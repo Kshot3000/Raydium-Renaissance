@@ -23,6 +23,7 @@ Official explainer source: <https://docs.raydium.io/>
 5. **Range (CLMM only)** — decide how you'll notice and respond when price leaves your range.
 6. **Deposit ratio (constant-product pools)** — AMM v4 / CPMM / CP-Swap pools take both tokens in the pool's existing ratio, so the second token's amount is set by the pool, not by you. Run your planned deposit through my hub's deposit planner first so the matching amount — and your resulting share of the pool — doesn't surprise you.
 7. **Trade size vs the pool** — the closer a swap's amount out gets to the pool's whole reserve on that side, the worse its price gets, without limit: a constant-product pool can never actually pay out its full reserve. If you need a specific amount out, run it through my hub's exact-out model first and look at the price impact — if it's in double digits, a smaller trade, a deeper pool, or an aggregator route will almost always beat it.
+8. **Your exit, before you enter** — withdrawing pays out both tokens in the pool's ratio *at that moment*, not the mix you deposited: if a price moved, the token that rose makes up less of what you get back (impermanent loss, made concrete). Run your share through my hub's withdrawal planner against the current reserves so the payout — and what's left if you withdraw only part — doesn't surprise you, and check on the pool page whether any withdrawal fee applies, because the planner models none.
 
 ## 4 · Building on Raydium
 

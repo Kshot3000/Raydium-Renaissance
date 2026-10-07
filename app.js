@@ -1,8 +1,9 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus six fully local
+/* Raydium Renaissance hub logic: project filtering plus seven fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
    calculator, an LP fee estimator, a break-even fee calculator, a
-   liquidity deposit planner, and an exact-out swap model. These are educational MODELS using
+   liquidity deposit planner, an exact-out swap model, and a liquidity
+   withdrawal planner. These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
 
@@ -175,8 +176,46 @@ function cpSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, feeBps) {
   };
 }
 
+/* ---------- 7 · Liquidity withdrawal planner (constant-product pools) ---------- */
+/* The exit side of Tool 5. Withdrawing liquidity from a constant-product
+   pool pays out BOTH tokens in the pool's current ratio, in proportion
+   to the share of the pool you redeem: amountOut = reserve * sharePct/100
+   * withdrawPct/100, computed in exact scaled-BigInt and floored at 9 dp
+   (the pool keeps any sub-unit remainder, as on-chain programs do).
+   withdrawPct below 100 models a partial exit; your remaining share
+   scales down by the same fraction. The reserves you enter are the
+   pool's CURRENT reserves — if prices have moved since you deposited,
+   the token mix you get back differs from what you put in, which is
+   exactly impermanent loss made concrete (Tool 2). This plans a
+   withdrawal for AMM v4 / CPMM / CP-Swap style pools; CLMM withdrawals
+   depend on the position's range and ticks and work differently.
+   Model only — no withdrawal fee is modelled, and real pools may have
+   their own; check the pool page. */
+function withdrawPlan(reserveAStr, reserveBStr, sharePctStr, withdrawPctStr) {
+  var ra = parseScaled(reserveAStr), rb = parseScaled(reserveBStr);
+  var share = parseScaled(sharePctStr), withdraw = parseScaled(withdrawPctStr);
+  if (ra === null || rb === null || share === null || withdraw === null) return null;
+  if (ra <= 0n || rb <= 0n) return null;
+  var hundred = 100n * SCALE;
+  if (share <= 0n || share > hundred || withdraw <= 0n || withdraw > hundred) return null;
+  var denom = 10000n * SCALE * SCALE;
+  var outA = ra * share * withdraw / denom;
+  var outB = rb * share * withdraw / denom;
+  if (outA <= 0n || outB <= 0n) return null;
+  var shareVal = scaledToNumber(share), withdrawVal = scaledToNumber(withdraw);
+  return {
+    outA: formatScaled(outA),
+    outB: formatScaled(outB),
+    remainingReserveA: formatScaled(ra - outA),
+    remainingReserveB: formatScaled(rb - outB),
+    sharePct: shareVal,
+    withdrawPct: withdrawVal,
+    remainingSharePct: shareVal * (100 - withdrawVal) / 100
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -327,6 +366,28 @@ if (typeof document !== "undefined") {
           "% fee), price impact incl. fee " + fmt(res.priceImpactPct, 2) +
           "%. A constant-product model, not a live Raydium quote.";
       if (res !== null) document.getElementById("xo-ain").value = res.amountIn;
+    });
+
+    /* --- withdrawal planner --- */
+    document.getElementById("wd-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = withdrawPlan(
+        document.getElementById("wd-ra").value,
+        document.getElementById("wd-rb").value,
+        document.getElementById("wd-share").value,
+        document.getElementById("wd-pct").value
+      );
+      var out = document.getElementById("wd-result");
+      out.textContent = res === null
+        ? "Enter positive pool reserves for both tokens, your share of the pool (above 0 and at most 100%), and a withdrawal percentage (above 0 and at most 100)."
+        : "Model output: withdrawing " + fmt(res.withdrawPct, 2) + "% of your position returns ≈ " + res.outA +
+          " of token A and ≈ " + res.outB + " of token B — both tokens, in the pool's current ratio. Your remaining share would be ≈ " +
+          fmt(res.remainingSharePct, 4) + "%, with model reserves left of " + res.remainingReserveA + " A / " + res.remainingReserveB +
+          " B. A constant-product withdrawal model, not a live Raydium quote — CLMM withdrawals are range-based and differ, and no withdrawal fee is modelled.";
+      if (res !== null) {
+        document.getElementById("wd-outa").value = res.outA;
+        document.getElementById("wd-outb").value = res.outB;
+      }
     });
 
     /* --- copy donation address --- */

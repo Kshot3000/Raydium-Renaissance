@@ -243,6 +243,25 @@
         <button type="submit" class="btn primary">Model the input needed</button>
         <p id="xo-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="wd-calc">
+        <h3>7 · Liquidity withdrawal planner</h3>
+        <p>The exit side of Tool 5: withdrawing from a constant-product pool (AMM v4 / CPMM / CP-Swap) pays out <strong>both</strong> tokens in the pool's <em>current</em> ratio, in proportion to the share you redeem. Enter the pool's current reserves and your share of the pool — the planner shows what a full or partial withdrawal returns, and what you'd have left. If prices have moved since you deposited, the mix you get back differs from what you put in — that's impermanent loss made concrete. CLMM withdrawals are range-based and work differently.</p>
+        <label for="wd-ra">Pool reserve — token A (current)</label>
+        <input id="wd-ra" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="wd-rb">Pool reserve — token B (current)</label>
+        <input id="wd-rb" inputmode="decimal" placeholder="e.g. 500000" autocomplete="off">
+        <label for="wd-share">Your share of the pool (%)</label>
+        <input id="wd-share" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="wd-pct">Withdraw this much of your position (%)</label>
+        <input id="wd-pct" inputmode="decimal" value="100" autocomplete="off">
+        <label for="wd-outa">You receive — token A (model)</label>
+        <input id="wd-outa" readonly placeholder="—" autocomplete="off">
+        <label for="wd-outb">You receive — token B (model)</label>
+        <input id="wd-outb" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan my withdrawal</button>
+        <p id="wd-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -270,6 +289,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

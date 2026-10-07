@@ -36,9 +36,9 @@ check("liquidity pools focus linked", html.includes("https://raydium.io/liquidit
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
 check("all main form controls labelled",
-  ["q", "rin", "rout", "ain", "aout", "swap-fee", "ratio", "deposit", "volume", "tvl", "your-liq", "fee-fee", "be-ratio", "be-deposit", "be-daily", "dep-ra", "dep-rb", "dep-aa", "dep-reqb", "xo-rin", "xo-rout", "xo-aout", "xo-ain", "xo-fee"]
+  ["q", "rin", "rout", "ain", "aout", "swap-fee", "ratio", "deposit", "volume", "tvl", "your-liq", "fee-fee", "be-ratio", "be-deposit", "be-daily", "dep-ra", "dep-rb", "dep-aa", "dep-reqb", "xo-rin", "xo-rout", "xo-aout", "xo-ain", "xo-fee", "wd-ra", "wd-rb", "wd-share", "wd-pct", "wd-outa", "wd-outb"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=4"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=5"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -165,6 +165,36 @@ check("XO rejects out >= reserve out", app.cpSwapExactOut("1000", "1000", "1000"
 check("XO rejects zero/junk/bad fee", app.cpSwapExactOut("1000", "1000", "0", 25) === null && app.cpSwapExactOut("abc", "1000", "1", 25) === null && app.cpSwapExactOut("1000", "1000", "1", 10000) === null && app.cpSwapExactOut("1000", "1000", "1", -1) === null);
 check("XO larger target = larger impact", app.cpSwapExactOut("1000", "1000", "500", 25).priceImpactPct > app.cpSwapExactOut("1000", "1000", "100", 25).priceImpactPct);
 check("exact-out tool present in index.html", html.includes('id="xo-calc"') && html.includes('id="xo-result"'));
+
+/* withdrawal planner — known values: out = reserve * share/100 * withdraw/100, floored */
+/* reserves 1,000,000 A / 500,000 B, 1% share, full exit => 10,000 A / 5,000 B, nothing left of the share */
+const w1 = app.withdrawPlan("1000000", "500000", "1", "100");
+check("WD full exit amounts exact", w1.outA === "10000" && w1.outB === "5000");
+check("WD full exit remaining reserves", w1.remainingReserveA === "990000" && w1.remainingReserveB === "495000");
+near("WD full exit remaining share is 0", w1.remainingSharePct, 0, 1e-12);
+check("WD payout keeps pool ratio", parseFloat(w1.outA) / parseFloat(w1.outB) === 2);
+/* same position, 50% exit => half the amounts, half the share left */
+const w2 = app.withdrawPlan("1000000", "500000", "1", "50");
+check("WD half exit amounts exact", w2.outA === "5000" && w2.outB === "2500");
+near("WD half exit remaining share", w2.remainingSharePct, 0.5, 1e-12);
+check("WD half exit remaining reserves", w2.remainingReserveA === "995000" && w2.remainingReserveB === "497500");
+/* fractional: reserves 3 A / 1 B, 50% share, full exit => 1.5 A / 0.5 B exactly at 9 dp */
+const w3 = app.withdrawPlan("3", "1", "50", "100");
+check("WD fractional exact", w3.outA === "1.5" && w3.outB === "0.5");
+/* whole-pool share: 100% share, full exit returns the entire reserves */
+const w4 = app.withdrawPlan("1000", "250", "100", "100");
+check("WD sole LP drains pool exactly", w4.outA === "1000" && w4.outB === "250" && w4.remainingReserveA === "0" && w4.remainingReserveB === "0");
+/* deposit-then-withdraw consistency: depositing with Tool 5 then redeeming that share in full returns the deposit (floored prices aside, equal-ratio case is exact) */
+const dpForWd = app.depositPlan("1000", "1000", "100");
+/* Tool 5 reports share as a float (9.090909...%); the planner takes it rounded to its 9 dp input precision */
+const wdBack = app.withdrawPlan(dpForWd.newReserveA, dpForWd.newReserveB, "9.090909091", "100");
+check("WD round-trips a Tool 5 deposit", wdBack !== null && Math.abs(parseFloat(wdBack.outA) - 100) < 0.001 && Math.abs(parseFloat(wdBack.outB) - 100) < 0.001);
+check("WD rejects zero reserves", app.withdrawPlan("0", "1000", "1", "100") === null && app.withdrawPlan("1000", "0", "1", "100") === null);
+check("WD rejects share out of range", app.withdrawPlan("1000", "1000", "0", "100") === null && app.withdrawPlan("1000", "1000", "100.000000001", "100") === null && app.withdrawPlan("1000", "1000", "101", "100") === null);
+check("WD rejects withdraw out of range", app.withdrawPlan("1000", "1000", "1", "0") === null && app.withdrawPlan("1000", "1000", "1", "101") === null);
+check("WD rejects junk / negative", app.withdrawPlan("abc", "1000", "1", "100") === null && app.withdrawPlan("1000", "1000", "-1", "100") === null && app.withdrawPlan("1000", "1000", "", "100") === null);
+check("WD rejects dust that floors to zero", app.withdrawPlan("0.000000001", "1000", "1", "100") === null);
+check("withdrawal planner present in index.html", html.includes('id="wd-calc"') && html.includes('id="wd-result"'));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
