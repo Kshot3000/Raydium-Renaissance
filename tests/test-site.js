@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=17"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=18"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -710,6 +710,56 @@ check("ZAP rejects junk / empty", app.zapInPlan("abc", "1000", "100", 25) === nu
 check("all zap controls labelled", ["zap-ra", "zap-rb", "zap-aa", "zap-fee", "zap-swap", "zap-depb"].every(id => html.includes(`for="${id}"`)));
 check("zap tool present in index.html", html.includes('id="zap-calc"') && html.includes('id="zap-result"'));
 check("zap honesty: post-swap ratio and not-live labels", html.includes("post-swap") && html.includes("not a live quote, not financial advice"));
+
+/* Single-sided zap-out — zero-fee known values: withdraw 10% of 1000/1000 in full
+   (100 A + 100 B, 900/900 left), then swap the 100 B into the shallower pool:
+   out = 900*100/1000 = 90 A, total 190 A against a 200 A spot value (cost 10 A, 5%) */
+const zo0 = app.zapOutPlan("1000", "1000", "10", "100", 0);
+check("ZOUT zero-fee feasible", zo0.feasible === true);
+check("ZOUT zero-fee withdrawal leg", zo0.withdrawA === "100" && zo0.withdrawB === "100" && zo0.postWithdrawReserveA === "900" && zo0.postWithdrawReserveB === "900");
+check("ZOUT zero-fee swap out", zo0.swapOutA === "90" && zo0.swapInB === "100");
+check("ZOUT zero-fee total A", zo0.totalA === "190");
+near("ZOUT zero-fee spot value", zo0.valueAtSpotA, 200, 1e-9);
+near("ZOUT zero-fee consolidation cost", zo0.consolidationCostA, 10, 1e-9);
+near("ZOUT zero-fee consolidation cost pct", zo0.consolidationCostPct, 5, 1e-9);
+near("ZOUT zero-fee swap impact", zo0.priceImpactPct, 10, 1e-9);
+/* fee 25 on the same exit: the swap leg nets 99.75 B in, out = 900*99.75/999.75 */
+const zoF = app.zapOutPlan("1000", "1000", "10", "100", 25);
+check("ZOUT fee25 swap out", zoF.swapOutA === "89.797449362" && zoF.totalA === "189.797449362");
+near("ZOUT fee25 consolidation cost pct", zoF.consolidationCostPct, 5.101275319, 1e-6);
+check("ZOUT larger fee costs more", zoF.consolidationCostA > zo0.consolidationCostA && app.zapOutPlan("1000", "1000", "10", "100", 100).consolidationCostA > zoF.consolidationCostA);
+/* partial withdrawal: half of the same position leaves 950/950, swap 50 B -> 47.5 A */
+const zoP = app.zapOutPlan("1000", "1000", "10", "50", 0);
+check("ZOUT partial withdrawal leg", zoP.withdrawA === "50" && zoP.withdrawB === "50" && zoP.postWithdrawReserveA === "950");
+check("ZOUT partial totals", zoP.swapOutA === "47.5" && zoP.totalA === "97.5");
+/* the cost grows with your share: exiting half the whole pool costs 25% of spot value */
+const zoBig = app.zapOutPlan("1000", "1000", "50", "100", 0);
+check("ZOUT big-share totals", zoBig.swapOutA === "250" && zoBig.totalA === "750");
+near("ZOUT big-share cost pct", zoBig.consolidationCostPct, 25, 1e-9);
+check("ZOUT bigger share costs a bigger share", zoBig.consolidationCostPct > zo0.consolidationCostPct && zo0.consolidationCostPct > zoP.consolidationCostPct);
+/* asymmetric pool: same percentages at 1,000,000/500,000 — spot 0.5 B per A */
+const zoA = app.zapOutPlan("1000000", "500000", "10", "100", 25);
+check("ZOUT asymmetric swap out", zoA.swapOutA === "89797.44936234" && zoA.totalA === "189797.44936234");
+near("ZOUT asymmetric spot", zoA.spotPrice, 0.5, 1e-12);
+near("ZOUT asymmetric spot value", zoA.valueAtSpotA, 200000, 1e-6);
+/* consistency: the withdrawal leg IS Tool 7 and the swap leg IS Tool 1, unchanged */
+for (const [label, z, args] of [["zero-fee", zo0, ["1000", "1000", "10", "100"]], ["fee25", zoF, ["1000", "1000", "10", "100"]], ["asym", zoA, ["1000000", "500000", "10", "100"]]]) {
+  const wd = app.withdrawPlan(args[0], args[1], args[2], args[3]);
+  check("ZOUT " + label + " withdrawal leg matches Tool 7", z.withdrawA === wd.outA && z.withdrawB === wd.outB && z.postWithdrawReserveA === wd.remainingReserveA && z.postWithdrawReserveB === wd.remainingReserveB);
+  check("ZOUT " + label + " swap leg matches Tool 1", app.cpSwap(z.postWithdrawReserveB, z.postWithdrawReserveA, z.withdrawB, z.feeBps).out === z.swapOutA);
+  near("ZOUT " + label + " total is withdrawal A plus swap A", Number(z.totalA), Number(z.withdrawA) + Number(z.swapOutA), 1e-9);
+  check("ZOUT " + label + " consolidation never pays you", z.totalA !== null && Number(z.totalA) < z.valueAtSpotA && z.consolidationCostPct > 0 && z.consolidationCostPct < z.priceImpactPct);
+}
+/* honest edge: withdrawing all of a pool you own entirely leaves no pool to swap in */
+const zoFull = app.zapOutPlan("1000", "1000", "100", "100", 25);
+check("ZOUT full-pool exit is not feasible", zoFull.feasible === false && zoFull.swapOutA === null && zoFull.totalA === null && zoFull.withdrawA === "1000" && zoFull.withdrawB === "1000");
+check("ZOUT rejects share / withdraw out of range", app.zapOutPlan("1000", "1000", "101", "100", 25) === null && app.zapOutPlan("1000", "1000", "0", "100", 25) === null && app.zapOutPlan("1000", "1000", "10", "0", 25) === null && app.zapOutPlan("1000", "1000", "10", "101", 25) === null);
+check("ZOUT rejects zero reserves", app.zapOutPlan("0", "1000", "10", "100", 25) === null && app.zapOutPlan("1000", "0", "10", "100", 25) === null);
+check("ZOUT rejects bad fees", app.zapOutPlan("1000", "1000", "10", "100", -1) === null && app.zapOutPlan("1000", "1000", "10", "100", 10000) === null && app.zapOutPlan("1000", "1000", "10", "100", 2.5) === null);
+check("ZOUT rejects junk / empty", app.zapOutPlan("abc", "1000", "10", "100", 25) === null && app.zapOutPlan("1000", "1000", "", "100", 25) === null && app.zapOutPlan("1000", "1000", "10", "100", "") === null && app.zapOutPlan("", "1000", "10", "100", 25) === null);
+check("all zout controls labelled", ["zout-ra", "zout-rb", "zout-share", "zout-pct", "zout-fee", "zout-swapout", "zout-totala"].every(id => html.includes(`for="${id}"`)));
+check("zout tool present in index.html", html.includes('id="zout-calc"') && html.includes('id="zout-result"'));
+check("zout honesty: post-withdrawal reserves and not-live labels", html.includes("post-withdrawal reserves") && html.includes("not a live quote, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

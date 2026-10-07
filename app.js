@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus nineteen fully local
+/* Raydium Renaissance hub logic: project filtering plus twenty fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
    calculator, an LP fee estimator, a break-even fee calculator, a
    liquidity deposit planner, an exact-out swap model, a liquidity
@@ -9,7 +9,7 @@
    estimator, a CLMM wallet-balance deposit planner, a CLMM
    break-even days calculator, a constant-product arbitrage model,
    a price-impact trade sizer, an LP-token share & value calculator,
-   and a single-sided zap-in planner.
+   a single-sided zap-in planner, and a single-sided zap-out planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -842,8 +842,70 @@ function zapInPlan(reserveAStr, reserveBStr, amountAStr, feeBps) {
   };
 }
 
+/* ---------- 20 · Single-sided zap-out planner (constant-product pools) ---------- */
+/* Tool 19's exit mirror. Tool 7's withdrawal always pays BOTH tokens
+   in the pool's ratio, but a wallet often wants to leave holding ONE
+   token — say token A. The standard way out is a "zap-out": withdraw
+   (Tool 7's model, unchanged), then swap all of the token B the
+   withdrawal returned back into token A in the same pool, against
+   the POST-withdrawal reserves (Tool 1's model, unchanged). Both
+   legs are computed by those tools' own functions, so the numbers
+   can never drift from their own forms. The consolidation is not
+   free, and the tool prices it honestly: valueAtSpotA is what the
+   withdrawn pair would be worth in A if the B leg filled at the
+   post-withdrawal spot price with no fee and no impact, and
+   consolidationCostA / consolidationCostPct are the difference —
+   the fee plus the price impact of swapping into a pool your own
+   withdrawal just made shallower, which is why the cost grows with
+   your share of the pool. One honest edge: withdrawing 100% of a
+   pool you own 100% of leaves no pool behind to swap in, so that
+   combination returns feasible: false (you simply keep both
+   tokens, or swap elsewhere) instead of a made-up fill. Model
+   only — one pool, no routing, no price movement between the
+   withdrawal and the swap (a real zap-out is a single transaction
+   for exactly that reason), no withdrawal fee modelled, and the
+   reserves are your inputs, not live pool state. CLMM exits are
+   range-based and differ. Not financial advice. */
+function zapOutPlan(reserveAStr, reserveBStr, sharePctStr, withdrawPctStr, feeBps) {
+  var required = [reserveAStr, reserveBStr, sharePctStr, withdrawPctStr, feeBps];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var fee = Number(feeBps);
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var wd = withdrawPlan(reserveAStr, reserveBStr, sharePctStr, withdrawPctStr);
+  if (wd === null) return null;
+  var base = {
+    withdrawA: wd.outA, withdrawB: wd.outB,
+    postWithdrawReserveA: wd.remainingReserveA, postWithdrawReserveB: wd.remainingReserveB,
+    sharePct: wd.sharePct, withdrawPct: wd.withdrawPct, feeBps: fee
+  };
+  var remA = parseScaled(wd.remainingReserveA), remB = parseScaled(wd.remainingReserveB);
+  if (remA <= 0n || remB <= 0n) {
+    return Object.assign(base, { feasible: false, swapInB: wd.outB, swapOutA: null, totalA: null,
+      spotPrice: null, priceImpactPct: null, valueAtSpotA: null, consolidationCostA: null, consolidationCostPct: null });
+  }
+  var swap = cpSwap(wd.remainingReserveB, wd.remainingReserveA, wd.outB, fee);
+  if (swap === null) return null;
+  var totalA = parseScaled(wd.outA) + parseScaled(swap.out);
+  var spot = scaledToNumber(remB) / scaledToNumber(remA);
+  var valueAtSpotA = scaledToNumber(parseScaled(wd.outA)) + scaledToNumber(parseScaled(wd.outB)) / spot;
+  var totalANum = scaledToNumber(totalA);
+  return Object.assign(base, {
+    feasible: true,
+    swapInB: wd.outB,
+    swapOutA: swap.out,
+    totalA: formatScaled(totalA),
+    spotPrice: spot,
+    priceImpactPct: swap.priceImpactPct,
+    valueAtSpotA: valueAtSpotA,
+    consolidationCostA: valueAtSpotA - totalANum,
+    consolidationCostPct: (valueAtSpotA - totalANum) / valueAtSpotA * 100
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -1343,6 +1405,38 @@ if (typeof document !== "undefined") {
           " B (the B reserve returns to what it was — the swap's B comes straight back as the deposit). A single-sided entry model in one pool, not a live Raydium quote — no routing or price movement between the two steps is modelled, and CLMM entries are range-based and differ.";
         document.getElementById("zap-swap").value = fmt(res.swapIn, 6);
         document.getElementById("zap-depb").value = fmt(res.depositB, 6);
+      }
+    });
+
+    /* --- single-sided zap-out planner --- */
+    document.getElementById("zout-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = zapOutPlan(
+        document.getElementById("zout-ra").value,
+        document.getElementById("zout-rb").value,
+        document.getElementById("zout-share").value,
+        document.getElementById("zout-pct").value,
+        document.getElementById("zout-fee").value
+      );
+      var out = document.getElementById("zout-result");
+      if (res === null) {
+        out.textContent = "Enter positive pool reserves for both tokens, your share of the pool (above 0 and at most 100%), how much of your position to withdraw (above 0 and at most 100%), and a fee in basis points (25 = 0.25%).";
+        document.getElementById("zout-swapout").value = "";
+        document.getElementById("zout-totala").value = "";
+      } else if (!res.feasible) {
+        out.textContent = "Model output: withdrawing " + fmt(res.withdrawPct, 4) + "% of a pool you own " + fmt(res.sharePct, 4) +
+          "% of returns ≈ " + res.withdrawA + " of token A and ≈ " + res.withdrawB + " of token B — and leaves no pool behind to swap in, " +
+          "so a same-pool zap-out cannot complete: you keep both tokens, or swap the B elsewhere. A single-sided exit model, not a live Raydium quote.";
+        document.getElementById("zout-swapout").value = "";
+        document.getElementById("zout-totala").value = "";
+      } else {
+        out.textContent = "Model output: withdraw ≈ " + res.withdrawA + " of token A and ≈ " + res.withdrawB +
+          " of token B, then swap all of that B back into token A in the same (now shallower) pool for ≈ " + res.swapOutA +
+          " A — leaving you holding ≈ " + res.totalA + " of token A in total. Consolidating costs ≈ " + fmt(res.consolidationCostA, 6) +
+          " A (≈ " + fmt(res.consolidationCostPct, 4) + "% of the withdrawn pair's value at the post-withdrawal spot price) in fee plus price impact (≈ " +
+          fmt(res.priceImpactPct, 4) + "% on the swap leg) — the cost grows with your share of the pool. A single-sided exit model in one pool, not a live Raydium quote — no routing or price movement between the two steps is modelled, no withdrawal fee is modelled, and CLMM exits are range-based and differ.";
+        document.getElementById("zout-swapout").value = res.swapOutA;
+        document.getElementById("zout-totala").value = res.totalA;
       }
     });
 
