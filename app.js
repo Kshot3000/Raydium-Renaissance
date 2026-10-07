@@ -1,7 +1,7 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus three fully local
+/* Raydium Renaissance hub logic: project filtering plus four fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
-   calculator, and an LP fee estimator. These are educational MODELS using
+   calculator, an LP fee estimator, and a break-even fee calculator. These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
 
@@ -86,8 +86,36 @@ function lpFees(volumeStr, feeBps, yourStr, tvlStr) {
   };
 }
 
+/* ---------- 4 · Break-even fees vs impermanent loss ---------- */
+/* Fees are what compensate an LP for impermanent loss, so the break-even
+   question is concrete: feesNeeded = holdValue - lpValue for the same
+   price move and deposit as Tool 2. If the LP also estimates their daily
+   fees (e.g. from Tool 3), daysToBreakEven = feesNeeded / dailyFees —
+   a model that assumes that daily rate never changes, which it will. */
+function breakEvenFees(priceRatio, depositStr, dailyFeesStr) {
+  var il = impermanentLoss(priceRatio, depositStr);
+  if (il === null || il.deposit == null || !(il.deposit > 0)) return null;
+  var feesNeeded = il.holdValue - il.lpValue;
+  var out = {
+    priceRatio: il.priceRatio,
+    ilPct: il.ilPct,
+    deposit: il.deposit,
+    holdValue: il.holdValue,
+    lpValue: il.lpValue,
+    feesNeeded: feesNeeded,
+    feesNeededPctOfDeposit: il.deposit > 0 ? (feesNeeded / il.deposit) * 100 : 0
+  };
+  if (dailyFeesStr != null && String(dailyFeesStr).trim() !== "") {
+    var daily = Number(dailyFeesStr);
+    if (!Number.isFinite(daily) || daily < 0) return null;
+    out.dailyFees = daily;
+    out.daysToBreakEven = daily > 0 ? feesNeeded / daily : (feesNeeded === 0 ? 0 : Infinity);
+  }
+  return out;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -175,6 +203,32 @@ if (typeof document !== "undefined") {
         : "Estimate: your share is " + fmt(res.sharePct, 4) + "% of the pool, earning ≈ $" + fmt(res.dailyFees, 2) +
           "/day (≈ $" + fmt(res.monthlyFees, 2) + "/30 days), a naive APR of " + fmt(res.aprPct, 2) +
           "% if nothing changed. Volume, TVL and prices always change — this is an estimate, not a promise.";
+    });
+
+    /* --- break-even fees --- */
+    document.getElementById("be-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = breakEvenFees(
+        document.getElementById("be-ratio").value,
+        document.getElementById("be-deposit").value,
+        document.getElementById("be-daily").value
+      );
+      var out = document.getElementById("be-result");
+      if (res === null) {
+        out.textContent = "Enter a price multiple above 0 and a deposit above $0 — e.g. 2 and 1000. Daily fees, if given, must be $0 or more.";
+      } else if (res.feesNeeded === 0) {
+        out.textContent = "At a " + res.priceRatio + "x price move there is no impermanent loss to offset — $0 in fees breaks even. Model only.";
+      } else if (res.dailyFees != null) {
+        out.textContent = "At a " + res.priceRatio + "x price move: holding would be $" + fmt(res.holdValue, 2) +
+          ", the LP position $" + fmt(res.lpValue, 2) + " — so you need $" + fmt(res.feesNeeded, 2) + " in fees (" +
+          fmt(res.feesNeededPctOfDeposit, 2) + "% of your deposit) to break even. At $" + fmt(res.dailyFees, 2) +
+          "/day in fees that is ≈ " + (isFinite(res.daysToBreakEven) ? fmt(res.daysToBreakEven, 1) + " days" : "never — $0/day never offsets a loss") +
+          ", if that rate held, which it won't. Model only, not financial advice.";
+      } else {
+        out.textContent = "At a " + res.priceRatio + "x price move: holding would be $" + fmt(res.holdValue, 2) +
+          ", the LP position $" + fmt(res.lpValue, 2) + " — so you need $" + fmt(res.feesNeeded, 2) + " in fees (" +
+          fmt(res.feesNeededPctOfDeposit, 2) + "% of your deposit) to break even, before the position counts as ahead. Model only.";
+      }
     });
 
     /* --- copy donation address --- */

@@ -198,6 +198,19 @@
         <button type="submit" class="btn primary">Estimate my fees</button>
         <p id="fee-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="be-calc">
+        <h3>4 · Break-even fee calculator</h3>
+        <p>Fees are what pay an LP back for impermanent loss. For the same 50/50 constant-product position as Tool 2, this shows exactly how much in fees you must earn to match simply holding — and, if you add your estimated daily fees from Tool 3, how many days that would take at that rate.</p>
+        <label for="be-ratio">Price multiple (2 = doubled, 0.5 = halved)</label>
+        <input id="be-ratio" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="be-deposit">Deposit value in $</label>
+        <input id="be-deposit" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="be-daily">Your estimated fees per day in $ (optional)</label>
+        <input id="be-daily" inputmode="decimal" placeholder="e.g. 25" autocomplete="off">
+        <button type="submit" class="btn primary">Calculate break-even</button>
+        <p id="be-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -225,6 +238,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=1"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

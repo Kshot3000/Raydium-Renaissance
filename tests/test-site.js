@@ -36,9 +36,9 @@ check("liquidity pools focus linked", html.includes("https://raydium.io/liquidit
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
 check("all main form controls labelled",
-  ["q", "rin", "rout", "ain", "aout", "swap-fee", "ratio", "deposit", "volume", "tvl", "your-liq", "fee-fee"]
+  ["q", "rin", "rout", "ain", "aout", "swap-fee", "ratio", "deposit", "volume", "tvl", "your-liq", "fee-fee", "be-ratio", "be-deposit", "be-daily"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=1"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=2"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -106,6 +106,26 @@ near("LP naive APR", f1.aprPct, 91.25, 1e-9);
 check("LP zero volume = zero fees", app.lpFees("0", 25, "10000", "1000000").dailyFees === 0);
 check("LP rejects your > TVL", app.lpFees("1000", 25, "2000000", "1000000") === null);
 check("LP rejects junk", app.lpFees("x", 25, "1", "2") === null && app.lpFees("1", 25, "0", "2") === null);
+
+/* break-even fees — known values: feesNeeded = holdValue - lpValue (Tool 2 maths) */
+/* at 4x, $1000 deposit: hold $2500, LP $2000 => $500 needed = 50% of deposit; at $25/day => 20 days */
+const b1 = app.breakEvenFees(4, "1000", "25");
+near("BE fees needed at 4x", b1.feesNeeded, 500, 1e-9);
+near("BE fees pct of deposit at 4x", b1.feesNeededPctOfDeposit, 50, 1e-9);
+near("BE days at $25/day", b1.daysToBreakEven, 20, 1e-9);
+near("BE hold value at 4x", b1.holdValue, 2500, 1e-9);
+near("BE LP value at 4x", b1.lpValue, 2000, 1e-9);
+/* at 1x there is no IL to offset */
+const b0 = app.breakEvenFees(1, "1000");
+near("BE fees needed at 1x is 0", b0.feesNeeded, 0, 1e-9);
+check("BE without daily fees has no days field", app.breakEvenFees(2, "1000").daysToBreakEven === undefined);
+check("BE $0/day with a loss never breaks even", app.breakEvenFees(2, "1000", "0").daysToBreakEven === Infinity);
+check("BE $0/day with no loss is 0 days", app.breakEvenFees(1, "1000", "0").daysToBreakEven === 0);
+check("BE fees needed matches IL gap at 2x", Math.abs(app.breakEvenFees(2, "1000").feesNeeded -
+  (app.impermanentLoss(2, "1000").holdValue - app.impermanentLoss(2, "1000").lpValue)) < 1e-9);
+check("BE rejects missing/zero deposit", app.breakEvenFees(2) === null && app.breakEvenFees(2, "") === null && app.breakEvenFees(2, "0") === null);
+check("BE rejects bad ratio / junk / negative daily", app.breakEvenFees(0, "1000") === null && app.breakEvenFees("x", "1000") === null && app.breakEvenFees(2, "1000", "-5") === null && app.breakEvenFees(2, "1000", "x") === null);
+check("break-even tool present in index.html", html.includes('id="be-calc"') && html.includes('id="be-result"'));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

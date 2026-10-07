@@ -19,6 +19,7 @@ For the Raydium team — [@raydium-io](https://github.com/raydium-io) on GitHub 
 1. **Constant-product swap model** — the x × y = k maths behind AMM v4 / CPMM pools, with fee and price-impact output. Exact scaled-BigInt arithmetic (9 dp).
 2. **Impermanent-loss calculator** — LP-vs-hold at any price multiple for a 50/50 constant-product position, with optional deposit value.
 3. **LP fee estimator** — your share of a pool's swap fees from its volume, TVL and fee tier, with a naively-annualised APR.
+4. **Break-even fee calculator** — how much in fees a 50/50 position must earn to offset impermanent loss at a given price move (hold value − LP value), and how many days that takes at an estimated daily fee rate.
 
 Honest labels, always: these are **educational models** using numbers you type in — not live quotes, not live pool data, and not financial advice. Real pools live at <https://raydium.io/liquidity-pools/>.
 
@@ -45,7 +46,7 @@ Ecosystem:
 node tests/test-site.js
 ```
 
-Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all three pool tools (known-value vectors, edge and rejection cases).
+Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all four pool tools (known-value vectors, edge and rejection cases).
 
 ## Support
 
