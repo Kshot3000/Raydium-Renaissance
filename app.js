@@ -904,8 +904,52 @@ function zapOutPlan(reserveAStr, reserveBStr, sharePctStr, withdrawPctStr, feeBp
   });
 }
 
+/* ---------- 21 · IL tolerance band (constant-product pool, 50/50 start) ---------- */
+/* Tools 2 and 4 answer forwards: at THIS price move, how much impermanent
+   loss, and how many fees to break even against it (Tool 4's feesNeeded =
+   holdValue - lpValue)? This one inverts Tool 4 exactly: given the fees a
+   position has already earned, how far can the price still move before the
+   shortfall against holding consumes those fees? Tool 4's shortfall as a
+   fraction of the deposit is (1 + r)/2 - sqrt(r) = (sqrt(r) - 1)^2 / 2, so
+   with f = fees / deposit the band edges are sqrt(r) = 1 +/- sqrt(2f) —
+   symmetric in the square root of the price, not in the price itself.
+   One honest asymmetry: as the price falls to zero the shortfall caps at
+   half the deposit (the half of the position held in the other token is
+   untouched), so fees of 50% of the deposit or more can never be consumed
+   by a fall, however far — reported as downUnbounded, not a made-up edge.
+   A rise has no such cap. Zero fees earned means the band has already
+   collapsed to the entry price. Model only — constant product, 50/50
+   start, fees counted in the deposit's terms and held outside the pool;
+   no compounding and no fee growth of the position itself is modelled.
+   Not financial advice. */
+function ilToleranceBand(depositStr, feesStr) {
+  var required = [depositStr, feesStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var dep = Number(depositStr), fees = Number(feesStr);
+  if (!Number.isFinite(dep) || !Number.isFinite(fees)) return null;
+  if (dep <= 0 || fees < 0) return null;
+  var f = fees / dep;
+  var a = Math.sqrt(2 * f);
+  var rHigh = (1 + a) * (1 + a);
+  var base = {
+    deposit: dep, feesEarned: fees, feePctOfDeposit: f * 100,
+    priceRatioHigh: rHigh, moveUpPct: (rHigh - 1) * 100
+  };
+  if (f >= 0.5) {
+    return Object.assign(base, { downUnbounded: true, priceRatioLow: null, moveDownPct: null });
+  }
+  var rLow = (1 - a) * (1 - a);
+  return Object.assign(base, {
+    downUnbounded: false,
+    priceRatioLow: rLow,
+    moveDownPct: (1 - rLow) * 100
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -1437,6 +1481,37 @@ if (typeof document !== "undefined") {
           fmt(res.priceImpactPct, 4) + "% on the swap leg) — the cost grows with your share of the pool. A single-sided exit model in one pool, not a live Raydium quote — no routing or price movement between the two steps is modelled, no withdrawal fee is modelled, and CLMM exits are range-based and differ.";
         document.getElementById("zout-swapout").value = res.swapOutA;
         document.getElementById("zout-totala").value = res.totalA;
+      }
+    });
+
+    /* --- IL tolerance band --- */
+    document.getElementById("band-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = ilToleranceBand(
+        document.getElementById("band-dep").value,
+        document.getElementById("band-fees").value
+      );
+      var out = document.getElementById("band-result");
+      if (res === null) {
+        out.textContent = "Enter a positive position value (in token B terms) and the fees earned so far (zero or more, in the same token B terms).";
+        document.getElementById("band-high").value = "";
+        document.getElementById("band-low").value = "";
+      } else if (res.downUnbounded) {
+        out.textContent = "Model output: fees of ≈ " + fmt(res.feesEarned, 6) + " B are ≈ " + fmt(res.feePctOfDeposit, 4) +
+          "% of the ≈ " + fmt(res.deposit, 6) + " B position. On the way up, they cover impermanent loss until the price reaches ≈ " +
+          fmt(res.priceRatioHigh, 6) + "× the entry price (+" + fmt(res.moveUpPct, 4) + "%). On the way down there is no edge to report: " +
+          "the worst a fall can cost against holding is half the position (the half held in the other token), so fees of 50% or more can never be " +
+          "consumed by a fall, however far the price drops. An IL tolerance model for a 50/50 constant-product position, not a live Raydium quote.";
+        document.getElementById("band-high").value = fmt(res.priceRatioHigh, 6);
+        document.getElementById("band-low").value = "";
+      } else {
+        out.textContent = "Model output: fees of ≈ " + fmt(res.feesEarned, 6) + " B (≈ " + fmt(res.feePctOfDeposit, 4) +
+          "% of the ≈ " + fmt(res.deposit, 6) + " B position) cover impermanent loss until the price reaches ≈ " +
+          fmt(res.priceRatioHigh, 6) + "× the entry price (+" + fmt(res.moveUpPct, 4) + "%) or falls to ≈ " + fmt(res.priceRatioLow, 6) +
+          "× (−" + fmt(res.moveDownPct, 4) + "%) — the band is symmetric in the square root of the price, which is why the percentage moves differ. Past either edge, impermanent loss " +
+          "exceeds the fees earned and holding would have been better. An IL tolerance model for a 50/50 constant-product position, not a live Raydium quote — fees are counted in token B terms outside the pool, with no compounding modelled, and CLMM positions are range-based and differ.";
+        document.getElementById("band-high").value = fmt(res.priceRatioHigh, 6);
+        document.getElementById("band-low").value = fmt(res.priceRatioLow, 6);
       }
     });
 

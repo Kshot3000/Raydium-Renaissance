@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=18"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=19"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -760,6 +760,69 @@ check("ZOUT rejects junk / empty", app.zapOutPlan("abc", "1000", "10", "100", 25
 check("all zout controls labelled", ["zout-ra", "zout-rb", "zout-share", "zout-pct", "zout-fee", "zout-swapout", "zout-totala"].every(id => html.includes(`for="${id}"`)));
 check("zout tool present in index.html", html.includes('id="zout-calc"') && html.includes('id="zout-result"'));
 check("zout honesty: post-withdrawal reserves and not-live labels", html.includes("post-withdrawal reserves") && html.includes("not a live quote, not financial advice"));
+
+/* IL tolerance band — the exact inverse of Tool 4: its shortfall fraction is
+   (sqrt(r) - 1)^2 / 2, so the edges are sqrt(r) = 1 +/- sqrt(2f).
+   Headline known values: fees of 125 on a 1000 position are f = 12.5%,
+   sqrt(2f) = 0.5 exactly, so the band is exactly [0.25x, 2.25x] */
+const band125 = app.ilToleranceBand("1000", "125");
+check("BAND 12.5% bounded both sides", band125.downUnbounded === false && band125.deposit === 1000 && band125.feesEarned === 125);
+near("BAND 12.5% fee pct", band125.feePctOfDeposit, 12.5, 1e-12);
+near("BAND 12.5% high edge is 2.25x", band125.priceRatioHigh, 2.25, 1e-12);
+near("BAND 12.5% low edge is 0.25x", band125.priceRatioLow, 0.25, 1e-12);
+near("BAND 12.5% move up", band125.moveUpPct, 125, 1e-9);
+near("BAND 12.5% move down", band125.moveDownPct, 75, 1e-9);
+/* small fees: f = 2% -> sqrt(2f) = 0.2 exactly -> band [0.64x, 1.44x] */
+const band2 = app.ilToleranceBand("1000", "20");
+near("BAND 2% high edge", band2.priceRatioHigh, 1.44, 1e-12);
+near("BAND 2% low edge", band2.priceRatioLow, 0.64, 1e-12);
+near("BAND 2% move up", band2.moveUpPct, 44, 1e-9);
+near("BAND 2% move down", band2.moveDownPct, 36, 1e-9);
+/* f = 5% on a different deposit: [0.46754446796632404x, 1.732455532033676x] */
+const band5 = app.ilToleranceBand("5000", "250");
+near("BAND 5% high edge", band5.priceRatioHigh, 1.732455532033676, 1e-9);
+near("BAND 5% low edge", band5.priceRatioLow, 0.46754446796632404, 1e-9);
+near("BAND 5% move up", band5.moveUpPct, 73.2455532033676, 1e-6);
+near("BAND 5% move down", band5.moveDownPct, 53.24555320336759, 1e-6);
+/* f = 0.5% -> sqrt(2f) = 0.1 exactly -> band [0.81x, 1.21x] */
+const bandTiny = app.ilToleranceBand("2000", "10");
+near("BAND 0.5% high edge", bandTiny.priceRatioHigh, 1.21, 1e-12);
+near("BAND 0.5% low edge", bandTiny.priceRatioLow, 0.81, 1e-12);
+/* the band depends only on the fee fraction, not the position size */
+near("BAND scale-free", app.ilToleranceBand("250", "31.25").priceRatioHigh, band125.priceRatioHigh, 1e-12);
+/* consistency with Tool 4 at both edges of every band: the fees Tool 4 says
+   are needed there equal the fees given — the band can never drift from it */
+for (const [label, b] of [["12.5%", band125], ["2%", band2], ["5%", band5], ["0.5%", bandTiny]]) {
+  near("BAND " + label + " fees needed at high edge (Tool 4)", app.breakEvenFees(b.priceRatioHigh, String(b.deposit)).feesNeeded, b.feesEarned, 1e-6);
+  near("BAND " + label + " fees needed at low edge (Tool 4)", app.breakEvenFees(b.priceRatioLow, String(b.deposit)).feesNeeded, b.feesEarned, 1e-6);
+  near("BAND " + label + " symmetric in sqrt(price)", Math.sqrt(b.priceRatioHigh) - 1, 1 - Math.sqrt(b.priceRatioLow), 1e-12);
+  check("BAND " + label + " band straddles the entry price", b.priceRatioLow < 1 && b.priceRatioHigh > 1);
+}
+/* inside the band Tool 4's shortfall is smaller than the fees; outside, larger */
+check("BAND inside/outside vs Tool 4", app.breakEvenFees(1.2, "1000").feesNeeded < 20 && app.breakEvenFees(2, "1000").feesNeeded > 20 && app.breakEvenFees(0.5, "1000").feesNeeded > 20);
+/* more fees always buy a wider band */
+check("BAND wider with more fees", bandTiny.priceRatioHigh < band2.priceRatioHigh && band2.priceRatioHigh < band5.priceRatioHigh && band5.priceRatioHigh < band125.priceRatioHigh && band125.priceRatioLow < band5.priceRatioLow && band5.priceRatioLow < band2.priceRatioLow && band2.priceRatioLow < bandTiny.priceRatioLow);
+/* honest edges: zero fees collapse the band to the entry price */
+const band0 = app.ilToleranceBand("1000", "0");
+check("BAND zero fees collapse to entry", band0.downUnbounded === false && band0.priceRatioHigh === 1 && band0.priceRatioLow === 1 && band0.moveUpPct === 0 && band0.moveDownPct === 0);
+/* the downside caps at half the deposit: fees >= 50% can never be eaten by a
+   fall (even to zero), while the upside edge stays finite and exact */
+const band50 = app.ilToleranceBand("1000", "500");
+check("BAND 50% fees: downside unbounded, upside exactly 4x", band50.downUnbounded === true && band50.priceRatioLow === null && band50.moveDownPct === null && Math.abs(band50.priceRatioHigh - 4) < 1e-12);
+near("BAND 50% fees needed at upside edge (Tool 4)", app.breakEvenFees(band50.priceRatioHigh, "1000").feesNeeded, 500, 1e-6);
+const band72 = app.ilToleranceBand("1000", "720");
+check("BAND 72% fees: downside unbounded, upside 4.84x", band72.downUnbounded === true && Math.abs(band72.priceRatioHigh - 4.84) < 1e-9);
+/* even a fall to (near) zero costs less than 50% of the deposit vs holding */
+check("BAND downside shortfall caps at half the deposit (Tool 4)", app.breakEvenFees(0.000000001, "1000").feesNeeded < 500);
+/* just under the cap the downside edge is finite but nearly zero */
+const band499 = app.ilToleranceBand("1000", "499");
+check("BAND 49.9% fees bounded but low edge near zero", band499.downUnbounded === false && band499.priceRatioLow > 0 && band499.priceRatioLow < 1e-5 && band499.priceRatioHigh > 3.9);
+check("BAND rejects non-positive deposit", app.ilToleranceBand("0", "10") === null && app.ilToleranceBand("-100", "10") === null);
+check("BAND rejects negative fees", app.ilToleranceBand("1000", "-1") === null);
+check("BAND rejects junk / empty", app.ilToleranceBand("abc", "10") === null && app.ilToleranceBand("1000", "xyz") === null && app.ilToleranceBand("", "10") === null && app.ilToleranceBand("1000", "") === null && app.ilToleranceBand(null, "10") === null);
+check("all band controls labelled", ["band-dep", "band-fees", "band-high", "band-low"].every(id => html.includes(`for="${id}"`)));
+check("band tool present in index.html", html.includes('id="band-calc"') && html.includes('id="band-result"'));
+check("band honesty: sqrt-price band and not-live labels", html.includes("square root") && html.includes("not a live quote, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

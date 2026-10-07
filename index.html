@@ -507,6 +507,21 @@
         <button type="submit" class="btn primary">Plan my zap-out</button>
         <p id="zout-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="band-calc">
+        <h3>21 · IL tolerance band</h3>
+        <p>Tools 2 and 4 work forwards — a price move in, impermanent loss and break-even fees out. This one works backwards: given the fees your position has <em>already earned</em>, how far can the price still move before impermanent loss consumes those fees exactly? Enter your position's value and the fees earned so far, both in token B terms — the answer is a tolerance band: the price can multiply by the upper edge or fall to the lower edge before holding would have been better. The band is symmetric in the <em>square root</em> of the price, which is why the percentage moves differ: fees of 2% of the position buy +44% / −36% of room, and fees of 12.5% buy a rise to 2.25× or a fall to a quarter. One honest asymmetry: a fall can never cost more than half the position against holding — the half held in the other token is untouched — so fees of 50% of the position or more can never be consumed by a fall, however far the price drops; that side is reported as unbounded rather than given a made-up edge, while a rise has no such cap. Zero fees earned means zero room: the band has already collapsed to the entry price. Educational model only — a 50/50 constant-product position, fees counted in token B terms and held outside the pool, no compounding or fee growth of the position modelled; your inputs, not live pool state; not a live quote, not financial advice. CLMM positions are range-based and differ.</p>
+        <label for="band-dep">Position value (token B terms)</label>
+        <input id="band-dep" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="band-fees">Fees earned so far (token B terms)</label>
+        <input id="band-fees" inputmode="decimal" placeholder="e.g. 200" autocomplete="off">
+        <label for="band-high">Price can rise to — × entry price (model)</label>
+        <input id="band-high" readonly placeholder="—" autocomplete="off">
+        <label for="band-low">Price can fall to — × entry price (model)</label>
+        <input id="band-low" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Find my tolerance band</button>
+        <p id="band-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -534,6 +549,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=18"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>
