@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus twenty-three fully
+/* Raydium Renaissance hub logic: project filtering plus twenty-four fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -10,8 +10,8 @@
    break-even days calculator, a constant-product arbitrage model, a
    price-impact trade sizer, an LP-token share & value calculator, a
    single-sided zap-in planner, a single-sided zap-out planner, an IL
-   tolerance band, a CLMM symmetric-range planner, and a two-hop
-   swap model.
+   tolerance band, a CLMM symmetric-range planner, a two-hop swap
+   model, and a net LP return calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1059,8 +1059,56 @@ function twoHopSwap(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2OutStr
   };
 }
 
+/* ---------- 24 · Net LP return calculator (fees earned vs holding) ---------- */
+/* Tools 2 and 4 answer their halves separately: Tool 2 values the LP
+   position and the hold alternative at a price move, and Tool 4 turns
+   the gap between them into the fees needed to break even. This tool
+   asks the question an LP actually settles with — "I earned THIS much
+   in fees: am I ahead of or behind simply holding, and by how much?"
+     netLpValue = lpValue + feesEarned
+     netVsHold  = netLpValue - holdValue = feesEarned - feesNeeded
+   Hold and LP values come from Tool 2's own impermanentLoss and the
+   hurdle from the same subtraction Tool 4 makes, so the verdict can
+   never drift from their forms. Two different bottom lines are both
+   reported and neither is hidden: netVsHoldPct against holding, and
+   netReturnPct against the deposit itself — a position can be UP on
+   its deposit and still behind holding (at a 2x move with no fees the
+   position is +41.4% on the deposit yet −5.72% vs holding), and only
+   the holding comparison says whether providing liquidity beat doing
+   nothing. Fees are counted in the deposit's ($) terms and held
+   outside the pool — the same convention as Tools 4 and 21: no
+   compounding, and fees the pool auto-compounds in reality are not
+   separated out. Model only — a 50/50 constant-product position;
+   CLMM positions are range-based and differ (Tools 12/15). */
+function netLpReturn(priceRatio, depositStr, feesStr) {
+  if (feesStr == null || String(feesStr).trim() === "") return null;
+  var il = impermanentLoss(priceRatio, depositStr);
+  if (il === null || il.deposit == null || !(il.deposit > 0)) return null;
+  var fees = Number(feesStr);
+  if (!Number.isFinite(fees) || fees < 0) return null;
+  var feesNeeded = il.holdValue - il.lpValue;
+  var netLpValue = il.lpValue + fees;
+  var netVsHold = netLpValue - il.holdValue;
+  var tol = 1e-9 * Math.max(1, il.holdValue);
+  return {
+    priceRatio: il.priceRatio,
+    deposit: il.deposit,
+    ilPct: il.ilPct,
+    holdValue: il.holdValue,
+    lpValue: il.lpValue,
+    feesEarned: fees,
+    feesNeeded: feesNeeded,
+    feesCoveragePct: feesNeeded > 1e-9 ? fees / feesNeeded * 100 : null,
+    netLpValue: netLpValue,
+    netVsHold: netVsHold,
+    netVsHoldPct: il.holdValue > 0 ? netVsHold / il.holdValue * 100 : 0,
+    netReturnPct: (netLpValue - il.deposit) / il.deposit * 100,
+    verdict: Math.abs(netVsHold) <= tol ? "even" : (netVsHold > 0 ? "ahead" : "behind")
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -1679,6 +1727,35 @@ if (typeof document !== "undefined") {
           "%, worse than either hop alone, because each hop pays its own fee and moves its own pool. A two-hop constant-product model, not a live Raydium quote — a real route may cross CLMM pools or other venues, and no routing search is done here: these are the two pools you typed.";
         document.getElementById("hop-mid").value = res.midOut;
         document.getElementById("hop-aout").value = res.out;
+      }
+    });
+
+    /* --- net LP return --- */
+    document.getElementById("net-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = netLpReturn(
+        document.getElementById("net-ratio").value,
+        document.getElementById("net-deposit").value,
+        document.getElementById("net-fees").value
+      );
+      var out = document.getElementById("net-result");
+      if (res === null) {
+        out.textContent = "Enter a price multiple above 0, a deposit above $0, and the fees you've earned ($0 or more).";
+        document.getElementById("net-out").value = "";
+      } else {
+        var verdictText = res.verdict === "ahead"
+          ? "≈ $" + fmt(res.netVsHold, 2) + " ahead of holding (" + fmt(res.netVsHoldPct, 2) + "%)"
+          : res.verdict === "behind"
+            ? "≈ $" + fmt(-res.netVsHold, 2) + " behind holding (" + fmt(res.netVsHoldPct, 2) + "%)"
+            : "exactly even with holding ($0 either way)";
+        out.textContent = "Model output: at a " + res.priceRatio + "x price move, holding would be $" + fmt(res.holdValue, 2) +
+          " and the LP position $" + fmt(res.lpValue, 2) + " — impermanent loss " + fmt(res.ilPct, 2) + "%, so $" +
+          fmt(res.feesNeeded, 2) + " in fees breaks even (Tool 4's hurdle). Adding your $" + fmt(res.feesEarned, 2) +
+          " in fees" + (res.feesCoveragePct !== null ? " (" + fmt(res.feesCoveragePct, 2) + "% of that hurdle)" : "") +
+          " brings the position to $" + fmt(res.netLpValue, 2) + " — " + verdictText +
+          ". Against the $" + fmt(res.deposit, 2) + " deposit itself that is a net return of " + fmt(res.netReturnPct, 2) +
+          "% — a different bottom line: a position can be up on its deposit and still behind holding, and only the holding comparison says whether providing liquidity beat doing nothing. A net-return model for a 50/50 constant-product position, not a live Raydium quote — fees are counted in $ terms outside the pool, with no compounding modelled, and CLMM positions are range-based and differ.";
+        document.getElementById("net-out").value = fmt(res.netVsHold, 2);
       }
     });
 

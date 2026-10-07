@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=21"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=22"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -927,6 +927,72 @@ check("HOP rejects junk / empty", app.twoHopSwap("x", "1000", "1000", "2000", "1
 check("all hop controls labelled", ["hop-r1in", "hop-r1out", "hop-r2in", "hop-r2out", "hop-ain", "hop-fee1", "hop-fee2", "hop-mid", "hop-aout"].every(id => html.includes(`for="${id}"`)));
 check("hop tool present in index.html", html.includes('id="hop-calc"') && html.includes('id="hop-result"'));
 check("hop honesty: routed model and not-live labels", html.includes("no routing search is done") && html.includes("not a live quote, not financial advice"));
+
+/* ---------- 24 · Net LP return calculator ---------- */
+/* headline vectors verified in a clean foreground run BEFORE these
+   tests were written: r=2, deposit $1000 — hold $1500, LP
+   $1414.2135623730951, fees needed $85.7864376269049 (Tool 4) */
+const net0 = app.netLpReturn(2, "1000", "0");
+near("NET no-fees hold value", net0.holdValue, 1500, 1e-9);
+near("NET no-fees LP value", net0.lpValue, 1414.2135623730951, 1e-9);
+near("NET no-fees hurdle", net0.feesNeeded, 85.7864376269049, 1e-9);
+near("NET no-fees net vs hold", net0.netVsHold, -85.7864376269049, 1e-9);
+near("NET no-fees net vs hold pct", net0.netVsHoldPct, -5.71909584179366, 1e-9);
+check("NET no-fees verdict is behind", net0.verdict === "behind");
+near("NET no-fees coverage is 0%", net0.feesCoveragePct, 0, 1e-12);
+/* the honest twist the tool exists to surface: UP on the deposit
+   (+41.42%) and still BEHIND holding at the same time */
+near("NET no-fees return on deposit is +41.42%", net0.netReturnPct, 41.42135623730951, 1e-9);
+check("NET up on deposit yet behind holding", net0.netReturnPct > 0 && net0.netVsHold < 0);
+/* $200 of fees flips the same move ahead: net $1614.21, +$114.21 */
+const net200 = app.netLpReturn(2, "1000", "200");
+near("NET $200 fees net LP value", net200.netLpValue, 1614.2135623730951, 1e-9);
+near("NET $200 fees net vs hold", net200.netVsHold, 114.2135623730951, 1e-9);
+near("NET $200 fees net vs hold pct", net200.netVsHoldPct, 7.614237491539673, 1e-9);
+near("NET $200 fees coverage", net200.feesCoveragePct, 233.13708498984775, 1e-6);
+check("NET $200 fees verdict is ahead", net200.verdict === "ahead");
+/* earning exactly Tool 4's hurdle settles exactly even */
+const hurdle = app.breakEvenFees(2, "1000");
+const netEven = app.netLpReturn(2, "1000", String(hurdle.feesNeeded));
+check("NET fees = Tool 4 hurdle settles even", netEven.verdict === "even" && Math.abs(netEven.netVsHold) < 1e-6);
+near("NET even coverage is 100%", netEven.feesCoveragePct, 100, 1e-6);
+/* half the hurdle: behind by the other half, coverage 50% */
+const netHalf = app.netLpReturn(2, "1000", String(hurdle.feesNeeded / 2));
+near("NET half-hurdle coverage is 50%", netHalf.feesCoveragePct, 50, 1e-6);
+near("NET half-hurdle shortfall is half the hurdle", netHalf.netVsHold, -hurdle.feesNeeded / 2, 1e-6);
+check("NET half-hurdle verdict is behind", netHalf.verdict === "behind");
+/* no price move: no hurdle at all — $0 fees is even, any fees ahead,
+   and coverage is honestly null (there is nothing to cover) */
+const netFlat0 = app.netLpReturn(1, "1000", "0");
+check("NET flat move, no fees: even, coverage null", netFlat0.verdict === "even" && netFlat0.feesNeeded === 0 && netFlat0.feesCoveragePct === null);
+const netFlat = app.netLpReturn(1, "1000", "50");
+check("NET flat move, $50 fees: ahead by the fees", netFlat.verdict === "ahead" && netFlat.netVsHold === 50 && netFlat.netReturnPct === 5);
+/* 4x move: hold $2500, LP $2000, hurdle $500 — $500 of fees is even */
+const net4 = app.netLpReturn(4, "1000", "500");
+check("NET 4x with $500 fees settles even", net4.verdict === "even" && net4.holdValue === 2500 && net4.lpValue === 2000);
+/* composition, exactly: hold/LP values ARE Tool 2's and the verdict IS
+   fees minus Tool 4's hurdle, at headline and arbitrary inputs alike */
+for (const [r, d, f] of [[2, "1000", "200"], [0.5, "1000", "10"], [3.7, "2500", "123.45"], [0.25, "750", "0"], [1.5, "10000", "999.99"]]) {
+  const net = app.netLpReturn(r, d, f);
+  const il = app.impermanentLoss(r, d);
+  const be = app.breakEvenFees(r, d);
+  check("NET composes Tools 2+4 @" + r + "x", net !== null && net.holdValue === il.holdValue && net.lpValue === il.lpValue &&
+    Math.abs(net.netVsHold - (Number(f) - be.feesNeeded)) < 1e-6 && Math.abs(net.netLpValue - (il.lpValue + Number(f))) < 1e-9);
+}
+/* IL symmetry carries through: a halving costs exactly what a doubling
+   costs at the same deposit fraction — same IL%, mirrored values */
+const netDown = app.netLpReturn(0.5, "1000", "0");
+near("NET halving IL% equals doubling IL%", netDown.ilPct, net0.ilPct, 1e-9);
+near("NET halving hurdle", netDown.feesNeeded, 42.89321881345245, 1e-9);
+/* more fees never moves the hurdle or the hold/LP values — only the verdict */
+const netMore = app.netLpReturn(2, "1000", "100000");
+check("NET fees don't move hold/LP/hurdle", netMore.holdValue === net0.holdValue && netMore.lpValue === net0.lpValue && netMore.feesNeeded === net0.feesNeeded && netMore.verdict === "ahead");
+check("NET rejects bad price multiple", app.netLpReturn(0, "1000", "10") === null && app.netLpReturn(-2, "1000", "10") === null && app.netLpReturn("x", "1000", "10") === null);
+check("NET rejects bad deposit", app.netLpReturn(2, "0", "10") === null && app.netLpReturn(2, "", "10") === null && app.netLpReturn(2, "abc", "10") === null);
+check("NET rejects bad fees", app.netLpReturn(2, "1000", "-1") === null && app.netLpReturn(2, "1000", "xyz") === null && app.netLpReturn(2, "1000", "") === null && app.netLpReturn(2, "1000", null) === null);
+check("all net controls labelled", ["net-ratio", "net-deposit", "net-fees", "net-out"].every(id => html.includes(`for="${id}"`)));
+check("net tool present in index.html", html.includes('id="net-calc"') && html.includes('id="net-result"'));
+check("net honesty: still-behind-holding and not-live labels", html.includes("still behind holding") && html.includes("not a live quote, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

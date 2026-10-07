@@ -564,6 +564,21 @@
         <button type="submit" class="btn primary">Model this two-hop swap</button>
         <p id="hop-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="net-calc">
+        <h3>24 · Net LP return calculator</h3>
+        <p>Tools 2 and 4 give the two halves separately — what the position is worth vs holding at a price move, and the fees it must earn to break even. This settles the question with the fees you <em>actually</em> earned: enter the price multiple, your deposit and your fees earned, and the calculator adds the fees to the position and gives the verdict against holding, both in $ and as a %. It also reports the return against the deposit itself — a different bottom line, reported alongside rather than instead: a position can be up on its deposit and still behind holding (at a 2× move with no fees, +41.42% on the deposit yet −5.72% vs holding), and only the holding comparison says whether providing liquidity beat doing nothing. Educational model only — a 50/50 constant-product position, fees counted in $ terms outside the pool with no compounding modelled; your inputs, not live pool state; not a live quote, not financial advice. CLMM positions are range-based and differ.</p>
+        <label for="net-ratio">Price multiple (2 = doubled, 0.5 = halved)</label>
+        <input id="net-ratio" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="net-deposit">Deposit value in $</label>
+        <input id="net-deposit" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="net-fees">Fees earned in $</label>
+        <input id="net-fees" inputmode="decimal" placeholder="e.g. 200" autocomplete="off">
+        <label for="net-out">Net vs holding — $ (model, negative = behind)</label>
+        <input id="net-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Settle my net return</button>
+        <p id="net-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -591,6 +606,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=21"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>
