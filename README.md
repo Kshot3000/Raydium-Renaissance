@@ -29,6 +29,7 @@ For the Raydium team — [@raydium-io](https://github.com/raydium-io) on GitHub 
 11. **CLMM tick / price converter** — what the tick indices in tools 8 and 9 actually are: each tick is one 0.01% price step (price = 1.0001^tick), a price's tick floors, and prices outside the standard CLMM tick range (−443636…443636) are rejected. With a pool's tick spacing, it also snaps a boundary the way pools require — lower boundaries down to the previous spacing multiple, upper boundaries up to the next (floor division, so negative ticks snap away from zero going down). Tick maths is floating-point, so a price exactly on a boundary can land one tick off.
 12. **CLMM position vs holding** — tool 2's impermanent-loss question for a CLMM position: given a position's model liquidity, its range, its entry price and a price to check, the position's value at the check price (in token B) against simply holding the tokens it started with. The position converts itself as price moves, so its value never beats holding — the shortfall is concentrated impermanent loss at that price, and the tool reports it as a % vs holding plus the exact fees (in token B) the position must have earned to break even with holding. The gap is zero at the entry price. No fees earned are included.
 13. **CLMM fee estimator** — the other side of tool 12's fee hurdle: a concentrated position's share is of the *active* liquidity at the current tick, not of TVL, and it earns only while price is in range — fees ≈ daily volume × fee tier × (your liquidity ÷ total active liquidity) × time-in-range %, per day and over a chosen period, with an optional naively-annualised APR against a position value. The total active liquidity is an input labelled as your estimate, and a total below your own liquidity is rejected (your L is part of it, so the share can never exceed 100%).
+14. **CLMM wallet-balance deposit planner** — the inverse of tool 8: given the token-A and token-B balances you actually hold, a current price and a chosen range, the biggest position those balances can fund — the scarcer side caps the liquidity and is used in full, the other side is partly left over (used and leftover amounts for both tokens, plus the model's liquidity). Below the range the position is entirely token A (the whole token-B balance is leftover); at or above the top it is entirely token B, symmetrically. Inside the range a zero balance on either side funds nothing and is rejected. No fees are modelled.
 
 Honest labels, always: these are **educational models** using numbers you type in — not live quotes, not live pool data, and not financial advice. Real pools live at <https://raydium.io/liquidity-pools/>.
 
@@ -55,7 +56,7 @@ Ecosystem:
 node tests/test-site.js
 ```
 
-Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all thirteen pool tools (known-value vectors, edge and rejection cases).
+Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all fourteen pool tools (known-value vectors, edge and rejection cases).
 
 ## Support
 

@@ -50,7 +50,10 @@ check("all tick-converter controls labelled",
 check("all vs-holding controls labelled",
   ["vh-l", "vh-lower", "vh-upper", "vh-entry", "vh-check", "vh-fees"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=11"));
+check("all wallet-planner controls labelled",
+  ["wp-price", "wp-lower", "wp-upper", "wp-bal-a", "wp-bal-b", "wp-out-l"]
+    .every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=12"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -421,6 +424,70 @@ check("CF rejects zero days / negative volume", app.clmmFeeEstimate("5", "5", "1
 check("CF rejects non-positive position value when given", app.clmmFeeEstimate("5", "5", "1", "25", "1", "100", "0") === null && app.clmmFeeEstimate("5", "5", "1", "25", "1", "100", "-3") === null);
 check("CF rejects junk / empty", app.clmmFeeEstimate("x", "5", "1", "25", "1", "100", "") === null && app.clmmFeeEstimate("5", "", "1", "25", "1", "100", "") === null && app.clmmFeeEstimate("5", "5", "", "25", "1", "100", "") === null);
 check("CLMM fee calculator present in index.html", html.includes('id="cfee-calc"') && html.includes('id="cfee-result"'));
+
+/* ---------- 14 · CLMM wallet-balance deposit planner ---------- */
+/* headline: range 0.8–1.25 at price 1 splits evenly (Tool 8: 100 A needs
+   100 B, L = 947.2135955), so balances 100/100 fund exactly that, both used */
+const wp1 = app.clmmWalletPlan("1", "0.8", "1.25", "100", "100");
+near("WP balanced balances liquidity", wp1.liquidity, 947.2135955, 0.000001);
+near("WP balanced used A", wp1.usedA, 100, 1e-9);
+near("WP balanced used B", wp1.usedB, 100, 1e-9);
+near("WP balanced leftover A", wp1.leftoverA, 0, 1e-9);
+near("WP balanced leftover B", wp1.leftoverB, 0, 1e-9);
+check("WP balanced limiting is both, in range", wp1.limiting === "both" && wp1.status === "in" && wp1.inRange === true);
+/* B is scarcer: 100 A / 50 B => L halves, A used halves, 50 A left over */
+const wp2 = app.clmmWalletPlan("1", "0.8", "1.25", "100", "50");
+near("WP B-limited liquidity", wp2.liquidity, 473.6067977, 0.000001);
+near("WP B-limited used A", wp2.usedA, 50, 1e-9);
+near("WP B-limited used B", wp2.usedB, 50, 1e-9);
+near("WP B-limited leftover A", wp2.leftoverA, 50, 1e-9);
+check("WP B-limited limiting is B", wp2.limiting === "B");
+/* A is scarcer: 25 A / 100 B => used 25/25, 75 B left over */
+const wp3 = app.clmmWalletPlan("1", "0.8", "1.25", "25", "100");
+near("WP A-limited used B", wp3.usedB, 25, 1e-9);
+near("WP A-limited leftover B", wp3.leftoverB, 75, 1e-9);
+check("WP A-limited limiting is A", wp3.limiting === "A");
+/* consistency with Tool 9: the used amounts are exactly what a position
+   with the funded liquidity holds at the current price */
+for (const [price, ba, bb] of [["1", "100", "50"], ["1.2", "100", "100"], ["0.9", "40", "90"]]) {
+  const wp = app.clmmWalletPlan(price, "0.8", "1.25", ba, bb);
+  const pos = app.clmmPositionAtPrice(String(wp.liquidity), "0.8", "1.25", price);
+  check("WP used amounts match Tool 9 @" + price + " " + ba + "/" + bb,
+    Math.abs(wp.usedA - pos.amountA) < 1e-9 && Math.abs(wp.usedB - pos.amountB) < 1e-9);
+}
+/* at 1.2 the position skews to B, so equal balances are B-limited with
+   most of the A left over (L from B: 100/(sqrt(1.2)-sqrt(0.8))) */
+const wpSkew = app.clmmWalletPlan("1.2", "0.8", "1.25", "100", "100");
+near("WP skewed liquidity", wpSkew.liquidity, 497.4680765, 0.000001);
+near("WP skewed used B in full", wpSkew.usedB, 100, 1e-9);
+check("WP skewed limiting is B, A mostly left", wpSkew.limiting === "B" && wpSkew.leftoverA > 90);
+/* used + leftover always rebuilds the balances, and neither exceeds them */
+for (const [price, ba, bb] of [["1", "100", "100"], ["1", "100", "50"], ["0.5", "100", "999"], ["2", "999", "100"], ["1.1", "7", "13"]]) {
+  const wp = app.clmmWalletPlan(price, "0.8", "1.25", ba, bb);
+  check("WP used+leftover = balances @" + price + " " + ba + "/" + bb,
+    wp !== null && Math.abs(wp.usedA + wp.leftoverA - Number(ba)) < 1e-9 && Math.abs(wp.usedB + wp.leftoverB - Number(bb)) < 1e-9 && wp.usedA <= Number(ba) + 1e-9 && wp.usedB <= Number(bb) + 1e-9);
+}
+/* below the range: entirely A — L from the range edges (Tool 8's below
+   case, 447.2135955 for 100 A), the whole B balance is leftover */
+const wpBelow = app.clmmWalletPlan("0.5", "0.8", "1.25", "100", "999");
+near("WP below-range liquidity", wpBelow.liquidity, 447.2135955, 0.000001);
+check("WP below-range uses only A", wpBelow.usedA === 100 && wpBelow.usedB === 0 && wpBelow.leftoverB === 999 && wpBelow.status === "below" && wpBelow.limiting === "A");
+check("WP below-range B balance may be zero", app.clmmWalletPlan("0.5", "0.8", "1.25", "100", "0") !== null);
+/* at/above the top: entirely B, symmetrically */
+const wpAbove = app.clmmWalletPlan("2", "0.8", "1.25", "999", "100");
+near("WP above-range liquidity", wpAbove.liquidity, 447.2135955, 0.000001);
+check("WP above-range uses only B", wpAbove.usedB === 100 && wpAbove.usedA === 0 && wpAbove.leftoverA === 999 && wpAbove.status === "above" && wpAbove.limiting === "B");
+check("WP above-range A balance may be zero", app.clmmWalletPlan("2", "0.8", "1.25", "0", "100") !== null);
+/* funding a Tool 8 plan exactly: Tool 8 says 100 A at price 1 needs
+   100 B — those balances fund Tool 8's own liquidity, nothing left */
+const plan8wp = app.clmmRangePlan("1", "0.8", "1.25", "100");
+const wpRound = app.clmmWalletPlan("1", "0.8", "1.25", "100", String(plan8wp.requiredB));
+near("WP round-trips Tool 8 liquidity", wpRound.liquidity, plan8wp.liquidity, 1e-9);
+check("WP rejects zero balance on a needed side", app.clmmWalletPlan("1", "0.8", "1.25", "0", "100") === null && app.clmmWalletPlan("1", "0.8", "1.25", "100", "0") === null && app.clmmWalletPlan("0.5", "0.8", "1.25", "0", "100") === null && app.clmmWalletPlan("2", "0.8", "1.25", "100", "0") === null);
+check("WP rejects inverted / empty range", app.clmmWalletPlan("1", "1.25", "0.8", "100", "100") === null && app.clmmWalletPlan("1", "1", "1", "100", "100") === null);
+check("WP rejects zero / negative / junk", app.clmmWalletPlan("0", "0.8", "1.25", "100", "100") === null && app.clmmWalletPlan("1", "0.8", "1.25", "-5", "100") === null && app.clmmWalletPlan("1", "0.8", "1.25", "100", "-5") === null && app.clmmWalletPlan("x", "0.8", "1.25", "100", "100") === null);
+check("WP rejects empty fields", app.clmmWalletPlan("", "0.8", "1.25", "100", "100") === null && app.clmmWalletPlan("1", "0.8", "1.25", "", "100") === null && app.clmmWalletPlan("1", "0.8", "1.25", "100", "") === null);
+check("wallet planner present in index.html", html.includes('id="wp-calc"') && html.includes('id="wp-result"'));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

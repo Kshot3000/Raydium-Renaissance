@@ -1,11 +1,12 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus twelve fully local
+/* Raydium Renaissance hub logic: project filtering plus fourteen fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
    calculator, an LP fee estimator, a break-even fee calculator, a
    liquidity deposit planner, an exact-out swap model, a liquidity
    withdrawal planner, a CLMM range deposit planner, a CLMM position
    checker, a slippage / minimum-received calculator, a CLMM tick /
-   price converter, and a CLMM position-vs-holding calculator. These are educational MODELS using
+   price converter, a CLMM position-vs-holding calculator, a CLMM fee
+   estimator, and a CLMM wallet-balance deposit planner. These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
 
@@ -520,8 +521,74 @@ function clmmFeeEstimate(yourLStr, totalActiveLStr, volumePerDayStr, feeBps, day
   };
 }
 
+/* ---------- 14 · CLMM wallet-balance deposit planner ---------- */
+/* Tool 8 answers "I want to deposit this much token A — how much token
+   B do I need?" Real wallets ask the inverse: "I hold this much of
+   BOTH tokens — what is the biggest position my balances can fund in
+   this range, and what will be left over?" Inside the range a position
+   with liquidity L uses (Tool 8/9's maths, s/sa/sb = sqrt prices):
+     amountA = L * (1/s - 1/sb)    amountB = L * (s - sa)
+   so each balance alone caps the liquidity:
+     LfromA = balanceA / (1/s - 1/sb),  LfromB = balanceB / (s - sa)
+   and the fundable liquidity is the SMALLER cap — the scarcer side is
+   used in full and the other side is partly left over. Below the range
+   the position is entirely token A (token B cannot fund it at all, so
+   the whole B balance is leftover and L is set by the range edges);
+   at or above the top it is entirely token B, symmetrically. A zero
+   balance on a side the position needs funds nothing and is rejected
+   inside the range. Model only: no fees, no tick-spacing snapping,
+   and a real deposit is quoted live on the pool page. */
+function clmmWalletPlan(currentStr, lowerStr, upperStr, balanceAStr, balanceBStr) {
+  var required = [currentStr, lowerStr, upperStr, balanceAStr, balanceBStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var current = Number(currentStr), lower = Number(lowerStr), upper = Number(upperStr);
+  var balanceA = Number(balanceAStr), balanceB = Number(balanceBStr);
+  if (![current, lower, upper, balanceA, balanceB].every(Number.isFinite)) return null;
+  if (current <= 0 || lower <= 0 || upper <= 0) return null;
+  if (balanceA < 0 || balanceB < 0) return null;
+  if (lower >= upper) return null;
+  var s = Math.sqrt(current), sa = Math.sqrt(lower), sb = Math.sqrt(upper);
+  var liquidity, usedA, usedB, status, limiting;
+  if (current <= lower) {
+    if (balanceA <= 0) return null;
+    liquidity = balanceA / (1 / sa - 1 / sb);
+    usedA = balanceA; usedB = 0; status = "below"; limiting = "A";
+  } else if (current >= upper) {
+    if (balanceB <= 0) return null;
+    liquidity = balanceB / (sb - sa);
+    usedA = 0; usedB = balanceB; status = "above"; limiting = "B";
+  } else {
+    if (balanceA <= 0 || balanceB <= 0) return null;
+    var lFromA = balanceA / (1 / s - 1 / sb);
+    var lFromB = balanceB / (s - sa);
+    liquidity = Math.min(lFromA, lFromB);
+    usedA = liquidity * (1 / s - 1 / sb);
+    usedB = liquidity * (s - sa);
+    status = "in";
+    limiting = Math.abs(lFromA - lFromB) <= Math.max(lFromA, lFromB) * 1e-12 ? "both" : (lFromA < lFromB ? "A" : "B");
+  }
+  if (!Number.isFinite(liquidity) || liquidity <= 0 || usedA < 0 || usedB < 0) return null;
+  return {
+    currentPrice: current,
+    lowerPrice: lower,
+    upperPrice: upper,
+    balanceA: balanceA,
+    balanceB: balanceB,
+    liquidity: liquidity,
+    usedA: usedA,
+    usedB: usedB,
+    leftoverA: balanceA - usedA,
+    leftoverB: balanceB - usedB,
+    status: status,
+    inRange: status === "in",
+    limiting: limiting
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -850,6 +917,41 @@ if (typeof document !== "undefined") {
         out.textContent = msg + " A CLMM fee model, not a live Raydium quote or a yield promise — the total active liquidity is your estimate, and real fees are read on the pool page.";
       }
       if (res !== null) document.getElementById("cfee-out").value = fmt(res.feesPerDay, 6);
+    });
+
+    /* --- CLMM wallet-balance deposit planner --- */
+    document.getElementById("wp-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmWalletPlan(
+        document.getElementById("wp-price").value,
+        document.getElementById("wp-lower").value,
+        document.getElementById("wp-upper").value,
+        document.getElementById("wp-bal-a").value,
+        document.getElementById("wp-bal-b").value
+      );
+      var out = document.getElementById("wp-result");
+      if (res === null) {
+        out.textContent = "Enter a current price and a range with lower below upper (all above 0) and the balances you hold. Inside the range a position needs both tokens, so a zero balance on either side funds nothing; below the range it needs token A, at or above the top it needs token B.";
+      } else if (res.status === "below") {
+        out.textContent = "Model output: the current price is below your range, so the position is entirely token A — it uses ≈ " +
+          fmt(res.usedA, 6) + " of token A and 0 of token B (model liquidity ≈ " + fmt(res.liquidity, 2) +
+          "), leaving ≈ " + fmt(res.leftoverB, 6) + " of token B unused. It earns no fees until the price enters the range. A CLMM wallet model, not a live Raydium quote.";
+      } else if (res.status === "above") {
+        out.textContent = "Model output: the current price is at or above the top of your range, so the position is entirely token B — it uses ≈ " +
+          fmt(res.usedB, 6) + " of token B and 0 of token A (model liquidity ≈ " + fmt(res.liquidity, 2) +
+          "), leaving ≈ " + fmt(res.leftoverA, 6) + " of token A unused. It earns no fees until the price returns into the range. A CLMM wallet model, not a live Raydium quote.";
+      } else {
+        out.textContent = "Model output: your balances fund a position with model liquidity ≈ " + fmt(res.liquidity, 2) +
+          ", using ≈ " + fmt(res.usedA, 6) + " of token A and ≈ " + fmt(res.usedB, 6) + " of token B" +
+          (res.limiting === "both"
+            ? " — both balances are used in full, with nothing left over"
+            : " — token " + res.limiting + " is the limiting side and is used in full, leaving ≈ " +
+              fmt(res.limiting === "A" ? res.leftoverB : res.leftoverA, 6) + " of token " + (res.limiting === "A" ? "B" : "A") + " unused") +
+          ". A CLMM wallet model, not a live Raydium quote — real positions snap ticks to the pool's tick spacing.";
+      }
+      if (res !== null) {
+        document.getElementById("wp-out-l").value = fmt(res.liquidity, 6);
+      }
     });
 
     /* --- copy donation address --- */
