@@ -1,13 +1,14 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus fifteen fully local
+/* Raydium Renaissance hub logic: project filtering plus sixteen fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
    calculator, an LP fee estimator, a break-even fee calculator, a
    liquidity deposit planner, an exact-out swap model, a liquidity
    withdrawal planner, a CLMM range deposit planner, a CLMM position
    checker, a slippage / minimum-received calculator, a CLMM tick /
    price converter, a CLMM position-vs-holding calculator, a CLMM fee
-   estimator, a CLMM wallet-balance deposit planner, and a CLMM
-   break-even days calculator. These are educational MODELS using
+   estimator, a CLMM wallet-balance deposit planner, a CLMM
+   break-even days calculator, and a constant-product arbitrage model.
+   These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
 
@@ -637,8 +638,57 @@ function clmmBreakEven(liquidityStr, lowerStr, upperStr, entryPriceStr, checkPri
   };
 }
 
+/* ---------- 16 · Constant-product arbitrage model ---------- */
+/* Why pools stay near the market price: if a pool's spot price
+   (reserveB / reserveA, in B per A) differs from a price elsewhere,
+   a trade that moves the pool's price TO that external price is
+   the textbook arbitrage. With k = reserveA * reserveB held
+   constant, the reserves at the external price Pe are forced:
+     reserveA' = sqrt(k / Pe),  reserveB' = sqrt(k * Pe)
+   Pe above spot: A is cheap in the pool — pay B in (net
+   reserveB' - reserveB), take A out (reserveA - reserveA').
+   Pe below spot: the mirror — pay A in, take B out. The fee is
+   taken from the input before it reaches the pool (as in Tool 1),
+   so the gross input is net / (1 - fee) and the modelled profit,
+   valued in B at the external price, is
+     outValueInB - grossInValueInB.
+   A gap smaller than the fee makes that profit negative at the
+   price-aligning size — reported as-is, never dressed up. The
+   external price is YOUR input, not a live feed: this sizes a
+   textbook trade against a price you supply, it does not find
+   one. Model only — no routing, no other venues' depth or fees,
+   no transaction costs, not financial advice. */
+function cpArbitrage(reserveAStr, reserveBStr, externalPriceStr, feeBps) {
+  var required = [reserveAStr, reserveBStr, externalPriceStr, feeBps];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var ra = Number(reserveAStr), rb = Number(reserveBStr);
+  var pe = Number(externalPriceStr), fee = Number(feeBps);
+  if (![ra, rb, pe, fee].every(Number.isFinite)) return null;
+  if (ra <= 0 || rb <= 0 || pe <= 0) return null;
+  if (fee < 0 || fee >= 10000) return null;
+  var spot = rb / ra;
+  var k = ra * rb;
+  var targetA = Math.sqrt(k / pe), targetB = Math.sqrt(k * pe);
+  var base = { reserveA: ra, reserveB: rb, spotPrice: spot, externalPrice: pe,
+    priceGapPct: (pe / spot - 1) * 100, feeBps: fee, postTradeSpot: pe };
+  if (Math.abs(pe - spot) / spot < 1e-12) {
+    return Object.assign(base, { direction: "none", inToken: null, netIn: 0, grossIn: 0, amountOut: 0, outToken: null, profitInB: 0 });
+  }
+  var keep = 1 - fee / 10000;
+  if (pe > spot) {
+    var netInB = targetB - rb, outA = ra - targetA;
+    var grossInB = netInB / keep;
+    return Object.assign(base, { direction: "buy-a", inToken: "B", netIn: netInB, grossIn: grossInB, amountOut: outA, outToken: "A", profitInB: outA * pe - grossInB });
+  }
+  var netInA = targetA - ra, outB = rb - targetB;
+  var grossInA = netInA / keep;
+  return Object.assign(base, { direction: "sell-a", inToken: "A", netIn: netInA, grossIn: grossInA, amountOut: outB, outToken: "B", profitInB: outB - grossInA * pe });
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -1032,6 +1082,35 @@ if (typeof document !== "undefined") {
           ", if that rate held for the whole period, which in a live pool it won't. A CLMM break-even model, not a live Raydium quote or a yield promise.";
       }
       if (res !== null) document.getElementById("bed-out").value = isFinite(res.daysToBreakEven) ? fmt(res.daysToBreakEven, 2) : "never";
+    });
+
+    /* --- CP arbitrage model --- */
+    document.getElementById("arb-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = cpArbitrage(
+        document.getElementById("arb-ra").value,
+        document.getElementById("arb-rb").value,
+        document.getElementById("arb-ext").value,
+        document.getElementById("arb-fee").value
+      );
+      var out = document.getElementById("arb-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, a positive external price (B per A), and a fee of 0–9,999 bps.";
+        document.getElementById("arb-out").value = "";
+      } else if (res.direction === "none") {
+        out.textContent = "Model output: the pool's spot price (≈ " + fmt(res.spotPrice, 6) + " B per A) already matches your external price — no arbitrage trade exists at these numbers. A CP arbitrage model, not a live Raydium quote.";
+        document.getElementById("arb-out").value = "0";
+      } else {
+        var dirText = res.direction === "buy-a"
+          ? "token A is cheap in this pool vs your external price: pay ≈ " + fmt(res.grossIn, 6) + " B in (≈ " + fmt(res.netIn, 6) + " B reaches the pool after the fee) and take ≈ " + fmt(res.amountOut, 6) + " A out"
+          : "token A is dear in this pool vs your external price: pay ≈ " + fmt(res.grossIn, 6) + " A in (≈ " + fmt(res.netIn, 6) + " A reaches the pool after the fee) and take ≈ " + fmt(res.amountOut, 6) + " B out";
+        out.textContent = "Model output: spot ≈ " + fmt(res.spotPrice, 6) + " B per A vs your external " + fmt(res.externalPrice, 6) +
+          " (" + (res.priceGapPct >= 0 ? "+" : "") + fmt(res.priceGapPct, 2) + "% gap) — " + dirText +
+          ", moving the pool's modelled price to your external price. Modelled profit ≈ " + fmt(res.profitInB, 6) + " B valued at the external price" +
+          (res.profitInB <= 0 ? " — not profitable at this fee: the gap is smaller than the fee takes. " : ". ") +
+          "A CP arbitrage model against a price you supplied, not a live quote, a found opportunity, or financial advice — real venues have their own depth, fees and costs this model ignores.";
+        document.getElementById("arb-out").value = fmt(res.profitInB, 6);
+      }
     });
 
     /* --- copy donation address --- */

@@ -31,6 +31,7 @@ For the Raydium team — [@raydium-io](https://github.com/raydium-io) on GitHub 
 13. **CLMM fee estimator** — the other side of tool 12's fee hurdle: a concentrated position's share is of the *active* liquidity at the current tick, not of TVL, and it earns only while price is in range — fees ≈ daily volume × fee tier × (your liquidity ÷ total active liquidity) × time-in-range %, per day and over a chosen period, with an optional naively-annualised APR against a position value. The total active liquidity is an input labelled as your estimate, and a total below your own liquidity is rejected (your L is part of it, so the share can never exceed 100%).
 14. **CLMM wallet-balance deposit planner** — the inverse of tool 8: given the token-A and token-B balances you actually hold, a current price and a chosen range, the biggest position those balances can fund — the scarcer side caps the liquidity and is used in full, the other side is partly left over (used and leftover amounts for both tokens, plus the model's liquidity). Below the range the position is entirely token A (the whole token-B balance is leftover); at or above the top it is entirely token B, symmetrically. Inside the range a zero balance on either side funds nothing and is rejected. No fees are modelled.
 15. **CLMM break-even days calculator** — tool 4's question for a CLMM position, joining tools 12 and 13: tool 12's fee hurdle at a check price (the fees, in token B, the position must earn to match holding) divided by tool 13's estimated fees per day at the same liquidity gives the days at that rate needed to break even with holding. Both halves are computed by those tools' own functions, so the numbers can never drift from their own forms. At the entry price the gap is zero and the answer is 0 days; with a real gap and a zero fee rate the answer is honestly never, not a large number. The rate is assumed to hold still for the whole period, which in a live pool it will not.
+16. **Constant-product arbitrage model** — why a pool's price tracks the wider market: given the pool's reserves and an external price you supply (no live feed — the tool finds no opportunities), the trade that moves the pool's price exactly to that external price: direction, size grossed up for the pool fee, and modelled profit valued in token B at your external price. The reserves at the target price are forced by x × y = k (√(k/Pe), √(k×Pe)). A price gap smaller than the fee honestly comes out unprofitable. No routing, other venues' depth/fees, or transaction costs are modelled.
 
 Honest labels, always: these are **educational models** using numbers you type in — not live quotes, not live pool data, and not financial advice. Real pools live at <https://raydium.io/liquidity-pools/>.
 
@@ -57,7 +58,7 @@ Ecosystem:
 node tests/test-site.js
 ```
 
-Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all fifteen pool tools (known-value vectors, edge and rejection cases).
+Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all sixteen pool tools (known-value vectors, edge and rejection cases).
 
 ## Support
 

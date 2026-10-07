@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=13"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=14"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -544,6 +544,52 @@ check("BED rejects time in range outside 0-100", app.clmmBreakEven(beL, "0.8", "
 check("BED rejects negative volume", app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472", "-5", "25", "") === null);
 check("BED rejects junk / empty", app.clmmBreakEven("x", "0.8", "1.25", "1", "1.25", "9472", "1000000", "25", "") === null && app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472", "", "25", "") === null && app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472", "1000000", "", "") === null && app.clmmBreakEven(beL, "0.8", "1.25", "", "1.25", "9472", "1000000", "25", "") === null);
 check("break-even days calculator present in index.html", html.includes('id="bed-calc"') && html.includes('id="bed-result"'));
+
+/* CP arbitrage — known values: reserves at Pe are sqrt(k/Pe), sqrt(k*Pe) */
+/* 1000/1000, Pe 4, no fee: pay 1000 B, take 500 A, profit 500*4-1000 = 1000 B */
+const a1 = app.cpArbitrage("1000", "1000", "4", 0);
+check("ARB buy-a direction", a1.direction === "buy-a" && a1.inToken === "B" && a1.outToken === "A");
+near("ARB buy-a net in", a1.netIn, 1000, 1e-9);
+near("ARB buy-a gross in (no fee)", a1.grossIn, 1000, 1e-9);
+near("ARB buy-a amount out", a1.amountOut, 500, 1e-9);
+near("ARB buy-a profit", a1.profitInB, 1000, 1e-9);
+near("ARB buy-a gap pct", a1.priceGapPct, 300, 1e-9);
+near("ARB post-trade spot is the external price", a1.postTradeSpot, 4, 1e-12);
+/* mirror: Pe 0.25 — pay 1000 A, take 500 B, profit 500 - 1000*0.25 = 250 B */
+const a2 = app.cpArbitrage("1000", "1000", "0.25", 0);
+check("ARB sell-a direction", a2.direction === "sell-a" && a2.inToken === "A" && a2.outToken === "B");
+near("ARB sell-a net in", a2.netIn, 1000, 1e-9);
+near("ARB sell-a amount out", a2.amountOut, 500, 1e-9);
+near("ARB sell-a profit", a2.profitInB, 250, 1e-9);
+near("ARB sell-a gap pct", a2.priceGapPct, -75, 1e-9);
+/* fee grosses the input up: buy case at 25bps gross = 1000/0.9975, profit = 2000 - gross */
+const a3 = app.cpArbitrage("1000", "1000", "4", 25);
+near("ARB 25bps gross in", a3.grossIn, 1002.5062656641603, 1e-9);
+near("ARB 25bps profit", a3.profitInB, 997.4937343358397, 1e-9);
+check("ARB fee lowers profit both directions", a3.profitInB < a1.profitInB && app.cpArbitrage("1000", "1000", "0.25", 25).profitInB < a2.profitInB);
+/* no gap, no trade — including at an asymmetric spot price */
+const a0 = app.cpArbitrage("2000", "500", "0.25", 25);
+check("ARB at spot is none", a0.direction === "none" && a0.profitInB === 0 && a0.amountOut === 0 && a0.grossIn === 0);
+/* a gap smaller than the fee is honestly unprofitable; without the fee it is not */
+check("ARB tiny gap eaten by fee", app.cpArbitrage("1000", "1000", "1.001", 25).profitInB < 0);
+check("ARB tiny gap profitable at zero fee", app.cpArbitrage("1000", "1000", "1.001", 0).profitInB > 0);
+/* consistency: Tool 1 swapping the gross input yields the modelled amount out */
+for (const [ra, rb, pe, f] of [["1000", "1000", "4", 0], ["1000", "1000", "4", 25], ["1000", "1000", "0.25", 25], ["2000000", "500000", "0.5", 25]]) {
+  const arb = app.cpArbitrage(ra, rb, pe, f);
+  const rin = arb.inToken === "B" ? rb : ra, rout = arb.inToken === "B" ? ra : rb;
+  const sw = app.cpSwap(rin, rout, arb.grossIn.toFixed(9), f);
+  check("ARB Tool-1 consistency " + ra + "/" + rb + " Pe " + pe + " @" + f + "bps", sw !== null && Math.abs(parseFloat(sw.out) - arb.amountOut) < 0.001);
+}
+/* reciprocal symmetry: swapping the tokens and inverting the price models the same trade */
+const aSym = app.cpArbitrage("1000", "1000", "0.25", 0);
+near("ARB reciprocal profit equivalence (valued in B)", aSym.profitInB * 4, a1.profitInB, 1e-9);
+check("ARB larger gap = larger profit", app.cpArbitrage("1000", "1000", "9", 25).profitInB > a3.profitInB);
+check("ARB rejects zero reserves / price", app.cpArbitrage("0", "1000", "1", 25) === null && app.cpArbitrage("1000", "0", "1", 25) === null && app.cpArbitrage("1000", "1000", "0", 25) === null && app.cpArbitrage("1000", "1000", "-1", 25) === null);
+check("ARB rejects bad fee", app.cpArbitrage("1000", "1000", "2", 10000) === null && app.cpArbitrage("1000", "1000", "2", -1) === null);
+check("ARB rejects junk / empty", app.cpArbitrage("x", "1000", "2", 25) === null && app.cpArbitrage("1000", "1000", "", 25) === null && app.cpArbitrage("1000", "1000", "2", "") === null && app.cpArbitrage("", "1000", "2", 25) === null);
+check("all arbitrage controls labelled", ["arb-ra", "arb-rb", "arb-ext", "arb-fee", "arb-out"].every(id => html.includes(`for="${id}"`)));
+check("arbitrage tool present in index.html", html.includes('id="arb-calc"') && html.includes('id="arb-result"'));
+check("arbitrage honesty: external price is user input", html.includes("not a live feed") && html.includes("not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
