@@ -1,6 +1,6 @@
 # Getting started with Raydium liquidity pools
 
-By Kyle Cox ([@kshot9000](https://x.com/kshot9000)) — my builder notes for Raydium on Solana, for the Raydium team ([@raydium-io](https://github.com/raydium-io) · [@Raydium](https://x.com/Raydium)) and anyone arriving at liquidity pools for the first time. Independent notes, not affiliated with Raydium.
+By Kyle Cox ([@kshot9000](https://x.com/kshot9000)) — my builder notes for Raydium on Solana, for the Raydium team ([@raydium-io](https://github.com/raydium-io) · [@Raydium](https://x.com/Raydium)) and the Solana team ([@solana-foundation](https://github.com/solana-foundation) · [@solana](https://x.com/solana)) and anyone arriving at liquidity pools for the first time. Independent notes, not affiliated with Raydium.
 
 ## 1 · Start at the real pools page
 
@@ -30,4 +30,4 @@ Official explainer source: <https://docs.raydium.io/>
 
 ## Support
 
-Tips in SOL: `9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8` — [@kshot9000](https://x.com/kshot9000)
+Tips in SOL: `9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8` — [@kshot9000](https://x.com/kshot9000) · tagging [@raydium-io](https://github.com/raydium-io) · [@solana-foundation](https://github.com/solana-foundation)

@@ -6,7 +6,7 @@ I'm Kyle Cox ([@kshot9000](https://x.com/kshot9000) · [github.com/Kshot3000](ht
 
 Live hub: **https://kshot3000.github.io/Raydium-Renaissance/**
 
-For the Raydium team — [@raydium-io](https://github.com/raydium-io) on GitHub · [@Raydium](https://x.com/Raydium) on X — feedback, corrections and issue reports are welcome here. I'm an independent builder, **not affiliated with Raydium or the Solana Foundation**; ecosystem projects in the catalogue are linked for credit, not claimed as my work.
+For the Raydium team — [@raydium-io](https://github.com/raydium-io) on GitHub · [@Raydium](https://x.com/Raydium) on X — and the Solana team — [@solana-foundation](https://github.com/solana-foundation) on GitHub · [@solana](https://x.com/solana) on X — feedback, corrections and issue reports are welcome here. I'm an independent builder, **not affiliated with Raydium or the Solana Foundation**; ecosystem projects in the catalogue are linked for credit, not claimed as my work.
 
 ## What this hub does
 
@@ -33,7 +33,7 @@ Official Raydium ([@raydium-io](https://github.com/raydium-io)):
 - [SDK V2](https://github.com/raydium-io/raydium-sdk-V2) · [CLMM program](https://github.com/raydium-io/raydium-clmm) · [CP-Swap program](https://github.com/raydium-io/raydium-cp-swap) · [AMM program](https://github.com/raydium-io/raydium-amm) · [IDL](https://github.com/raydium-io/raydium-idl)
 
 Ecosystem:
-- [Solana](https://solana.com/) · [Jupiter](https://jup.ag/) (aggregator routing across venues including Raydium pools)
+- [Solana](https://solana.com/) ([@solana-foundation](https://github.com/solana-foundation) · [@solana](https://x.com/solana)) · [Jupiter](https://jup.ag/) (aggregator routing across venues including Raydium pools)
 
 ## Guides
 
@@ -51,6 +51,6 @@ Covers attribution on every surface, catalogue links and counts, cache keys, and
 
 Tips in SOL keep this work going: `9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8`
 
-— Kyle Cox, [@kshot9000](https://x.com/kshot9000). Tagging the Raydium team on everything: [@raydium-io](https://github.com/raydium-io) · [@Raydium](https://x.com/Raydium).
+— Kyle Cox, [@kshot9000](https://x.com/kshot9000). Tagging the Raydium and Solana teams on everything: [@raydium-io](https://github.com/raydium-io) · [@Raydium](https://x.com/Raydium) · [@solana-foundation](https://github.com/solana-foundation) · [@solana](https://x.com/solana).
 
 *Independent builder hub — not affiliated with Raydium, raydium-io, or the Solana Foundation.*

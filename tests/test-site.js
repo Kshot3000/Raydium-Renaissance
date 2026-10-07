@@ -24,6 +24,8 @@ for (const [label, doc] of [["index.html", html], ["README", readme], ["guide", 
   check("@kshot9000 in " + label, doc.includes("@kshot9000"));
   check("Raydium team GitHub tag in " + label, doc.includes("@raydium-io"));
   check("Raydium team X tag in " + label, doc.includes("@Raydium"));
+  check("Solana team GitHub tag in " + label, doc.includes("@solana-foundation"));
+  check("Solana team X tag in " + label, doc.includes("https://x.com/solana"));
 }
 check("honesty line in index.html", html.includes("Not affiliated with Raydium"));
 check("honesty line in README", readme.includes("not affiliated with Raydium"));
@@ -47,7 +49,7 @@ const LINKS = [
   "https://github.com/raydium-io/raydium-docs", "https://github.com/raydium-io/raydium-sdk-V2",
   "https://github.com/raydium-io/raydium-clmm", "https://github.com/raydium-io/raydium-cp-swap",
   "https://github.com/raydium-io/raydium-amm", "https://github.com/raydium-io/raydium-idl",
-  "https://solana.com/", "https://jup.ag/"
+  "https://solana.com/", "https://github.com/solana-foundation", "https://x.com/solana", "https://jup.ag/"
 ];
 for (const url of LINKS) {
   check("catalogue linked in index.html: " + url, html.includes(url));
