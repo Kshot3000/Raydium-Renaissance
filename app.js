@@ -460,8 +460,68 @@ function clmmVsHold(liquidityStr, lowerStr, upperStr, entryPriceStr, checkPriceS
   };
 }
 
+/* ---------- 13 · CLMM fee estimator ---------- */
+/* Tool 3 estimates constant-product LP fees from your share of TVL;
+   a CLMM position's share is not of TVL but of the ACTIVE liquidity
+   at the current tick, and it only earns while price is inside its
+   range. The model is the same shape with those two corrections:
+     pool fees per day  = daily volume (in token B) * fee tier
+     your share         = your liquidity L / total active liquidity
+     your fees per day  = pool fees * share * time-in-range fraction
+   Total active liquidity is the number nobody can read off a single
+   pool page precisely — it is an input here, labelled an estimate,
+   and it must be at least your own L (your liquidity is part of it),
+   so total < L is rejected rather than silently paying out a share
+   above 100%. The naive APR (only with a position value, also an
+   input) just annualises the daily figure — it assumes volume, the
+   active-liquidity total and your time in range all hold still,
+   which in a live pool none of them do. Pair it with Tool 12: fees
+   per day vs the fee hurdle a price move creates is the honest
+   CLMM question. Model only — not a live quote or yield promise. */
+function clmmFeeEstimate(yourLStr, totalActiveLStr, volumePerDayStr, feeBps, daysStr, inRangePctStr, positionValueStr) {
+  /* required fields must be present: Number("") is 0, which the
+     volume >= 0 allowance below would otherwise let slip through */
+  var required = [yourLStr, totalActiveLStr, volumePerDayStr, feeBps, daysStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var yourL = Number(yourLStr), totalL = Number(totalActiveLStr);
+  var volume = Number(volumePerDayStr), fee = Number(feeBps), days = Number(daysStr);
+  if (![yourL, totalL, volume, fee, days].every(Number.isFinite)) return null;
+  if (yourL <= 0 || totalL <= 0 || volume < 0 || days <= 0) return null;
+  if (totalL < yourL) return null;
+  if (fee < 0 || fee > 10000) return null;
+  var inRangePct = 100;
+  if (inRangePctStr != null && String(inRangePctStr).trim() !== "") {
+    inRangePct = Number(inRangePctStr);
+    if (!Number.isFinite(inRangePct) || inRangePct < 0 || inRangePct > 100) return null;
+  }
+  var positionValue = null;
+  if (positionValueStr != null && String(positionValueStr).trim() !== "") {
+    positionValue = Number(positionValueStr);
+    if (!Number.isFinite(positionValue) || positionValue <= 0) return null;
+  }
+  var sharePct = yourL / totalL * 100;
+  var poolFeesPerDay = volume * fee / 10000;
+  var feesPerDay = poolFeesPerDay * (yourL / totalL) * (inRangePct / 100);
+  return {
+    yourLiquidity: yourL,
+    totalActiveLiquidity: totalL,
+    volumePerDay: volume,
+    feeBps: fee,
+    days: days,
+    inRangePct: inRangePct,
+    sharePct: sharePct,
+    poolFeesPerDay: poolFeesPerDay,
+    feesPerDay: feesPerDay,
+    feesForPeriod: feesPerDay * days,
+    positionValueInB: positionValue,
+    naiveAprPct: positionValue !== null ? feesPerDay * 365 / positionValue * 100 : null
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -763,6 +823,33 @@ if (typeof document !== "undefined") {
           " B in fees earned to break even with holding. A CLMM position-vs-holding model, not a live Raydium quote — no fees earned are included.";
       }
       if (res !== null) document.getElementById("vh-fees").value = fmt(res.feesNeededInB, 6);
+    });
+
+    document.getElementById("cfee-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmFeeEstimate(
+        document.getElementById("cfee-l").value,
+        document.getElementById("cfee-total").value,
+        document.getElementById("cfee-volume").value,
+        document.getElementById("cfee-bps").value,
+        document.getElementById("cfee-days").value,
+        document.getElementById("cfee-inrange").value,
+        document.getElementById("cfee-value").value
+      );
+      var out = document.getElementById("cfee-result");
+      if (res === null) {
+        out.textContent = "Enter a positive position liquidity, a total active liquidity at least as large, a non-negative daily volume, a fee tier of 0–10,000 bps, a positive number of days, and a time-in-range of 0–100%.";
+      } else {
+        var msg = "Model output: your liquidity is ≈ " + fmt(res.sharePct, 4) + "% of the active liquidity, so of the pool's ≈ " +
+          fmt(res.poolFeesPerDay, 6) + " B in daily fees your in-range share is ≈ " + fmt(res.feesPerDay, 6) + " B per day — ≈ " +
+          fmt(res.feesForPeriod, 6) + " B over " + fmt(res.days, 0) + " days at " + fmt(res.inRangePct, 2) + "% time in range.";
+        if (res.naiveAprPct !== null) {
+          msg += " Against a position value of ≈ " + fmt(res.positionValueInB, 6) + " B that is a naive ≈ " + fmt(res.naiveAprPct, 2) +
+            "% APR — it assumes volume, active liquidity and your time in range all hold still, which in a live pool none of them do.";
+        }
+        out.textContent = msg + " A CLMM fee model, not a live Raydium quote or a yield promise — the total active liquidity is your estimate, and real fees are read on the pool page.";
+      }
+      if (res !== null) document.getElementById("cfee-out").value = fmt(res.feesPerDay, 6);
     });
 
     /* --- copy donation address --- */

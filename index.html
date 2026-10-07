@@ -345,6 +345,29 @@
         <button type="submit" class="btn primary">Compare vs holding</button>
         <p id="vh-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="cfee-calc">
+        <h3>13 · CLMM fee estimator</h3>
+        <p>Tool 12 tells you the fees a CLMM position must earn to match holding — this estimates the fees it might actually earn. A concentrated position's share is not of the pool's TVL but of the <em>active</em> liquidity at the current tick, and it earns only while price is inside its range: your fees ≈ pool volume × fee tier × (your liquidity ÷ total active liquidity) × your time in range. The total active liquidity is an estimate you supply — it must be at least your own liquidity, since yours is part of it. Pair the daily figure with Tool 12's fee hurdle before trusting a range.</p>
+        <label for="cfee-l">Your position liquidity L (model, from Tool 8)</label>
+        <input id="cfee-l" inputmode="decimal" placeholder="e.g. 947.21" autocomplete="off">
+        <label for="cfee-total">Total active liquidity at the current tick (your estimate)</label>
+        <input id="cfee-total" inputmode="decimal" placeholder="e.g. 9472.14" autocomplete="off">
+        <label for="cfee-volume">Pool volume per day (token B)</label>
+        <input id="cfee-volume" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="cfee-bps">Fee tier (bps — 25 = 0.25%)</label>
+        <input id="cfee-bps" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="cfee-days">Days to estimate over</label>
+        <input id="cfee-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="cfee-inrange">Time in range % (optional, default 100)</label>
+        <input id="cfee-inrange" inputmode="decimal" placeholder="e.g. 80" autocomplete="off">
+        <label for="cfee-value">Position value — token B (optional, for naive APR)</label>
+        <input id="cfee-value" inputmode="decimal" placeholder="e.g. 20000" autocomplete="off">
+        <label for="cfee-out">Your fees per day — token B (model)</label>
+        <input id="cfee-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Estimate CLMM fees</button>
+        <p id="cfee-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -372,6 +395,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

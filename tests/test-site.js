@@ -50,7 +50,7 @@ check("all tick-converter controls labelled",
 check("all vs-holding controls labelled",
   ["vh-l", "vh-lower", "vh-upper", "vh-entry", "vh-check", "vh-fees"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=10"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=11"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -385,6 +385,42 @@ check("VH rejects zero liquidity / prices", app.clmmVsHold("0", "0.8", "1.25", "
 check("VH rejects inverted / empty range", app.clmmVsHold(vhL, "1.25", "0.8", "1", "1") === null && app.clmmVsHold(vhL, "1", "1", "1", "1") === null);
 check("VH rejects junk / empty", app.clmmVsHold("x", "0.8", "1.25", "1", "1") === null && app.clmmVsHold(vhL, "0.8", "1.25", "", "1") === null && app.clmmVsHold(vhL, "0.8", "1.25", "1", "") === null);
 check("vs-holding calculator present in index.html", html.includes('id="vh-calc"') && html.includes('id="vh-result"'));
+
+/* ---------- 13 · CLMM fee estimator ---------- */
+/* headline: L is exactly 10% of active liquidity; 1,000,000 B/day at
+   25 bps is 2,500 B of pool fees; 10% share at 80% in range = 200/day */
+const cf = app.clmmFeeEstimate("947.2136", "9472.136", "1000000", "25", "30", "80", "20000");
+near("CF share pct", cf.sharePct, 10, 1e-9);
+near("CF pool fees per day", cf.poolFeesPerDay, 2500, 1e-9);
+near("CF fees per day", cf.feesPerDay, 200, 1e-9);
+near("CF fees for period", cf.feesForPeriod, 6000, 1e-9);
+near("CF naive APR", cf.naiveAprPct, 365, 1e-9);
+/* sole active LP at 1% tier, half the time in range */
+const cfSole = app.clmmFeeEstimate("500", "500", "40000", "100", "7", "50", "");
+near("CF sole-LP share is 100", cfSole.sharePct, 100, 1e-12);
+near("CF sole-LP fees per day", cfSole.feesPerDay, 200, 1e-9);
+near("CF sole-LP fees for period", cfSole.feesForPeriod, 1400, 1e-9);
+check("CF no position value -> no APR", cfSole.naiveAprPct === null && cfSole.positionValueInB === null);
+/* empty time-in-range defaults to 100%: full 10% of 2,500 = 250/day */
+near("CF default in-range is 100%", app.clmmFeeEstimate("947.2136", "9472.136", "1000000", "25", "30", "", "20000").feesPerDay, 250, 1e-9);
+/* zeros that are honest answers, not errors */
+check("CF zero fee tier earns 0", app.clmmFeeEstimate("500", "500", "40000", "0", "7", "50", "").feesPerDay === 0);
+check("CF zero time in range earns 0", app.clmmFeeEstimate("500", "500", "40000", "100", "7", "0", "").feesPerDay === 0);
+check("CF zero volume earns 0", app.clmmFeeEstimate("500", "500", "0", "100", "7", "50", "").feesForPeriod === 0);
+/* doubling volume or time in range doubles the fees; period = day * days */
+for (const [v, ir] of [["100000", "100"], ["250000", "60"], ["50000", "25"]]) {
+  const a = app.clmmFeeEstimate("100", "1000", v, "25", "10", ir, "");
+  const b = app.clmmFeeEstimate("100", "1000", String(Number(v) * 2), "25", "10", ir, "");
+  check(`CF fees scale with volume @${v}/${ir}`, a !== null && b !== null && Math.abs(b.feesPerDay - 2 * a.feesPerDay) < 1e-9 && Math.abs(a.feesForPeriod - a.feesPerDay * 10) < 1e-9);
+}
+check("CF rejects your L above total active", app.clmmFeeEstimate("600", "500", "40000", "100", "7", "50", "") === null);
+check("CF rejects zero / negative liquidity", app.clmmFeeEstimate("0", "500", "40000", "100", "7", "50", "") === null && app.clmmFeeEstimate("500", "0", "40000", "100", "7", "50", "") === null && app.clmmFeeEstimate("-5", "500", "40000", "100", "7", "50", "") === null);
+check("CF rejects fee tier above 100%", app.clmmFeeEstimate("5", "5", "1", "10001", "1", "100", "") === null && app.clmmFeeEstimate("5", "5", "1", "-1", "1", "100", "") === null);
+check("CF rejects time in range outside 0-100", app.clmmFeeEstimate("5", "5", "1", "25", "1", "101", "") === null && app.clmmFeeEstimate("5", "5", "1", "25", "1", "-1", "") === null);
+check("CF rejects zero days / negative volume", app.clmmFeeEstimate("5", "5", "1", "25", "0", "100", "") === null && app.clmmFeeEstimate("5", "5", "-1", "25", "1", "100", "") === null);
+check("CF rejects non-positive position value when given", app.clmmFeeEstimate("5", "5", "1", "25", "1", "100", "0") === null && app.clmmFeeEstimate("5", "5", "1", "25", "1", "100", "-3") === null);
+check("CF rejects junk / empty", app.clmmFeeEstimate("x", "5", "1", "25", "1", "100", "") === null && app.clmmFeeEstimate("5", "", "1", "25", "1", "100", "") === null && app.clmmFeeEstimate("5", "5", "", "25", "1", "100", "") === null);
+check("CLMM fee calculator present in index.html", html.includes('id="cfee-calc"') && html.includes('id="cfee-result"'));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
