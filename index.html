@@ -262,6 +262,23 @@
         <button type="submit" class="btn primary">Plan my withdrawal</button>
         <p id="wd-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="clmm-calc">
+        <h3>8 · CLMM range deposit planner</h3>
+        <p>Tools 5 and 7 are constant-product only — a CLMM position works differently: you pick a price range, and where the current price sits inside it sets the token split for you. Enter a current price and your range (token B per token A) plus the token A you want to deposit — the planner shows the matching token B, the model's liquidity, and the range's tick indices. Below your range a position is entirely token A and earns nothing until price enters it; at or above the top it is entirely token B, so a token-A deposit can't fund it. Tick indices here are modelled with floating-point logs and are not snapped to a pool's tick spacing.</p>
+        <label for="clmm-price">Current price (token B per token A)</label>
+        <input id="clmm-price" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="clmm-lower">Range lower price (B per A)</label>
+        <input id="clmm-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="clmm-upper">Range upper price (B per A)</label>
+        <input id="clmm-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="clmm-aa">Your deposit — token A</label>
+        <input id="clmm-aa" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="clmm-reqb">Matching deposit — token B (model)</label>
+        <input id="clmm-reqb" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan my CLMM deposit</button>
+        <p id="clmm-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -289,6 +306,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

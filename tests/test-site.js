@@ -36,9 +36,9 @@ check("liquidity pools focus linked", html.includes("https://raydium.io/liquidit
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
 check("all main form controls labelled",
-  ["q", "rin", "rout", "ain", "aout", "swap-fee", "ratio", "deposit", "volume", "tvl", "your-liq", "fee-fee", "be-ratio", "be-deposit", "be-daily", "dep-ra", "dep-rb", "dep-aa", "dep-reqb", "xo-rin", "xo-rout", "xo-aout", "xo-ain", "xo-fee", "wd-ra", "wd-rb", "wd-share", "wd-pct", "wd-outa", "wd-outb"]
+  ["q", "rin", "rout", "ain", "aout", "swap-fee", "ratio", "deposit", "volume", "tvl", "your-liq", "fee-fee", "be-ratio", "be-deposit", "be-daily", "dep-ra", "dep-rb", "dep-aa", "dep-reqb", "xo-rin", "xo-rout", "xo-aout", "xo-ain", "xo-fee", "wd-ra", "wd-rb", "wd-share", "wd-pct", "wd-outa", "wd-outb", "clmm-price", "clmm-lower", "clmm-upper", "clmm-aa", "clmm-reqb"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=5"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=6"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -195,6 +195,33 @@ check("WD rejects withdraw out of range", app.withdrawPlan("1000", "1000", "1", 
 check("WD rejects junk / negative", app.withdrawPlan("abc", "1000", "1", "100") === null && app.withdrawPlan("1000", "1000", "-1", "100") === null && app.withdrawPlan("1000", "1000", "", "100") === null);
 check("WD rejects dust that floors to zero", app.withdrawPlan("0.000000001", "1000", "1", "100") === null);
 check("withdrawal planner present in index.html", html.includes('id="wd-calc"') && html.includes('id="wd-result"'));
+
+/* CLMM range planner — known values: amountA = L*(1/sqrt(P) - 1/sqrt(upper)), amountB = L*(sqrt(P) - sqrt(lower)) */
+/* reciprocal range 0.8–1.25 at price 1, deposit 100 A => exactly 100 B (50% of value in B), L = 100/(1 - 1/sqrt(1.25)) = 947.2136 */
+const c1 = app.clmmRangePlan("1", "0.8", "1.25", "100");
+near("CLMM reciprocal range required B", c1.requiredB, 100, 1e-9);
+near("CLMM reciprocal range liquidity", c1.liquidity, 947.2135955, 0.000001);
+near("CLMM reciprocal range B value pct", c1.bValuePct, 50, 1e-9);
+check("CLMM reciprocal range in range", c1.status === "in" && c1.inRange === true);
+check("CLMM ticks at price 1 / 0.8 / 1.25", c1.tickCurrent === 0 && c1.tickLower === -2232 && c1.tickUpper === 2231);
+/* wider symmetric range 0.5–2 at price 1 also splits 100 A / 100 B, with lower liquidity (less concentrated) */
+const c2 = app.clmmRangePlan("1", "0.5", "2", "100");
+near("CLMM wide range required B", c2.requiredB, 100, 1e-9);
+check("CLMM wider range = lower liquidity", c2.liquidity < c1.liquidity);
+near("CLMM wide range liquidity", c2.liquidity, 341.4213562, 0.000001);
+/* below the range: entirely token A, L set by the range edges */
+const c3 = app.clmmRangePlan("0.5", "0.8", "1.25", "100");
+check("CLMM below range needs no B", c3.requiredB === 0 && c3.status === "below" && c3.inRange === false);
+near("CLMM below range liquidity", c3.liquidity, 447.2135955, 0.000001);
+near("CLMM below range B value pct is 0", c3.bValuePct, 0, 1e-12);
+/* nearer the top of the range the position skews to token B, so the same fixed A deposit needs MORE B */
+check("CLMM nearer upper needs more B", app.clmmRangePlan("1.2", "0.8", "1.25", "100").requiredB > app.clmmRangePlan("0.9", "0.8", "1.25", "100").requiredB);
+check("CLMM B value share rises toward the top", app.clmmRangePlan("1.2", "0.8", "1.25", "100").bValuePct > app.clmmRangePlan("0.9", "0.8", "1.25", "100").bValuePct);
+check("CLMM priceToTick known values", app.priceToTick(1) === 0 && app.priceToTick(2) === 6931 && app.priceToTick(0.5) === -6932 && app.priceToTick(1.0001) === 1);
+check("CLMM rejects at/above upper for an A deposit", app.clmmRangePlan("1.25", "0.8", "1.25", "100") === null && app.clmmRangePlan("2", "0.8", "1.25", "100") === null);
+check("CLMM rejects inverted / empty range", app.clmmRangePlan("1", "1.25", "0.8", "100") === null && app.clmmRangePlan("1", "1", "1", "100") === null);
+check("CLMM rejects zero / junk inputs", app.clmmRangePlan("0", "0.8", "1.25", "100") === null && app.clmmRangePlan("1", "0.8", "1.25", "0") === null && app.clmmRangePlan("x", "0.8", "1.25", "100") === null && app.clmmRangePlan("1", "0.8", "1.25", "") === null);
+check("CLMM range planner present in index.html", html.includes('id="clmm-calc"') && html.includes('id="clmm-result"'));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

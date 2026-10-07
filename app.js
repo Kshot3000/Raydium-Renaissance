@@ -1,9 +1,9 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus seven fully local
+/* Raydium Renaissance hub logic: project filtering plus eight fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
    calculator, an LP fee estimator, a break-even fee calculator, a
-   liquidity deposit planner, an exact-out swap model, and a liquidity
-   withdrawal planner. These are educational MODELS using
+   liquidity deposit planner, an exact-out swap model, a liquidity
+   withdrawal planner, and a CLMM range deposit planner. These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
 
@@ -214,8 +214,65 @@ function withdrawPlan(reserveAStr, reserveBStr, sharePctStr, withdrawPctStr) {
   };
 }
 
+/* ---------- 8 · CLMM range deposit planner (concentrated liquidity) ---------- */
+/* Tools 5 and 7 keep noting CLMM deposits are range-based and different —
+   this is how they differ. A CLMM position covers a price range
+   [lower, upper] (price = token B per token A). With sqrt prices
+   s = sqrt(P), sa = sqrt(lower), sb = sqrt(upper), a position with
+   liquidity L holds, while the current price P is inside the range:
+     amountA = L * (1/s - 1/sb)    amountB = L * (s - sa)
+   So given the token A you want to deposit, L = amountA / (1/s - 1/sb)
+   and the matching token B follows — the split is set by where the
+   current price sits inside your range, not by you. Below the range the
+   position is entirely token A (amountB = 0, and L is set by the range
+   edges: L = amountA / (1/sa - 1/sb)); at or above the top of the range
+   the position is entirely token B, so a token-A deposit cannot fund
+   it and that combination is rejected here. Tick indices are the
+   standard CLMM ticks, tick = floor(log_{1.0001}(price)) — modelled
+   with floating-point logs, so a price sitting exactly on a tick
+   boundary can be off by one tick; real positions snap ticks to the
+   pool's tick spacing. Model only: no fees, no tick-spacing snapping,
+   and real Raydium CLMM deposits are quoted live on the pool page. */
+function priceToTick(price) {
+  return Math.floor(Math.log(price) / Math.log(1.0001) + 1e-9);
+}
+function clmmRangePlan(currentStr, lowerStr, upperStr, amountAStr) {
+  var current = Number(currentStr), lower = Number(lowerStr), upper = Number(upperStr), amountA = Number(amountAStr);
+  if (![current, lower, upper, amountA].every(Number.isFinite)) return null;
+  if (current <= 0 || lower <= 0 || upper <= 0 || amountA <= 0) return null;
+  if (lower >= upper) return null;
+  if (current >= upper) return null;
+  var s = Math.sqrt(current), sa = Math.sqrt(lower), sb = Math.sqrt(upper);
+  var liquidity, requiredB, status;
+  if (current <= lower) {
+    liquidity = amountA / (1 / sa - 1 / sb);
+    requiredB = 0;
+    status = "below";
+  } else {
+    liquidity = amountA / (1 / s - 1 / sb);
+    requiredB = liquidity * (s - sa);
+    status = "in";
+  }
+  if (!Number.isFinite(liquidity) || liquidity <= 0 || requiredB < 0) return null;
+  var valueInB = amountA * current + requiredB;
+  return {
+    currentPrice: current,
+    lowerPrice: lower,
+    upperPrice: upper,
+    amountA: amountA,
+    requiredB: requiredB,
+    liquidity: liquidity,
+    status: status,
+    inRange: status === "in",
+    bValuePct: valueInB > 0 ? requiredB / valueInB * 100 : 0,
+    tickCurrent: priceToTick(current),
+    tickLower: priceToTick(lower),
+    tickUpper: priceToTick(upper)
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, clmmRangePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -388,6 +445,32 @@ if (typeof document !== "undefined") {
         document.getElementById("wd-outa").value = res.outA;
         document.getElementById("wd-outb").value = res.outB;
       }
+    });
+
+    /* --- CLMM range deposit planner --- */
+    document.getElementById("clmm-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmRangePlan(
+        document.getElementById("clmm-price").value,
+        document.getElementById("clmm-lower").value,
+        document.getElementById("clmm-upper").value,
+        document.getElementById("clmm-aa").value
+      );
+      var out = document.getElementById("clmm-result");
+      if (res === null) {
+        out.textContent = "Enter a current price and a range with lower below upper (all above 0) and a positive token-A deposit. If the current price is at or above the top of your range, the position would be entirely token B — a token-A deposit can't fund it.";
+      } else if (res.status === "below") {
+        out.textContent = "Model output: the current price is below your range, so the position is entirely token A — deposit ≈ " +
+          fmt(res.amountA, 6) + " of token A and 0 of token B (model liquidity ≈ " + fmt(res.liquidity, 2) +
+          "). It earns no fees until the price enters the range (ticks " + res.tickLower + " to " + res.tickUpper +
+          ", current tick " + res.tickCurrent + "). A CLMM range model, not a live Raydium quote.";
+      } else {
+        out.textContent = "Model output: deposit ≈ " + fmt(res.requiredB, 6) + " of token B alongside your token A (model liquidity ≈ " +
+          fmt(res.liquidity, 2) + "; token B is ≈ " + fmt(res.bValuePct, 2) + "% of the position's value at the current price). " +
+          "Your range is ticks " + res.tickLower + " to " + res.tickUpper + " (current tick " + res.tickCurrent +
+          "). A CLMM range model, not a live Raydium quote — real positions snap ticks to the pool's tick spacing.";
+      }
+      if (res !== null) document.getElementById("clmm-reqb").value = fmt(res.requiredB, 6);
     });
 
     /* --- copy donation address --- */
