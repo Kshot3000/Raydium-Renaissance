@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus sixteen fully local
+/* Raydium Renaissance hub logic: project filtering plus seventeen fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
    calculator, an LP fee estimator, a break-even fee calculator, a
    liquidity deposit planner, an exact-out swap model, a liquidity
@@ -7,7 +7,8 @@
    checker, a slippage / minimum-received calculator, a CLMM tick /
    price converter, a CLMM position-vs-holding calculator, a CLMM fee
    estimator, a CLMM wallet-balance deposit planner, a CLMM
-   break-even days calculator, and a constant-product arbitrage model.
+   break-even days calculator, a constant-product arbitrage model,
+   and a price-impact trade sizer.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -687,8 +688,59 @@ function cpArbitrage(reserveAStr, reserveBStr, externalPriceStr, feeBps) {
   return Object.assign(base, { direction: "sell-a", inToken: "A", netIn: netInA, grossIn: grossInA, amountOut: outB, outToken: "B", profitInB: outB - grossInA * pe });
 }
 
+/* ---------- 17 · Price-impact trade sizer ---------- */
+/* The inverse question to Tool 1: not "what does this trade get?"
+   but "how large can a trade get before its price impact crosses a
+   cap I choose?" Tool 1 measures price impact as
+     1 - (effective price / spot price),  effective = out / grossIn,
+   a measure that INCLUDES the fee: even a vanishingly small trade
+   shows impact = the fee fraction, because the fee is taken from
+   the input before the curve sees it. With net = grossIn*(1-fee)
+   reaching the pool, out/spot-expected works out to
+   reserveIn*(1-fee) / (reserveIn + net), so setting the impact
+   equal to the cap p and solving for the input gives
+     grossIn = reserveIn * (p - fee) / ((1 - p) * (1 - fee)).
+   Two honest consequences, reported as-is: a cap at or below the
+   fee itself admits no positive trade at all (feasible:false, the
+   only trade that fits is none), and the answer scales with the
+   pool — the same cap in a pool 10x deeper allows a trade 10x
+   larger, which is the whole point of pool depth. Model only —
+   the reserves are your inputs, not live pool state, and real
+   routes split trades across pools. Not financial advice. */
+function priceImpactSizer(reserveInStr, reserveOutStr, maxImpactPctStr, feeBps) {
+  var required = [reserveInStr, reserveOutStr, maxImpactPctStr, feeBps];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var rin = Number(reserveInStr), rout = Number(reserveOutStr);
+  var capPct = Number(maxImpactPctStr), fee = Number(feeBps);
+  if (![rin, rout, capPct, fee].every(Number.isFinite)) return null;
+  if (rin <= 0 || rout <= 0) return null;
+  if (capPct <= 0 || capPct >= 100) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var feeFrac = fee / 10000, pFrac = capPct / 100;
+  var base = { reserveIn: rin, reserveOut: rout, spotPrice: rout / rin,
+    maxImpactPct: capPct, feeBps: fee, feeImpactPct: feeFrac * 100 };
+  if (pFrac <= feeFrac) {
+    return Object.assign(base, { feasible: false, maxAmountIn: 0, netIn: 0, amountOut: 0, actualImpactPct: feeFrac * 100 });
+  }
+  var grossIn = rin * (pFrac - feeFrac) / ((1 - pFrac) * (1 - feeFrac));
+  var netIn = grossIn * (1 - feeFrac);
+  var amountOut = rout * netIn / (rin + netIn);
+  var effective = amountOut / grossIn;
+  return Object.assign(base, {
+    feasible: true,
+    maxAmountIn: grossIn,
+    netIn: netIn,
+    amountOut: amountOut,
+    effectivePrice: effective,
+    actualImpactPct: (1 - effective / base.spotPrice) * 100,
+    postTradeSpotPrice: (rout - amountOut) / (rin + netIn)
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -1110,6 +1162,34 @@ if (typeof document !== "undefined") {
           (res.profitInB <= 0 ? " — not profitable at this fee: the gap is smaller than the fee takes. " : ". ") +
           "A CP arbitrage model against a price you supplied, not a live quote, a found opportunity, or financial advice — real venues have their own depth, fees and costs this model ignores.";
         document.getElementById("arb-out").value = fmt(res.profitInB, 6);
+      }
+    });
+
+    /* --- price-impact trade sizer --- */
+    document.getElementById("pi-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = priceImpactSizer(
+        document.getElementById("pi-rin").value,
+        document.getElementById("pi-rout").value,
+        document.getElementById("pi-cap").value,
+        document.getElementById("pi-fee").value
+      );
+      var out = document.getElementById("pi-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, a maximum price impact above 0% and below 100%, and a fee of 0–9,999 bps.";
+        document.getElementById("pi-out").value = "";
+      } else if (!res.feasible) {
+        out.textContent = "Model output: no positive trade fits that cap — in this model the pool fee alone contributes ≈ " + fmt(res.feeImpactPct, 4) +
+          "% price impact (Tool 1's measure includes the fee), so a cap of " + fmt(res.maxImpactPct, 4) +
+          "% can only be met by not trading at all. Raise the cap above the fee, or use a pool with a lower fee tier. A price-impact sizing model, not a live Raydium quote.";
+        document.getElementById("pi-out").value = "0";
+      } else {
+        out.textContent = "Model output: the largest pay-in whose modelled price impact stays at your ≈ " + fmt(res.maxImpactPct, 4) +
+          "% cap is ≈ " + fmt(res.maxAmountIn, 6) + " in (≈ " + fmt(res.netIn, 6) + " reaches the pool after the fee), returning ≈ " +
+          fmt(res.amountOut, 6) + " out at an effective price of ≈ " + fmt(res.effectivePrice, 6) + " vs a spot of ≈ " + fmt(res.spotPrice, 6) +
+          " — any larger trade crosses the cap, any smaller one stays under it. The fee alone accounts for ≈ " + fmt(res.feeImpactPct, 4) +
+          "% of that impact before trade size adds the rest. A price-impact sizing model against reserves you supplied, not a live Raydium quote or financial advice.";
+        document.getElementById("pi-out").value = fmt(res.maxAmountIn, 6);
       }
     });
 

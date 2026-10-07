@@ -431,6 +431,23 @@
         <button type="submit" class="btn primary">Model the arbitrage trade</button>
         <p id="arb-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="pi-calc">
+        <h3>17 · Price-impact trade sizer</h3>
+        <p>The inverse of tool 1: instead of asking what a trade gets, ask how large a trade can get before its price impact crosses a cap you choose. Enter the pool's reserves (in the direction you'd trade — what you pay in, what you receive) and your maximum acceptable price impact: the result is the largest pay-in that stays at that cap, and what it returns. Note the model's honest floor — tool 1's impact measure includes the pool fee, so a cap at or below the fee itself admits no positive trade at all, and the same cap in a deeper pool allows a proportionally larger trade. Educational model only — reserves are your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="pi-rin">Pool reserve — token you pay in</label>
+        <input id="pi-rin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="pi-rout">Pool reserve — token you receive</label>
+        <input id="pi-rout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="pi-cap">Maximum price impact % (your cap, fee included)</label>
+        <input id="pi-cap" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="pi-fee">Pool fee (bps — 25 = 0.25%)</label>
+        <input id="pi-fee" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="pi-out">Largest pay-in at that impact cap (model)</label>
+        <input id="pi-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Size the trade</button>
+        <p id="pi-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -458,6 +475,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>

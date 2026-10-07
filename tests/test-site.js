@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=14"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=15"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -590,6 +590,50 @@ check("ARB rejects junk / empty", app.cpArbitrage("x", "1000", "2", 25) === null
 check("all arbitrage controls labelled", ["arb-ra", "arb-rb", "arb-ext", "arb-fee", "arb-out"].every(id => html.includes(`for="${id}"`)));
 check("arbitrage tool present in index.html", html.includes('id="arb-calc"') && html.includes('id="arb-result"'));
 check("arbitrage honesty: external price is user input", html.includes("not a live feed") && html.includes("not financial advice"));
+
+/* Price-impact sizer — grossIn = reserveIn*(p-fee)/((1-p)*(1-fee)) */
+/* 1000/1000, cap 10%, no fee: in = 1000*0.1/0.9 = 111.111…, out = 100 exactly */
+const pi1 = app.priceImpactSizer("1000", "1000", "10", 0);
+check("PI feasible at zero fee", pi1.feasible === true);
+near("PI zero-fee max in", pi1.maxAmountIn, 111.11111111111111, 1e-9);
+near("PI zero-fee amount out", pi1.amountOut, 100, 1e-9);
+near("PI zero-fee actual impact is the cap", pi1.actualImpactPct, 10, 1e-9);
+near("PI zero-fee post-trade spot", pi1.postTradeSpotPrice, 0.81, 1e-9);
+/* 25bps fee, cap 1%: in = 1000*0.0075/(0.99*0.9975) ≈ 7.5947, impact lands on the cap */
+const pi2 = app.priceImpactSizer("1000", "1000", "1", 25);
+check("PI feasible above the fee floor", pi2.feasible === true);
+near("PI 25bps max in", pi2.maxAmountIn, 7.594744436849699, 1e-9);
+near("PI 25bps actual impact is the cap", pi2.actualImpactPct, 1, 1e-9);
+near("PI fee impact reported", pi2.feeImpactPct, 0.25, 1e-12);
+/* consistency: Tool 1 swapping the sized input reports the capped impact,
+   and a 1%-larger trade crosses the cap while a 1%-smaller one stays under */
+for (const [rin, rout, cap, f] of [["1000", "1000", "10", 0], ["1000", "1000", "1", 25], ["2000000", "500000", "5", 25], ["500", "2000", "2.5", 100]]) {
+  const pi = app.priceImpactSizer(rin, rout, cap, f);
+  const at = app.cpSwap(rin, rout, pi.maxAmountIn.toFixed(9), f);
+  check("PI Tool-1 consistency " + rin + "/" + rout + " cap " + cap + " @" + f + "bps",
+    at !== null && Math.abs(at.priceImpactPct - Number(cap)) < 0.01);
+  const over = app.cpSwap(rin, rout, (pi.maxAmountIn * 1.01).toFixed(9), f);
+  const under = app.cpSwap(rin, rout, (pi.maxAmountIn * 0.99).toFixed(9), f);
+  check("PI bracket " + rin + "/" + rout + " cap " + cap + " @" + f + "bps",
+    over !== null && under !== null && over.priceImpactPct > Number(cap) && under.priceImpactPct < Number(cap));
+}
+/* the honest fee floor: a cap at or below the fee admits no positive trade */
+check("PI cap equal to fee is infeasible", app.priceImpactSizer("1000", "1000", "0.25", 25).feasible === false && app.priceImpactSizer("1000", "1000", "0.25", 25).maxAmountIn === 0);
+check("PI cap below fee is infeasible", app.priceImpactSizer("1000", "1000", "0.1", 25).feasible === false);
+check("PI cap just above fee is a small positive trade", (() => { const r = app.priceImpactSizer("1000", "1000", "0.26", 25); return r.feasible === true && r.maxAmountIn > 0 && r.maxAmountIn < 1; })());
+/* depth is the point: the same cap in a 10x deeper pool sizes a 10x trade */
+const piDeep = app.priceImpactSizer("10000", "10000", "10", 0);
+near("PI 10x deeper pool = 10x trade", piDeep.maxAmountIn, pi1.maxAmountIn * 10, 1e-6);
+near("PI 10x deeper pool = 10x out", piDeep.amountOut, pi1.amountOut * 10, 1e-6);
+check("PI larger cap = larger trade", app.priceImpactSizer("1000", "1000", "20", 25).maxAmountIn > app.priceImpactSizer("1000", "1000", "10", 25).maxAmountIn);
+check("PI higher fee = smaller trade at same cap", app.priceImpactSizer("1000", "1000", "5", 100).maxAmountIn < app.priceImpactSizer("1000", "1000", "5", 25).maxAmountIn);
+check("PI rejects zero reserves", app.priceImpactSizer("0", "1000", "1", 25) === null && app.priceImpactSizer("1000", "0", "1", 25) === null);
+check("PI rejects cap at/above 100 or at/below 0", app.priceImpactSizer("1000", "1000", "100", 25) === null && app.priceImpactSizer("1000", "1000", "0", 25) === null && app.priceImpactSizer("1000", "1000", "-1", 25) === null);
+check("PI rejects bad fee", app.priceImpactSizer("1000", "1000", "1", 10000) === null && app.priceImpactSizer("1000", "1000", "1", -1) === null && app.priceImpactSizer("1000", "1000", "1", 12.5) === null);
+check("PI rejects junk / empty", app.priceImpactSizer("x", "1000", "1", 25) === null && app.priceImpactSizer("1000", "1000", "", 25) === null && app.priceImpactSizer("1000", "1000", "1", "") === null && app.priceImpactSizer("", "1000", "1", 25) === null);
+check("all price-impact controls labelled", ["pi-rin", "pi-rout", "pi-cap", "pi-fee", "pi-out"].every(id => html.includes(`for="${id}"`)));
+check("price-impact tool present in index.html", html.includes('id="pi-calc"') && html.includes('id="pi-result"'));
+check("price-impact honesty: fee floor + model label", html.includes("admits no positive trade at all") && html.includes("not a live quote, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
