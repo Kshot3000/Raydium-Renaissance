@@ -1,8 +1,8 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus five fully local
+/* Raydium Renaissance hub logic: project filtering plus six fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
-   calculator, an LP fee estimator, a break-even fee calculator, and a
-   liquidity deposit planner. These are educational MODELS using
+   calculator, an LP fee estimator, a break-even fee calculator, a
+   liquidity deposit planner, and an exact-out swap model. These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
 
@@ -140,8 +140,43 @@ function depositPlan(reserveAStr, reserveBStr, amountAStr) {
   };
 }
 
+/* ---------- 6 · Exact-out swap model (constant-product, inverse of Tool 1) ---------- */
+/* Tool 1 answers "how much do I get for this much in?"; traders planning
+   around a target amount ask the inverse: "how much in do I need for
+   exactly this much out?" Inverting x * y = k:
+   inAfterFee = reserveIn * amountOut / (reserveOut - amountOut), then the
+   input is grossed back up for the fee: amountIn = inAfterFee * 10000 /
+   (10000 - feeBps). Both divisions round UP (ceiling, exact scaled-BigInt)
+   so the modelled input is never a hair short of buying the target output
+   — the same round-up the on-chain programs require. amountOut must be
+   strictly less than reserveOut: a constant-product pool can never pay
+   out its whole reserve, and asking for more than it holds is rejected
+   here instead of returning a nonsense (or negative) input. Model only. */
+function cpSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, feeBps) {
+  var rin = parseScaled(reserveInStr), rout = parseScaled(reserveOutStr), aout = parseScaled(amountOutStr);
+  var fee = Number(feeBps);
+  if (rin === null || rout === null || aout === null) return null;
+  if (rin <= 0n || rout <= 0n || aout <= 0n) return null;
+  if (aout >= rout) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var denom = rout - aout;
+  var inAfterFee = (rin * aout + denom - 1n) / denom;
+  var amountIn = (inAfterFee * 10000n + BigInt(9999 - fee)) / BigInt(10000 - fee);
+  if (amountIn <= 0n) return null;
+  var spot = scaledToNumber(rout) / scaledToNumber(rin);
+  var effective = scaledToNumber(aout) / scaledToNumber(amountIn);
+  return {
+    amountIn: formatScaled(amountIn),
+    inAfterFee: formatScaled(inAfterFee),
+    spotPrice: spot,
+    effectivePrice: effective,
+    priceImpactPct: (1 - effective / spot) * 100,
+    feePct: fee / 100
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -273,6 +308,25 @@ if (typeof document !== "undefined") {
           fmt(res.sharePct, 4) + "%, with model reserves of " + res.newReserveA + " A / " + res.newReserveB +
           " B. A constant-product deposit model, not a live Raydium quote — CLMM deposits are range-based and differ.";
       if (res !== null) document.getElementById("dep-reqb").value = res.requiredB;
+    });
+
+    /* --- exact-out swap model --- */
+    document.getElementById("xo-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = cpSwapExactOut(
+        document.getElementById("xo-rin").value,
+        document.getElementById("xo-rout").value,
+        document.getElementById("xo-aout").value,
+        document.getElementById("xo-fee").value
+      );
+      var out = document.getElementById("xo-result");
+      out.textContent = res === null
+        ? "Enter positive reserves and a target amount out that is less than the reserve out (a pool can never pay out its whole reserve), plus a fee in basis points (25 = 0.25%)."
+        : "Model output: you need ≈ " + res.amountIn + " tokens in to receive that amount out. Spot price " + fmt(res.spotPrice, 6) +
+          ", effective price " + fmt(res.effectivePrice, 6) + " (after the " + fmt(res.feePct, 2) +
+          "% fee), price impact incl. fee " + fmt(res.priceImpactPct, 2) +
+          "%. A constant-product model, not a live Raydium quote.";
+      if (res !== null) document.getElementById("xo-ain").value = res.amountIn;
     });
 
     /* --- copy donation address --- */

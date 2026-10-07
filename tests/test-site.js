@@ -36,9 +36,9 @@ check("liquidity pools focus linked", html.includes("https://raydium.io/liquidit
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
 check("all main form controls labelled",
-  ["q", "rin", "rout", "ain", "aout", "swap-fee", "ratio", "deposit", "volume", "tvl", "your-liq", "fee-fee", "be-ratio", "be-deposit", "be-daily", "dep-ra", "dep-rb", "dep-aa", "dep-reqb"]
+  ["q", "rin", "rout", "ain", "aout", "swap-fee", "ratio", "deposit", "volume", "tvl", "your-liq", "fee-fee", "be-ratio", "be-deposit", "be-daily", "dep-ra", "dep-rb", "dep-aa", "dep-reqb", "xo-rin", "xo-rout", "xo-aout", "xo-ain", "xo-fee"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=3"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=4"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -145,6 +145,26 @@ check("DP rejects zero amount", app.depositPlan("1000", "1000", "0") === null);
 check("DP rejects junk / negative", app.depositPlan("abc", "1000", "100") === null && app.depositPlan("1000", "1000", "-5") === null && app.depositPlan("1000", "1000", "") === null);
 check("DP rejects dust that floors to zero B", app.depositPlan("1000000000", "0.000000001", "1") === null);
 check("deposit planner present in index.html", html.includes('id="dep-calc"') && html.includes('id="dep-result"'));
+
+/* exact-out swap — known values: inAfterFee = rin*aout/(rout-aout), grossed up for the fee, both rounded UP */
+/* reserves 1000/1000, want 500 out, no fee => exactly 1000 in, impact 50% */
+const x0 = app.cpSwapExactOut("1000", "1000", "500", 0);
+check("XO no-fee amount in exact", x0.amountIn === "1000");
+near("XO no-fee impact", x0.priceImpactPct, 50, 1e-9);
+/* inverse of Tool 1's headline case: 1000/1000, out 90.909090909, no fee => exactly 100 in */
+check("XO inverse of cpSwap case", app.cpSwapExactOut("1000", "1000", "90.909090909", 0).amountIn === "100");
+/* same target at 25bps: inAfterFee stays 100, grossed up 100*10000/9975 = 100.250626... */
+check("XO 25bps amount in exact", app.cpSwapExactOut("1000", "1000", "90.909090909", 25).amountIn === "100.250626567");
+check("XO fee raises required input", parseFloat(app.cpSwapExactOut("1000", "1000", "100", 25).amountIn) > parseFloat(app.cpSwapExactOut("1000", "1000", "100", 0).amountIn));
+/* round-trip property: feeding the modelled input into cpSwap yields at least the target out */
+for (const [ri, ro, ao, f] of [["1000", "1000", "500", 0], ["2000000", "500000", "2400", 25], ["1000000", "1000000", "1000", 25], ["3", "1", "0.5", 4]]) {
+  const xo = app.cpSwapExactOut(ri, ro, ao, f);
+  check("XO round-trip " + ri + "/" + ro + " out " + ao + " @" + f + "bps", xo !== null && parseFloat(app.cpSwap(ri, ro, xo.amountIn, f).out) >= parseFloat(ao));
+}
+check("XO rejects out >= reserve out", app.cpSwapExactOut("1000", "1000", "1000", 25) === null && app.cpSwapExactOut("1000", "1000", "1001", 25) === null);
+check("XO rejects zero/junk/bad fee", app.cpSwapExactOut("1000", "1000", "0", 25) === null && app.cpSwapExactOut("abc", "1000", "1", 25) === null && app.cpSwapExactOut("1000", "1000", "1", 10000) === null && app.cpSwapExactOut("1000", "1000", "1", -1) === null);
+check("XO larger target = larger impact", app.cpSwapExactOut("1000", "1000", "500", 25).priceImpactPct > app.cpSwapExactOut("1000", "1000", "100", 25).priceImpactPct);
+check("exact-out tool present in index.html", html.includes('id="xo-calc"') && html.includes('id="xo-result"'));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

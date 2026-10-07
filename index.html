@@ -226,6 +226,23 @@
         <button type="submit" class="btn primary">Plan my deposit</button>
         <p id="dep-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="xo-calc">
+        <h3>6 · Exact-out swap model</h3>
+        <p>The inverse of Tool 1: instead of asking what a trade gets you, enter the amount out you actually want and the model works backwards along x × y = k for the amount in you'd need — grossed up for the fee and rounded up so the input is never short. A target equal to or above the whole reserve out is rejected: a constant-product pool can never pay out everything it holds.</p>
+        <label for="xo-rin">Reserve in (tokens)</label>
+        <input id="xo-rin" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="xo-rout">Reserve out (tokens)</label>
+        <input id="xo-rout" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="xo-aout">Amount out you want (tokens)</label>
+        <input id="xo-aout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="xo-ain">Amount in needed (model)</label>
+        <input id="xo-ain" readonly placeholder="—" autocomplete="off">
+        <label for="xo-fee">Swap fee (basis points, 25 = 0.25%)</label>
+        <input id="xo-fee" inputmode="numeric" value="25" autocomplete="off">
+        <button type="submit" class="btn primary">Model the input needed</button>
+        <p id="xo-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -253,6 +270,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
