@@ -21,6 +21,7 @@ Official explainer source: <https://docs.raydium.io/>
 3. **Impermanent loss** — run the price moves you fear through the IL calculator first. If a 2× move's IL scares you, the fees need to be very good.
 4. **Token risk** — a pool is only as sound as its weaker token. Verify token addresses from official sources, never from a chat message.
 5. **Range (CLMM only)** — decide how you'll notice and respond when price leaves your range.
+6. **Deposit ratio (constant-product pools)** — AMM v4 / CPMM / CP-Swap pools take both tokens in the pool's existing ratio, so the second token's amount is set by the pool, not by you. Run your planned deposit through my hub's deposit planner first so the matching amount — and your resulting share of the pool — doesn't surprise you.
 
 ## 4 · Building on Raydium
 

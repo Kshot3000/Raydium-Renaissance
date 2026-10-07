@@ -1,7 +1,8 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus four fully local
+/* Raydium Renaissance hub logic: project filtering plus five fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
-   calculator, an LP fee estimator, and a break-even fee calculator. These are educational MODELS using
+   calculator, an LP fee estimator, a break-even fee calculator, and a
+   liquidity deposit planner. These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
 
@@ -114,8 +115,33 @@ function breakEvenFees(priceRatio, depositStr, dailyFeesStr) {
   return out;
 }
 
+/* ---------- 5 · Liquidity deposit planner (constant-product pools) ---------- */
+/* Adding liquidity to a constant-product pool means depositing BOTH tokens
+   in the pool's existing ratio — depositing only one side, or the wrong
+   ratio, either fails or leaves the excess unused. Given the reserves and
+   how much of token A you want to add: requiredB = reserveB * amountA /
+   reserveA (exact scaled-BigInt, floored at 9 dp), and because the deposit
+   is proportional, your share of the pool afterwards is
+   amountA / (reserveA + amountA) — the same fraction on both sides.
+   This plans a deposit for AMM v4 / CPMM / CP-Swap style pools; CLMM
+   deposits are range-based and work differently. Model only. */
+function depositPlan(reserveAStr, reserveBStr, amountAStr) {
+  var ra = parseScaled(reserveAStr), rb = parseScaled(reserveBStr), aa = parseScaled(amountAStr);
+  if (ra === null || rb === null || aa === null) return null;
+  if (ra <= 0n || rb <= 0n || aa <= 0n) return null;
+  var requiredB = rb * aa / ra;
+  if (requiredB <= 0n) return null;
+  return {
+    requiredB: formatScaled(requiredB),
+    sharePct: scaledToNumber(aa) / scaledToNumber(ra + aa) * 100,
+    newReserveA: formatScaled(ra + aa),
+    newReserveB: formatScaled(rb + requiredB),
+    priceBperA: scaledToNumber(rb) / scaledToNumber(ra)
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -229,6 +255,24 @@ if (typeof document !== "undefined") {
           ", the LP position $" + fmt(res.lpValue, 2) + " — so you need $" + fmt(res.feesNeeded, 2) + " in fees (" +
           fmt(res.feesNeededPctOfDeposit, 2) + "% of your deposit) to break even, before the position counts as ahead. Model only.";
       }
+    });
+
+    /* --- deposit planner --- */
+    document.getElementById("dep-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = depositPlan(
+        document.getElementById("dep-ra").value,
+        document.getElementById("dep-rb").value,
+        document.getElementById("dep-aa").value
+      );
+      var out = document.getElementById("dep-result");
+      out.textContent = res === null
+        ? "Enter positive pool reserves for both tokens and a positive amount of token A (up to 9 decimal places)."
+        : "Model output: deposit ≈ " + res.requiredB + " of token B alongside your token A (pool ratio ≈ " +
+          fmt(res.priceBperA, 6) + " B per A). Your share of the pool after depositing would be ≈ " +
+          fmt(res.sharePct, 4) + "%, with model reserves of " + res.newReserveA + " A / " + res.newReserveB +
+          " B. A constant-product deposit model, not a live Raydium quote — CLMM deposits are range-based and differ.";
+      if (res !== null) document.getElementById("dep-reqb").value = res.requiredB;
     });
 
     /* --- copy donation address --- */

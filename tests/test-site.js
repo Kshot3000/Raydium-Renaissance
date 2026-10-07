@@ -36,9 +36,9 @@ check("liquidity pools focus linked", html.includes("https://raydium.io/liquidit
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
 check("all main form controls labelled",
-  ["q", "rin", "rout", "ain", "aout", "swap-fee", "ratio", "deposit", "volume", "tvl", "your-liq", "fee-fee", "be-ratio", "be-deposit", "be-daily"]
+  ["q", "rin", "rout", "ain", "aout", "swap-fee", "ratio", "deposit", "volume", "tvl", "your-liq", "fee-fee", "be-ratio", "be-deposit", "be-daily", "dep-ra", "dep-rb", "dep-aa", "dep-reqb"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=2"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=3"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -126,6 +126,25 @@ check("BE fees needed matches IL gap at 2x", Math.abs(app.breakEvenFees(2, "1000
 check("BE rejects missing/zero deposit", app.breakEvenFees(2) === null && app.breakEvenFees(2, "") === null && app.breakEvenFees(2, "0") === null);
 check("BE rejects bad ratio / junk / negative daily", app.breakEvenFees(0, "1000") === null && app.breakEvenFees("x", "1000") === null && app.breakEvenFees(2, "1000", "-5") === null && app.breakEvenFees(2, "1000", "x") === null);
 check("break-even tool present in index.html", html.includes('id="be-calc"') && html.includes('id="be-result"'));
+
+/* deposit planner — known values: requiredB = reserveB * amountA / reserveA, share = amountA / (reserveA + amountA) */
+/* reserves 1,000,000 A / 500,000 B (0.5 B per A), deposit 10,000 A => 5,000 B, share 10,000/1,010,000 = 0.990099...% */
+const d1 = app.depositPlan("1000000", "500000", "10000");
+check("DP required B exact", d1.requiredB === "5000");
+near("DP share pct", d1.sharePct, 0.990099, 0.000001);
+near("DP price B per A", d1.priceBperA, 0.5, 1e-12);
+check("DP new reserves", d1.newReserveA === "1010000" && d1.newReserveB === "505000");
+/* equal reserves 1000/1000, deposit 100 => 100 B, share 100/1100 = 9.0909...% */
+const d2 = app.depositPlan("1000", "1000", "100");
+check("DP equal reserves required B", d2.requiredB === "100");
+near("DP equal reserves share", d2.sharePct, 9.090909, 0.000001);
+/* fractional: reserves 3 A / 1 B, deposit 1.5 A => 0.5 B exactly at 9 dp */
+check("DP fractional exact", app.depositPlan("3", "1", "1.5").requiredB === "0.5");
+check("DP rejects zero reserves", app.depositPlan("0", "1000", "100") === null && app.depositPlan("1000", "0", "100") === null);
+check("DP rejects zero amount", app.depositPlan("1000", "1000", "0") === null);
+check("DP rejects junk / negative", app.depositPlan("abc", "1000", "100") === null && app.depositPlan("1000", "1000", "-5") === null && app.depositPlan("1000", "1000", "") === null);
+check("DP rejects dust that floors to zero B", app.depositPlan("1000000000", "0.000000001", "1") === null);
+check("deposit planner present in index.html", html.includes('id="dep-calc"') && html.includes('id="dep-result"'));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

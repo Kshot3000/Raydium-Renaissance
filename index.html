@@ -211,6 +211,21 @@
         <button type="submit" class="btn primary">Calculate break-even</button>
         <p id="be-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="dep-calc">
+        <h3>5 · Liquidity deposit planner</h3>
+        <p>Before the maths in Tools 1–4 matters, a constant-product pool (AMM v4 / CPMM / CP-Swap) takes <strong>both</strong> tokens in the pool's existing ratio. Enter a pool's reserves and how much of token A you want to add — the planner shows the matching token B amount and your share of the pool afterwards. CLMM deposits are range-based and work differently.</p>
+        <label for="dep-ra">Pool reserve — token A</label>
+        <input id="dep-ra" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="dep-rb">Pool reserve — token B</label>
+        <input id="dep-rb" inputmode="decimal" placeholder="e.g. 500000" autocomplete="off">
+        <label for="dep-aa">Your deposit — token A</label>
+        <input id="dep-aa" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="dep-reqb">Matching deposit — token B (model)</label>
+        <input id="dep-reqb" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan my deposit</button>
+        <p id="dep-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -238,6 +253,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

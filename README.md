@@ -20,6 +20,7 @@ For the Raydium team — [@raydium-io](https://github.com/raydium-io) on GitHub 
 2. **Impermanent-loss calculator** — LP-vs-hold at any price multiple for a 50/50 constant-product position, with optional deposit value.
 3. **LP fee estimator** — your share of a pool's swap fees from its volume, TVL and fee tier, with a naively-annualised APR.
 4. **Break-even fee calculator** — how much in fees a 50/50 position must earn to offset impermanent loss at a given price move (hold value − LP value), and how many days that takes at an estimated daily fee rate.
+5. **Liquidity deposit planner** — constant-product pools take both tokens in the pool's existing ratio: given the reserves and a token-A deposit, the matching token-B amount and your post-deposit share of the pool. Exact scaled-BigInt arithmetic (9 dp).
 
 Honest labels, always: these are **educational models** using numbers you type in — not live quotes, not live pool data, and not financial advice. Real pools live at <https://raydium.io/liquidity-pools/>.
 
@@ -46,7 +47,7 @@ Ecosystem:
 node tests/test-site.js
 ```
 
-Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all four pool tools (known-value vectors, edge and rejection cases).
+Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all five pool tools (known-value vectors, edge and rejection cases).
 
 ## Support
 
