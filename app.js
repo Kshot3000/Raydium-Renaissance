@@ -1,10 +1,11 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus ten fully local
+/* Raydium Renaissance hub logic: project filtering plus eleven fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
    calculator, an LP fee estimator, a break-even fee calculator, a
    liquidity deposit planner, an exact-out swap model, a liquidity
    withdrawal planner, a CLMM range deposit planner, a CLMM position
-   checker, and a slippage / minimum-received calculator. These are educational MODELS using
+   checker, a slippage / minimum-received calculator, and a CLMM tick /
+   price converter. These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
 
@@ -366,8 +367,58 @@ function slippagePlan(expectedOutStr, slippageBps, expectedInStr) {
   return res;
 }
 
+/* ---------- 11 · CLMM tick / price converter (with tick-spacing snapping) ---------- */
+/* Tools 8 and 9 report CLMM ranges as tick indices and warn that real
+   positions snap those ticks to the pool's tick spacing — this tool does
+   that conversion and snapping. CLMM prices are discrete: each tick is a
+   0.01% price step, price = 1.0001^tick, and a price's tick is
+   floor(log_{1.0001}(price)) — floored, so the tick's own price is at or
+   just below the price you entered and the next tick's price is above it.
+   The standard CLMM tick range is -443636..443636; prices whose tick
+   falls outside it are rejected here instead of returning a meaningless
+   index. Pools only accept position boundaries on multiples of their
+   tick spacing: a lower boundary snaps DOWN to the previous multiple
+   and an upper boundary snaps UP to the next (floor division, which for
+   negative ticks moves away from zero on the down snap — -2232 at
+   spacing 10 snaps down to -2240, not -2230). Tick maths here uses
+   floating-point logs / powers, so a price sitting exactly on a tick
+   boundary can land one tick off; the pool page quotes the real ticks.
+   Model only. */
+var TICK_MIN = -443636, TICK_MAX = 443636;
+function tickToPrice(tick) {
+  var t = Number(tick);
+  if (!Number.isInteger(t) || t < TICK_MIN || t > TICK_MAX) return null;
+  return Math.pow(1.0001, t);
+}
+function tickPriceConvert(priceStr, spacingStr) {
+  var price = Number(priceStr);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  var tick = priceToTick(price);
+  if (tick < TICK_MIN || tick > TICK_MAX) return null;
+  var tickPrice = tickToPrice(tick);
+  var out = {
+    price: price,
+    tick: tick,
+    tickPrice: tickPrice,
+    nextTick: tick + 1,
+    nextTickPrice: tick === TICK_MAX ? null : tickToPrice(tick + 1)
+  };
+  if (spacingStr != null && String(spacingStr).trim() !== "") {
+    var spacing = Number(spacingStr);
+    if (!Number.isInteger(spacing) || spacing <= 0) return null;
+    var down = Math.floor(tick / spacing) * spacing;
+    var up = down === tick ? tick : down + spacing;
+    out.spacing = spacing;
+    out.snappedDownTick = down;
+    out.snappedDownPrice = Math.pow(1.0001, down);
+    out.snappedUpTick = up;
+    out.snappedUpPrice = Math.pow(1.0001, up);
+  }
+  return out;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, clmmRangePlan, clmmPositionAtPrice, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -618,6 +669,31 @@ if (typeof document !== "undefined") {
           ". If the live result would cross either bound, the transaction fails instead of filling badly. A slippage model, not a live Raydium quote.";
       }
       if (res !== null) document.getElementById("slip-min").value = res.minReceived;
+    });
+
+    /* --- CLMM tick / price converter --- */
+    document.getElementById("tick-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = tickPriceConvert(
+        document.getElementById("tick-price").value,
+        document.getElementById("tick-spacing").value
+      );
+      var out = document.getElementById("tick-result");
+      function fp(x) { return x === null ? "—" : String(parseFloat(x.toPrecision(10))); }
+      if (res === null) {
+        out.textContent = "Enter a positive price whose tick sits inside the standard CLMM tick range (-443636 to 443636), and — if you add a tick spacing — a positive whole number.";
+      } else {
+        out.textContent = "Model output: " + fp(res.price) + " B per A is tick " + res.tick +
+          " — that tick's own price is " + fp(res.tickPrice) + " (ticks floor, so it sits at or just below your price; the next tick, " +
+          res.nextTick + ", is " + fp(res.nextTickPrice) + ")" +
+          (res.spacing != null
+            ? ". At a tick spacing of " + res.spacing + ", a lower range boundary at this price snaps down to tick " +
+              res.snappedDownTick + " (price " + fp(res.snappedDownPrice) + ") and an upper boundary snaps up to tick " +
+              res.snappedUpTick + " (price " + fp(res.snappedUpPrice) + ") — pools only accept boundaries on spacing multiples"
+            : ". Add your pool's tick spacing to see where a range boundary at this price would snap") +
+          ". A tick model, not a live Raydium quote — real positions are quoted with the pool's own ticks on the pool page.";
+      }
+      if (res !== null) document.getElementById("tick-out").value = res.tick;
     });
 
     /* --- copy donation address --- */

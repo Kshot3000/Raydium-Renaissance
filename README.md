@@ -26,6 +26,7 @@ For the Raydium team — [@raydium-io](https://github.com/raydium-io) on GitHub 
 8. **CLMM range deposit planner** — the range-based deposit the constant-product tools keep pointing at: given a current price, a chosen price range and a token-A deposit, the matching token-B amount the range's position maths requires (the split is set by where the price sits in the range), the model's liquidity, and the range's tick indices. Below the range the position is entirely token A; at or above the top it is entirely token B, so a token-A deposit is rejected there. Tick indices are modelled with floating-point logs and are not snapped to a pool's tick spacing; no fees are modelled.
 9. **CLMM position checker** — the follow-up to tool 8: given a position's model liquidity (tool 8 reports it), its price range, and a price to check, what the position holds at that price. Inside the range a rising price steadily converts the position into token B — concentrated liquidity's version of impermanent loss; at or outside either edge the position is entirely one token and earns no fees until price returns. No fees earned are included.
 10. **Slippage & minimum-received calculator** — given an expected amount out and a slippage tolerance, the minimum received that tolerance implies (and, with an expected amount in, the maximum input) — both bounds floored in exact scaled-BigInt (9 dp), never rounded up: a minimum that rounds up is stricter than the tolerance set, and a maximum that rounds up authorises paying more than intended.
+11. **CLMM tick / price converter** — what the tick indices in tools 8 and 9 actually are: each tick is one 0.01% price step (price = 1.0001^tick), a price's tick floors, and prices outside the standard CLMM tick range (−443636…443636) are rejected. With a pool's tick spacing, it also snaps a boundary the way pools require — lower boundaries down to the previous spacing multiple, upper boundaries up to the next (floor division, so negative ticks snap away from zero going down). Tick maths is floating-point, so a price exactly on a boundary can land one tick off.
 
 Honest labels, always: these are **educational models** using numbers you type in — not live quotes, not live pool data, and not financial advice. Real pools live at <https://raydium.io/liquidity-pools/>.
 
@@ -52,7 +53,7 @@ Ecosystem:
 node tests/test-site.js
 ```
 
-Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all ten pool tools (known-value vectors, edge and rejection cases).
+Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all eleven pool tools (known-value vectors, edge and rejection cases).
 
 ## Support
 

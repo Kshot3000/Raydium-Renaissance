@@ -44,7 +44,10 @@ check("all position-checker controls labelled",
 check("all slippage controls labelled",
   ["slip-out", "slip-bps", "slip-in", "slip-min"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=8"));
+check("all tick-converter controls labelled",
+  ["tick-price", "tick-spacing", "tick-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=9"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -292,6 +295,47 @@ check("SLIP rejects zero / junk out", app.slippagePlan("0", 50) === null && app.
 check("SLIP rejects dust that floors to zero min", app.slippagePlan("0.000000001", 5000) === null);
 check("SLIP rejects junk expected in when given", app.slippagePlan("1000", 50, "abc") === null && app.slippagePlan("1000", 50, "0") === null);
 check("slippage calculator present in index.html", html.includes('id="slip-calc"') && html.includes('id="slip-result"'));
+
+/* tick / price converter — known values: price = 1.0001^tick, tick = floor(log_{1.0001}(price)) */
+near("TICK tickToPrice 0", app.tickToPrice(0), 1, 1e-12);
+near("TICK tickToPrice 1", app.tickToPrice(1), 1.0001, 1e-12);
+near("TICK tickToPrice -1", app.tickToPrice(-1), 0.999900009999, 1e-12);
+check("TICK tickToPrice bounds", app.tickToPrice(app.TICK_MAX) !== null && app.tickToPrice(app.TICK_MIN) !== null);
+check("TICK tickToPrice rejects out of range / fractional", app.tickToPrice(443637) === null && app.tickToPrice(-443637) === null && app.tickToPrice(1.5) === null);
+/* price 1 is tick 0 exactly; its next tick is 1 at 1.0001 */
+const t0 = app.tickPriceConvert("1");
+check("TICK price 1 is tick 0", t0.tick === 0 && t0.tickPrice === 1 && t0.nextTick === 1);
+near("TICK price 1 next tick price", t0.nextTickPrice, 1.0001, 1e-12);
+/* price 1.25 floors to tick 2231, whose own price 1.2499316199 sits just below 1.25; next tick is above */
+const t1 = app.tickPriceConvert("1.25");
+check("TICK price 1.25 floors to 2231", t1.tick === 2231);
+near("TICK tick 2231 price", t1.tickPrice, 1.2499316199, 1e-9);
+check("TICK tick price <= price < next tick price", t1.tickPrice <= 1.25 && t1.nextTickPrice > 1.25);
+/* price 0.8 floors to tick -2232 (floor, not nearest: -2231's price is above 0.8) */
+const t2 = app.tickPriceConvert("0.8");
+check("TICK price 0.8 floors to -2232", t2.tick === -2232);
+near("TICK tick -2232 price", t2.tickPrice, 0.7999637693, 1e-9);
+/* round trip across a sweep: tickToPrice(priceToTick(p)) <= p < tickToPrice(tick+1) */
+for (const p of [0.01, 0.5, 0.99, 1, 1.01, 2, 10, 150.5, 1000]) {
+  const r = app.tickPriceConvert(String(p));
+  check("TICK round-trip brackets " + p, r !== null && r.tickPrice <= p && r.nextTickPrice > p);
+}
+/* snapping at spacing 10: 2231 snaps down to 2230 / up to 2240, with prices to match */
+const ts1 = app.tickPriceConvert("1.25", "10");
+check("TICK snap 2231 @10", ts1.snappedDownTick === 2230 && ts1.snappedUpTick === 2240 && ts1.spacing === 10);
+near("TICK snapped down price @10", ts1.snappedDownPrice, app.tickToPrice(2230), 1e-12);
+near("TICK snapped up price @10", ts1.snappedUpPrice, app.tickToPrice(2240), 1e-9);
+/* negative ticks snap by floor division: -2232 @10 snaps DOWN to -2240 (away from zero), up to -2230 */
+const ts2 = app.tickPriceConvert("0.8", "10");
+check("TICK negative snap @10", ts2.snappedDownTick === -2240 && ts2.snappedUpTick === -2230);
+/* a tick already on a multiple snaps to itself both ways */
+const ts3 = app.tickPriceConvert("1", "10");
+check("TICK on-multiple snaps to itself", ts3.snappedDownTick === 0 && ts3.snappedUpTick === 0);
+check("TICK without spacing has no snap fields", app.tickPriceConvert("1.25").snappedDownTick === undefined);
+check("TICK rejects zero / negative / junk price", app.tickPriceConvert("0") === null && app.tickPriceConvert("-1") === null && app.tickPriceConvert("abc") === null && app.tickPriceConvert("") === null);
+check("TICK rejects price outside tick range", app.tickPriceConvert("1e30") === null && app.tickPriceConvert("1e-30") === null);
+check("TICK rejects bad spacing", app.tickPriceConvert("1.25", "0") === null && app.tickPriceConvert("1.25", "-10") === null && app.tickPriceConvert("1.25", "2.5") === null && app.tickPriceConvert("1.25", "x") === null);
+check("tick converter present in index.html", html.includes('id="tick-calc"') && html.includes('id="tick-result"'));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

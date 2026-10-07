@@ -313,6 +313,19 @@
         <button type="submit" class="btn primary">Calculate my bounds</button>
         <p id="slip-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="tick-calc">
+        <h3>11 · CLMM tick / price converter</h3>
+        <p>Tools 8 and 9 report CLMM ranges as tick indices — this is what a tick is. CLMM prices are discrete: each tick is one 0.01% price step (price = 1.0001<sup>tick</sup>), and a price's tick is that step counted down from 1, floored. Enter a price to see its tick and the tick's own price — and add your pool's tick spacing to see where a range boundary would snap: pools only accept boundaries on spacing multiples, a lower boundary snapping down and an upper one up. Tick maths here uses floating-point logs, so a price exactly on a boundary can land one tick off.</p>
+        <label for="tick-price">Price (token B per token A)</label>
+        <input id="tick-price" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="tick-spacing">Pool tick spacing (optional, e.g. 10)</label>
+        <input id="tick-spacing" inputmode="numeric" placeholder="e.g. 10" autocomplete="off">
+        <label for="tick-out">Tick index (model)</label>
+        <input id="tick-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Convert price to tick</button>
+        <p id="tick-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -340,6 +353,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>
