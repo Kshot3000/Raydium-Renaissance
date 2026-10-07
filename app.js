@@ -1,12 +1,13 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus fourteen fully local
+/* Raydium Renaissance hub logic: project filtering plus fifteen fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
    calculator, an LP fee estimator, a break-even fee calculator, a
    liquidity deposit planner, an exact-out swap model, a liquidity
    withdrawal planner, a CLMM range deposit planner, a CLMM position
    checker, a slippage / minimum-received calculator, a CLMM tick /
    price converter, a CLMM position-vs-holding calculator, a CLMM fee
-   estimator, and a CLMM wallet-balance deposit planner. These are educational MODELS using
+   estimator, a CLMM wallet-balance deposit planner, and a CLMM
+   break-even days calculator. These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
 
@@ -587,8 +588,57 @@ function clmmWalletPlan(currentStr, lowerStr, upperStr, balanceAStr, balanceBStr
   };
 }
 
+/* ---------- 15 · CLMM break-even days (Tools 12 + 13 joined) ---------- */
+/* Tool 4 does this for constant-product positions; Tools 12 and 13
+   leave the CLMM version as two numbers on two different forms:
+   Tool 12 reports the fees (in token B) a position must earn to
+   match holding at a check price, and Tool 13 estimates the fees
+   (in token B) it earns per day. This tool divides one by the other:
+     daysToBreakEven = feesNeededInB (Tool 12) / feesPerDayInB (Tool 13)
+   Both halves are computed by calling those tools' own functions, so
+   the hurdle and the rate can never drift apart from what their own
+   forms show. Two honest edges: at the entry price there is no gap
+   to close, so the answer is 0 days even if the fee rate is 0; and
+   with a real gap but a 0 fee rate (no volume, a 0 fee tier, or 0%
+   time in range) the position never catches holding at that rate —
+   daysToBreakEven is Infinity, not a very large number. The result
+   assumes the fee rate holds still for the whole period, which in a
+   live pool it will not — volume, active liquidity and time in range
+   all move. Model only — not a live quote or a yield promise. */
+function clmmBreakEven(liquidityStr, lowerStr, upperStr, entryPriceStr, checkPriceStr, totalActiveLStr, volumePerDayStr, feeBps, inRangePctStr) {
+  var vh = clmmVsHold(liquidityStr, lowerStr, upperStr, entryPriceStr, checkPriceStr);
+  if (vh === null) return null;
+  /* one day of Tool 13's estimator at the same liquidity: its fees
+     for a 1-day period are exactly its fees per day */
+  var est = clmmFeeEstimate(liquidityStr, totalActiveLStr, volumePerDayStr, feeBps, "1", inRangePctStr, "");
+  if (est === null) return null;
+  var feesNeeded = vh.feesNeededInB;
+  var days;
+  if (feesNeeded <= 1e-12) days = 0;
+  else if (est.feesPerDay > 0) days = feesNeeded / est.feesPerDay;
+  else days = Infinity;
+  return {
+    liquidity: vh.liquidity,
+    lowerPrice: vh.lowerPrice,
+    upperPrice: vh.upperPrice,
+    entryPrice: vh.entryPrice,
+    checkPrice: vh.checkPrice,
+    entryStatus: vh.entryStatus,
+    checkStatus: vh.checkStatus,
+    holdValueInB: vh.holdValueInB,
+    positionValueInB: vh.positionValueInB,
+    vsHoldPct: vh.vsHoldPct,
+    feesNeededInB: feesNeeded,
+    sharePct: est.sharePct,
+    poolFeesPerDay: est.poolFeesPerDay,
+    feesPerDay: est.feesPerDay,
+    inRangePct: est.inRangePct,
+    daysToBreakEven: days
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -952,6 +1002,36 @@ if (typeof document !== "undefined") {
       if (res !== null) {
         document.getElementById("wp-out-l").value = fmt(res.liquidity, 6);
       }
+    });
+
+    /* --- CLMM break-even days --- */
+    document.getElementById("bed-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmBreakEven(
+        document.getElementById("bed-l").value,
+        document.getElementById("bed-lower").value,
+        document.getElementById("bed-upper").value,
+        document.getElementById("bed-entry").value,
+        document.getElementById("bed-check").value,
+        document.getElementById("bed-total").value,
+        document.getElementById("bed-volume").value,
+        document.getElementById("bed-bps").value,
+        document.getElementById("bed-inrange").value
+      );
+      var out = document.getElementById("bed-result");
+      if (res === null) {
+        out.textContent = "Enter a positive model liquidity (Tool 8 reports it), a range with lower below upper, positive entry and check prices, a total active liquidity at least as large as yours, a non-negative daily volume, a fee tier of 0–10,000 bps, and a time-in-range of 0–100%.";
+      } else if (res.daysToBreakEven === 0) {
+        out.textContent = "Model output: at the check price of " + fmt(res.checkPrice, 6) + " B per A there is no gap to close — the position is worth what holding its entry tokens would be (≈ " +
+          fmt(res.positionValueInB, 6) + " B either way), so it breaks even with holding at 0 days. A CLMM break-even model, not a live Raydium quote.";
+      } else {
+        out.textContent = "Model output: at " + fmt(res.checkPrice, 6) + " B per A the position trails holding by ≈ " + fmt(res.feesNeededInB, 6) +
+          " B (" + fmt(res.vsHoldPct, 2) + "% vs holding — Tool 12's hurdle). At ≈ " + fmt(res.feesPerDay, 6) + " B per day in fees (your ≈ " +
+          fmt(res.sharePct, 4) + "% share of the active liquidity at " + fmt(res.inRangePct, 2) + "% time in range — Tool 13's rate) that gap closes in ≈ " +
+          (isFinite(res.daysToBreakEven) ? fmt(res.daysToBreakEven, 2) + " days" : "never — a 0 fee rate never offsets a real gap") +
+          ", if that rate held for the whole period, which in a live pool it won't. A CLMM break-even model, not a live Raydium quote or a yield promise.";
+      }
+      if (res !== null) document.getElementById("bed-out").value = isFinite(res.daysToBreakEven) ? fmt(res.daysToBreakEven, 2) : "never";
     });
 
     /* --- copy donation address --- */

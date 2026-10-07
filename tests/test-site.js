@@ -53,7 +53,10 @@ check("all vs-holding controls labelled",
 check("all wallet-planner controls labelled",
   ["wp-price", "wp-lower", "wp-upper", "wp-bal-a", "wp-bal-b", "wp-out-l"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=12"));
+check("all break-even-days controls labelled",
+  ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=13"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -488,6 +491,59 @@ check("WP rejects inverted / empty range", app.clmmWalletPlan("1", "1.25", "0.8"
 check("WP rejects zero / negative / junk", app.clmmWalletPlan("0", "0.8", "1.25", "100", "100") === null && app.clmmWalletPlan("1", "0.8", "1.25", "-5", "100") === null && app.clmmWalletPlan("1", "0.8", "1.25", "100", "-5") === null && app.clmmWalletPlan("x", "0.8", "1.25", "100", "100") === null);
 check("WP rejects empty fields", app.clmmWalletPlan("", "0.8", "1.25", "100", "100") === null && app.clmmWalletPlan("1", "0.8", "1.25", "", "100") === null && app.clmmWalletPlan("1", "0.8", "1.25", "100", "") === null);
 check("wallet planner present in index.html", html.includes('id="wp-calc"') && html.includes('id="wp-result"'));
+
+/* ---------- 15 · CLMM break-even days (Tools 12 + 13 joined) ---------- */
+/* headline: Tools 8/9's position (range 0.8–1.25, L = 947.2135955, entered
+   at 1) checked at the upper edge — Tool 12's hurdle is 13.19660113 B.
+   Total active liquidity is exactly 10x the position's (10% share);
+   1,000,000 B/day at 25 bps is 2,500 B of pool fees, so the position
+   earns 250 B/day at 100% in range: 13.19660113 / 250 = 0.0527864045 days */
+const beL = "947.2135954999579";
+const bed1 = app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472.135954999579", "1000000", "25", "");
+near("BED headline fees needed (Tool 12 hurdle)", bed1.feesNeededInB, 13.19660113, 0.000001);
+near("BED headline fees per day (Tool 13 rate)", bed1.feesPerDay, 250, 1e-9);
+near("BED headline share pct", bed1.sharePct, 10, 1e-9);
+near("BED headline days to break even", bed1.daysToBreakEven, 0.0527864045, 0.000000001);
+near("BED headline pct vs hold", bed1.vsHoldPct, -5.86515606, 0.000001);
+/* consistency, exactly: the hurdle IS Tool 12's and the rate IS Tool 13's
+   for the same inputs, so the day count is their ratio with no drift */
+const vhForBed = app.clmmVsHold(beL, "0.8", "1.25", "1", "1.25");
+const cfForBed = app.clmmFeeEstimate(beL, "9472.135954999579", "1000000", "25", "1", "", "");
+check("BED hurdle equals Tool 12 exactly", bed1.feesNeededInB === vhForBed.feesNeededInB);
+check("BED rate equals Tool 13 exactly", bed1.feesPerDay === cfForBed.feesPerDay);
+check("BED days equal hurdle / rate exactly", bed1.daysToBreakEven === vhForBed.feesNeededInB / cfForBed.feesPerDay);
+/* 80% time in range cuts the rate to 200/day and stretches the days */
+const bed80 = app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472.135954999579", "1000000", "25", "80");
+near("BED 80% in range fees per day", bed80.feesPerDay, 200, 1e-9);
+near("BED 80% in range days", bed80.daysToBreakEven, 0.06598300563, 0.00000001);
+/* the lower edge's hurdle is Tool 12's reciprocal-symmetric 10.5572809 B */
+const bedLo = app.clmmBreakEven(beL, "0.8", "1.25", "1", "0.8", "9472.135954999579", "1000000", "25", "");
+near("BED lower edge fees needed", bedLo.feesNeededInB, 10.5572809, 0.000001);
+near("BED lower edge days", bedLo.daysToBreakEven, 0.0422291236, 0.000000001);
+/* doubling volume (or the fee tier, or the share) halves the day count */
+const bedDbl = app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472.135954999579", "2000000", "25", "");
+check("BED doubling volume halves days", Math.abs(bedDbl.daysToBreakEven - bed1.daysToBreakEven / 2) < 1e-12);
+/* the honest edges: no gap at the entry price is 0 days even at a zero
+   fee rate; a real gap at a zero rate is Infinity, never a big number */
+check("BED at entry price is 0 days even with zero volume",
+  app.clmmBreakEven(beL, "0.8", "1.25", "1", "1", "9472.135954999579", "0", "25", "").daysToBreakEven === 0);
+check("BED gap with zero volume never breaks even",
+  app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472.135954999579", "0", "25", "").daysToBreakEven === Infinity);
+check("BED gap with zero fee tier never breaks even",
+  app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472.135954999579", "1000000", "0", "").daysToBreakEven === Infinity);
+check("BED gap with 0% time in range never breaks even",
+  app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472.135954999579", "1000000", "25", "0").daysToBreakEven === Infinity);
+/* the bigger the price travel, the bigger the hurdle and the longer the wait */
+check("BED further check price = more days",
+  app.clmmBreakEven(beL, "0.8", "1.25", "1", "2", "9472.135954999579", "1000000", "25", "").daysToBreakEven > bed1.daysToBreakEven);
+check("BED rejects your L above total active", app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "500", "1000000", "25", "") === null);
+check("BED rejects zero liquidity / prices", app.clmmBreakEven("0", "0.8", "1.25", "1", "1.25", "9472", "1000000", "25", "") === null && app.clmmBreakEven(beL, "0.8", "1.25", "0", "1.25", "9472", "1000000", "25", "") === null && app.clmmBreakEven(beL, "0.8", "1.25", "1", "0", "9472", "1000000", "25", "") === null);
+check("BED rejects inverted / empty range", app.clmmBreakEven(beL, "1.25", "0.8", "1", "1.25", "9472", "1000000", "25", "") === null && app.clmmBreakEven(beL, "1", "1", "1", "1.25", "9472", "1000000", "25", "") === null);
+check("BED rejects fee tier above 100% / negative", app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472", "1000000", "10001", "") === null && app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472", "1000000", "-1", "") === null);
+check("BED rejects time in range outside 0-100", app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472", "1000000", "25", "101") === null && app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472", "1000000", "25", "-1") === null);
+check("BED rejects negative volume", app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472", "-5", "25", "") === null);
+check("BED rejects junk / empty", app.clmmBreakEven("x", "0.8", "1.25", "1", "1.25", "9472", "1000000", "25", "") === null && app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472", "", "25", "") === null && app.clmmBreakEven(beL, "0.8", "1.25", "1", "1.25", "9472", "1000000", "", "") === null && app.clmmBreakEven(beL, "0.8", "1.25", "", "1.25", "9472", "1000000", "25", "") === null);
+check("break-even days calculator present in index.html", html.includes('id="bed-calc"') && html.includes('id="bed-result"'));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
