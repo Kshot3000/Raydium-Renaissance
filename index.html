@@ -539,6 +539,31 @@
         <button type="submit" class="btn primary">Plan my ±% range</button>
         <p id="sym-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="hop-calc">
+        <h3>23 · Two-hop swap model</h3>
+        <p>Tool 1 models one pool — but many pairs have no direct pool, so a real trade routes through an intermediate token: token A → token M in one pool, then M → token C in a second. This model runs Tool 1's own maths twice: hop 2's input is hop 1's output exactly as Tool 1 reports it (floored at 9 decimal places — that, not a hidden-precision value, is what the second pool would receive). Each hop pays its own pool's fee and takes its own price impact against its own reserves, so the combined impact — measured against the product of the two pools' spot prices — is always worse than either hop alone, and a shallow second pool can dominate the whole route. Educational model only — both pools are constant-product here; a real route may cross CLMM pools or other venues, and no routing search is done: these are the two pools you typed, with your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="hop-r1in">Pool 1 reserve in — token A</label>
+        <input id="hop-r1in" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hop-r1out">Pool 1 reserve out — intermediate token M</label>
+        <input id="hop-r1out" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hop-r2in">Pool 2 reserve in — intermediate token M</label>
+        <input id="hop-r2in" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hop-r2out">Pool 2 reserve out — token C</label>
+        <input id="hop-r2out" inputmode="decimal" placeholder="e.g. 2000" autocomplete="off">
+        <label for="hop-ain">Amount in — token A</label>
+        <input id="hop-ain" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="hop-fee1">Pool 1 fee (basis points, 25 = 0.25%)</label>
+        <input id="hop-fee1" inputmode="numeric" value="25" autocomplete="off">
+        <label for="hop-fee2">Pool 2 fee (basis points, 25 = 0.25%)</label>
+        <input id="hop-fee2" inputmode="numeric" value="25" autocomplete="off">
+        <label for="hop-mid">After hop 1 — intermediate token M (model)</label>
+        <input id="hop-mid" readonly placeholder="—" autocomplete="off">
+        <label for="hop-aout">Amount out — token C (model)</label>
+        <input id="hop-aout" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model this two-hop swap</button>
+        <p id="hop-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -566,6 +591,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=20"></script>
+<script src="app.js?v=21"></script>
 </body>
 </html>

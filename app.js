@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus twenty-two fully
+/* Raydium Renaissance hub logic: project filtering plus twenty-three fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -10,7 +10,8 @@
    break-even days calculator, a constant-product arbitrage model, a
    price-impact trade sizer, an LP-token share & value calculator, a
    single-sided zap-in planner, a single-sided zap-out planner, an IL
-   tolerance band, and a CLMM symmetric-range planner.
+   tolerance band, a CLMM symmetric-range planner, and a two-hop
+   swap model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1018,8 +1019,48 @@ function clmmSymmetricRange(currentStr, widthPctStr, amountAStr, spacingStr) {
   };
 }
 
+/* ---------- 23 · Two-hop swap model ---------- */
+/* Real trades often have no direct pool for the pair wanted, so they
+   route through an intermediate token: A -> M in one constant-product
+   pool, then M -> C in a second. This model is Tool 1 twice, honestly
+   composed: hop 1 is cpSwap on the first pool, and hop 2's input is
+   hop 1's output STRING exactly as Tool 1 reports it (floored at
+   9 dp — that, not a hidden-precision value, is what the second pool
+   would receive). Each hop pays its own pool's fee and takes its own
+   price impact against its own reserves, so the routed trade always
+   does worse than either hop alone. The combined spot price is the
+   product of the two hops' spot prices (M per A x C per M = C per A),
+   and the combined price impact follows Tool 1's definition against
+   that product — equivalently 1 - (1 - i1)(1 - i2) for the hops'
+   impacts i1 and i2. Both hops are CP pools in this model; a real
+   route may cross CLMM pools, other venues and priority fees, none of
+   which are modelled. Model only — your inputs, not live pool state.
+   Not a live quote and not financial advice. */
+function twoHopSwap(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2OutStr, amountInStr, fee1Bps, fee2Bps) {
+  var hop1 = cpSwap(reserve1InStr, reserve1OutStr, amountInStr, fee1Bps);
+  if (hop1 === null) return null;
+  var hop2 = cpSwap(reserve2InStr, reserve2OutStr, hop1.out, fee2Bps);
+  if (hop2 === null) return null;
+  var amountIn = Number(amountInStr);
+  if (!Number.isFinite(amountIn) || amountIn <= 0) return null;
+  var spotPrice = hop1.spotPrice * hop2.spotPrice;
+  var effectivePrice = Number(hop2.out) / amountIn;
+  return {
+    amountIn: amountIn,
+    midOut: hop1.out,
+    out: hop2.out,
+    hop1ImpactPct: hop1.priceImpactPct,
+    hop2ImpactPct: hop2.priceImpactPct,
+    spotPrice: spotPrice,
+    effectivePrice: effectivePrice,
+    priceImpactPct: (1 - effectivePrice / spotPrice) * 100,
+    fee1Pct: hop1.feePct,
+    fee2Pct: hop2.feePct
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -1610,6 +1651,34 @@ if (typeof document !== "undefined") {
           "% of the position's value in B) for model liquidity L ≈ " + fmt(res.liquidity, 4) +
           ". A CLMM range model, not a live Raydium quote — no fees are modelled, and CLMM deposits are range-based, not pool-ratio based.";
         document.getElementById("sym-reqb").value = fmt(res.requiredB, 6);
+      }
+    });
+
+    /* --- two-hop swap model --- */
+    document.getElementById("hop-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = twoHopSwap(
+        document.getElementById("hop-r1in").value,
+        document.getElementById("hop-r1out").value,
+        document.getElementById("hop-r2in").value,
+        document.getElementById("hop-r2out").value,
+        document.getElementById("hop-ain").value,
+        document.getElementById("hop-fee1").value,
+        document.getElementById("hop-fee2").value
+      );
+      var out = document.getElementById("hop-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both pools and a positive amount in (up to 9 decimal places), plus a fee in basis points for each pool (25 = 0.25%). A trade so small that the first hop rounds to zero cannot route.";
+        document.getElementById("hop-mid").value = "";
+        document.getElementById("hop-aout").value = "";
+      } else {
+        out.textContent = "Model output: hop 1 pays ≈ " + res.midOut + " of the intermediate token (price impact ≈ " + fmt(res.hop1ImpactPct, 2) +
+          "% after its " + fmt(res.fee1Pct, 2) + "% fee), and hop 2 turns that into ≈ " + res.out + " of token C (price impact ≈ " + fmt(res.hop2ImpactPct, 2) +
+          "% after its " + fmt(res.fee2Pct, 2) + "% fee). Combined: effective price ≈ " + fmt(res.effectivePrice, 6) + " C per A against a combined spot of ≈ " +
+          fmt(res.spotPrice, 6) + " — a combined price impact of ≈ " + fmt(res.priceImpactPct, 2) +
+          "%, worse than either hop alone, because each hop pays its own fee and moves its own pool. A two-hop constant-product model, not a live Raydium quote — a real route may cross CLMM pools or other venues, and no routing search is done here: these are the two pools you typed.";
+        document.getElementById("hop-mid").value = res.midOut;
+        document.getElementById("hop-aout").value = res.out;
       }
     });
 

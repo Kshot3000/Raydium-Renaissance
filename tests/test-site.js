@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=20"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=21"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -878,6 +878,55 @@ check("SYM rejects junk / empty", app.clmmSymmetricRange("x", "25", "100", "") =
 check("all sym controls labelled", ["sym-price", "sym-width", "sym-aa", "sym-spacing", "sym-reqb"].every(id => html.includes(`for="${id}"`)));
 check("sym tool present in index.html", html.includes('id="sym-calc"') && html.includes('id="sym-result"'));
 check("sym honesty: multiplicative range and not-live labels", html.includes("multiplicatively") && html.includes("not a live quote, not financial advice"));
+
+/* ---------- 23 · Two-hop swap model ---------- */
+/* headline vectors verified against Tool 1 in a clean foreground run
+   BEFORE these tests were written: 100 A into 1000/1000 (25 bps) pays
+   90.70243237 M; that into 1000/2000 (25 bps) pays 165.937999822 C */
+const hop1 = app.twoHopSwap("1000", "1000", "1000", "2000", "100", 25, 25);
+check("HOP headline mid out", hop1.midOut === "90.70243237");
+check("HOP headline final out", hop1.out === "165.937999822");
+near("HOP headline combined spot is the product", hop1.spotPrice, 2, 1e-12);
+near("HOP headline effective price", hop1.effectivePrice, 1.65937999822, 1e-12);
+near("HOP headline hop1 impact", hop1.hop1ImpactPct, 9.29756763, 1e-9);
+near("HOP headline hop2 impact", hop1.hop2ImpactPct, 8.526157741231478, 1e-9);
+near("HOP headline combined impact", hop1.priceImpactPct, 17.031000089, 1e-9);
+/* combined impact is exactly the composition of the hops' impacts:
+   1 - (1 - i1)(1 - i2), and so worse than either hop alone */
+near("HOP combined impact composes the hops", hop1.priceImpactPct, (1 - (1 - hop1.hop1ImpactPct / 100) * (1 - hop1.hop2ImpactPct / 100)) * 100, 1e-9);
+check("HOP combined worse than either hop", hop1.priceImpactPct > hop1.hop1ImpactPct && hop1.priceImpactPct > hop1.hop2ImpactPct);
+/* both legs ARE Tool 1, exactly: midOut is cpSwap on pool 1 and the
+   final out is cpSwap on pool 2 fed that exact string, at headline
+   and arbitrary inputs alike */
+for (const [r1i, r1o, r2i, r2o, a, f1, f2] of [["1000", "1000", "1000", "2000", "100", 25, 25], ["5000", "2500", "800", "4000", "37.5", 25, 100], ["100000", "100000", "100000", "100000", "1000", 5, 5], ["250", "1000", "3000", "750", "12.25", 0, 30]]) {
+  const route = app.twoHopSwap(r1i, r1o, r2i, r2o, a, f1, f2);
+  const leg1 = app.cpSwap(r1i, r1o, a, f1);
+  const leg2 = app.cpSwap(r2i, r2o, leg1.out, f2);
+  check("HOP legs equal Tool 1 @" + a + " in", route !== null && route.midOut === leg1.out && route.out === leg2.out);
+  near("HOP combined composes @" + a + " in", route.priceImpactPct, (1 - (1 - route.hop1ImpactPct / 100) * (1 - route.hop2ImpactPct / 100)) * 100, 1e-9);
+}
+/* zero fees on both hops: 100 -> 90.909090909 -> 83.333333333 */
+const hop0 = app.twoHopSwap("1000", "1000", "1000", "1000", "100", 0, 0);
+check("HOP zero-fee mid / out", hop0.midOut === "90.909090909" && hop0.out === "83.333333333");
+near("HOP zero-fee combined impact", hop0.priceImpactPct, 16.666666667, 1e-9);
+/* a shallow second pool dominates the route: hop 2's impact dwarfs
+   hop 1's and the combined impact follows it */
+const hopShallow = app.twoHopSwap("1000", "1000", "10", "10", "100", 25, 25);
+check("HOP shallow hop2 out", hopShallow.out === "9.004734243");
+check("HOP shallow hop2 dominates", hopShallow.hop2ImpactPct > 90 && hopShallow.hop2ImpactPct > hopShallow.hop1ImpactPct && hopShallow.priceImpactPct > hopShallow.hop2ImpactPct);
+/* deeper pools on both hops route the same trade with less impact */
+const hopDeep = app.twoHopSwap("10000", "10000", "10000", "20000", "100", 25, 25);
+check("HOP deeper pools = less combined impact", hopDeep.priceImpactPct < hop1.priceImpactPct && Number(hopDeep.out) > Number(hop1.out));
+/* raising only pool 2's fee leaves hop 1 untouched and worsens hop 2 */
+const hopFee2 = app.twoHopSwap("1000", "1000", "1000", "2000", "100", 25, 100);
+check("HOP fee2 leaves hop 1 alone, worsens the route", hopFee2.midOut === hop1.midOut && Number(hopFee2.out) < Number(hop1.out));
+check("HOP rejects zero / negative reserves or amount", app.twoHopSwap("0", "1000", "1000", "2000", "100", 25, 25) === null && app.twoHopSwap("1000", "1000", "1000", "0", "100", 25, 25) === null && app.twoHopSwap("1000", "1000", "1000", "2000", "0", 25, 25) === null);
+check("HOP rejects bad fees on either hop", app.twoHopSwap("1000", "1000", "1000", "2000", "100", 10000, 25) === null && app.twoHopSwap("1000", "1000", "1000", "2000", "100", 25, -1) === null && app.twoHopSwap("1000", "1000", "1000", "2000", "100", 25, 2.5) === null);
+check("HOP rejects dust that hop 1 rounds to zero", app.twoHopSwap("1000", "1000", "1000", "2000", "0.000000001", 25, 25) === null);
+check("HOP rejects junk / empty", app.twoHopSwap("x", "1000", "1000", "2000", "100", 25, 25) === null && app.twoHopSwap("1000", "1000", "1000", "2000", "", 25, 25) === null && app.twoHopSwap("1000", "", "1000", "2000", "100", 25, 25) === null);
+check("all hop controls labelled", ["hop-r1in", "hop-r1out", "hop-r2in", "hop-r2out", "hop-ain", "hop-fee1", "hop-fee2", "hop-mid", "hop-aout"].every(id => html.includes(`for="${id}"`)));
+check("hop tool present in index.html", html.includes('id="hop-calc"') && html.includes('id="hop-result"'));
+check("hop honesty: routed model and not-live labels", html.includes("no routing search is done") && html.includes("not a live quote, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
