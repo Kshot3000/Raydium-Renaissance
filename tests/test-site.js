@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=15"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=16"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -634,6 +634,49 @@ check("PI rejects junk / empty", app.priceImpactSizer("x", "1000", "1", 25) === 
 check("all price-impact controls labelled", ["pi-rin", "pi-rout", "pi-cap", "pi-fee", "pi-out"].every(id => html.includes(`for="${id}"`)));
 check("price-impact tool present in index.html", html.includes('id="pi-calc"') && html.includes('id="pi-result"'));
 check("price-impact honesty: fee floor + model label", html.includes("admits no positive trade at all") && html.includes("not a live quote, not financial advice"));
+
+/* LP-token share & value — known values: amount = reserve * yours / supply, floored */
+/* reserves 1,000,000 A / 500,000 B, supply 100,000, yours 1,000 => 1% share, 10,000 A / 5,000 B, value 5,000 + 10,000*0.5 = 10,000 B */
+const lp1 = app.lpTokenValue("1000000", "500000", "100000", "1000");
+near("LP share pct", lp1.sharePct, 1, 1e-12);
+check("LP redeem amounts exact", lp1.amountA === "10000" && lp1.amountB === "5000");
+check("LP remaining reserves", lp1.remainingReserveA === "990000" && lp1.remainingReserveB === "495000");
+near("LP price B per A", lp1.priceBperA, 0.5, 1e-12);
+near("LP value in B at pool spot", lp1.valueInB, 10000, 1e-9);
+/* holding the whole supply redeems the whole pool, no more and no less */
+const lpSole = app.lpTokenValue("1000", "250", "500", "500");
+check("LP sole holder redeems everything", lpSole.amountA === "1000" && lpSole.amountB === "250" && lpSole.remainingReserveA === "0" && lpSole.remainingReserveB === "0");
+near("LP sole holder share is 100", lpSole.sharePct, 100, 1e-12);
+near("LP sole holder value in B", lpSole.valueInB, 500, 1e-9);
+/* fractional: reserves 3 A / 1 B, supply 2, yours 1 => 1.5 A / 0.5 B, value 0.5 + 1.5/3 = 1 B */
+const lpFrac = app.lpTokenValue("3", "1", "2", "1");
+check("LP fractional exact", lpFrac.amountA === "1.5" && lpFrac.amountB === "0.5");
+near("LP fractional value in B", lpFrac.valueInB, 1, 1e-9);
+/* consistency with Tool 7: redeeming a count is withdrawing that share in full */
+for (const [ra, rb, sup, yours] of [["1000000", "500000", "100000", "1000"], ["1000", "250", "500", "125"], ["3", "1", "2", "1"]]) {
+  const lp = app.lpTokenValue(ra, rb, sup, yours);
+  const wd = app.withdrawPlan(ra, rb, lp.sharePct.toFixed(9), "100");
+  check("LP matches Tool 7 full exit " + ra + "/" + rb + " " + yours + "/" + sup,
+    wd !== null && lp.amountA === wd.outA && lp.amountB === wd.outB);
+}
+/* consistency with Tool 5: the share a deposit earns is the share its LP count would show.
+   Deposit 10,000 A into 1,000,000/500,000 (Tool 5: share 0.990099...%) — a supply of
+   1,000,000 growing pro-rata mints 10,000 new tokens, so yours 10,000 of 1,010,000 total */
+const lpDep = app.lpTokenValue("1010000", "505000", "1010000", "10000");
+near("LP deposit share matches Tool 5", lpDep.sharePct, app.depositPlan("1000000", "500000", "10000").sharePct, 1e-9);
+check("LP deposit redeems the deposit back", lpDep.amountA === "10000" && lpDep.amountB === "5000");
+/* dilution is the point: the same 1,000 tokens are 1% of a 100,000 supply but 0.5% of 200,000 */
+check("LP share halves when supply doubles", Math.abs(app.lpTokenValue("1000000", "500000", "200000", "1000").sharePct - lp1.sharePct / 2) < 1e-12);
+/* value scales with the count: double the tokens, double the redemption and the value */
+const lpDbl = app.lpTokenValue("1000000", "500000", "100000", "2000");
+check("LP double tokens = double redemption", lpDbl.amountA === "20000" && lpDbl.amountB === "10000" && Math.abs(lpDbl.valueInB - 2 * lp1.valueInB) < 1e-9);
+check("LP rejects yours above supply", app.lpTokenValue("1000", "1000", "100", "101") === null && app.lpTokenValue("1000", "1000", "100", "100.000000001") === null);
+check("LP rejects zero reserves / supply / yours", app.lpTokenValue("0", "1000", "100", "1") === null && app.lpTokenValue("1000", "0", "100", "1") === null && app.lpTokenValue("1000", "1000", "0", "1") === null && app.lpTokenValue("1000", "1000", "100", "0") === null);
+check("LP rejects junk / negative / empty", app.lpTokenValue("abc", "1000", "100", "1") === null && app.lpTokenValue("1000", "1000", "100", "-1") === null && app.lpTokenValue("1000", "1000", "", "1") === null && app.lpTokenValue("1000", "1000", "100", "") === null && app.lpTokenValue("", "1000", "100", "1") === null);
+check("LP rejects dust that floors to zero", app.lpTokenValue("0.000000001", "1000", "1000000", "1") === null);
+check("all LP-token controls labelled", ["lp-ra", "lp-rb", "lp-supply", "lp-yours", "lp-outa", "lp-outb"].every(id => html.includes(`for="${id}"`)));
+check("LP-token tool present in index.html", html.includes('id="lp-calc"') && html.includes('id="lp-result"'));
+check("LP-token honesty: share shrinks as supply grows", html.includes("shrinks as new LPs deposit") && html.includes("not a live quote, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

@@ -448,6 +448,25 @@
         <button type="submit" class="btn primary">Size the trade</button>
         <p id="pi-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="lp-calc">
+        <h3>18 · LP-token share &amp; value calculator</h3>
+        <p>Tools 5 and 7 speak in share percentages, but what you actually hold in a constant-product pool (AMM v4 / CPMM / CP-Swap) is a count of LP tokens — and that count against the pool's total LP supply <em>is</em> your share. Enter the pool's current reserves, its total LP supply and your token count: the calculator shows your share, what redeeming those tokens returns in both tokens (the exit Tool 7 plans, from the count you hold), and the position's value in token B at the pool's own spot price. One catch the percentages hide: your share shrinks as new LPs deposit and the supply grows, so a count that was 1% at deposit need not be 1% now. CLMM positions are range-based NFTs, not fungible LP tokens. Educational model only — reserves and supply are your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="lp-ra">Pool reserve — token A (current)</label>
+        <input id="lp-ra" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="lp-rb">Pool reserve — token B (current)</label>
+        <input id="lp-rb" inputmode="decimal" placeholder="e.g. 500000" autocomplete="off">
+        <label for="lp-supply">Total LP-token supply</label>
+        <input id="lp-supply" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="lp-yours">Your LP tokens</label>
+        <input id="lp-yours" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="lp-outa">Redeems for — token A (model)</label>
+        <input id="lp-outa" readonly placeholder="—" autocomplete="off">
+        <label for="lp-outb">Redeems for — token B (model)</label>
+        <input id="lp-outb" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Value my LP tokens</button>
+        <p id="lp-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -475,6 +494,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=15"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>

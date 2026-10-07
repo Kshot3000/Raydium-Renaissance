@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus seventeen fully local
+/* Raydium Renaissance hub logic: project filtering plus eighteen fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
    calculator, an LP fee estimator, a break-even fee calculator, a
    liquidity deposit planner, an exact-out swap model, a liquidity
@@ -8,7 +8,7 @@
    price converter, a CLMM position-vs-holding calculator, a CLMM fee
    estimator, a CLMM wallet-balance deposit planner, a CLMM
    break-even days calculator, a constant-product arbitrage model,
-   and a price-impact trade sizer.
+   a price-impact trade sizer, and an LP-token share & value calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -739,8 +739,52 @@ function priceImpactSizer(reserveInStr, reserveOutStr, maxImpactPctStr, feeBps) 
   });
 }
 
+/* ---------- 18 · LP-token share & value calculator ---------- */
+/* Tools 5 and 7 work in share percentages, but what an LP actually
+   HOLDS is a count of LP tokens against the pool's total LP supply —
+   and that count is the share: share = yourTokens / totalSupply.
+   Redeeming (burning) those tokens pays out both reserves in the
+   pool's current ratio, exactly as Tool 7 models for a percentage:
+     amountOut = reserve * yourTokens / totalSupply
+   computed in exact scaled-BigInt and floored at 9 dp (the pool
+   keeps any sub-unit remainder, as on-chain programs do). The
+   position's value in token B values the token-A side at the pool's
+   own spot price (reserveB / reserveA) — the pool's price, not an
+   external one, so it is the value the pool itself implies. Two
+   honest consequences: the share a fixed token count represents
+   SHRINKS as new LPs deposit (the supply grows), so a count that
+   was 1% at deposit need not be 1% now; and holding every token in
+   the supply redeems the whole pool, no more and no less. Model
+   only — no withdrawal fee is modelled, and a real redemption is
+   quoted live on the pool page. CLMM positions are NFTs with
+   range-based amounts (Tools 8/9), not fungible LP tokens. */
+function lpTokenValue(reserveAStr, reserveBStr, totalSupplyStr, yourTokensStr) {
+  var required = [reserveAStr, reserveBStr, totalSupplyStr, yourTokensStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var ra = parseScaled(reserveAStr), rb = parseScaled(reserveBStr);
+  var supply = parseScaled(totalSupplyStr), yours = parseScaled(yourTokensStr);
+  if (ra === null || rb === null || supply === null || yours === null) return null;
+  if (ra <= 0n || rb <= 0n || supply <= 0n || yours <= 0n) return null;
+  if (yours > supply) return null;
+  var outA = ra * yours / supply;
+  var outB = rb * yours / supply;
+  if (outA <= 0n || outB <= 0n) return null;
+  var spot = scaledToNumber(rb) / scaledToNumber(ra);
+  return {
+    amountA: formatScaled(outA),
+    amountB: formatScaled(outB),
+    remainingReserveA: formatScaled(ra - outA),
+    remainingReserveB: formatScaled(rb - outB),
+    sharePct: scaledToNumber(yours) / scaledToNumber(supply) * 100,
+    priceBperA: spot,
+    valueInB: scaledToNumber(outB) + scaledToNumber(outA) * spot
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -1190,6 +1234,31 @@ if (typeof document !== "undefined") {
           " — any larger trade crosses the cap, any smaller one stays under it. The fee alone accounts for ≈ " + fmt(res.feeImpactPct, 4) +
           "% of that impact before trade size adds the rest. A price-impact sizing model against reserves you supplied, not a live Raydium quote or financial advice.";
         document.getElementById("pi-out").value = fmt(res.maxAmountIn, 6);
+      }
+    });
+
+    /* --- LP-token share & value --- */
+    document.getElementById("lp-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = lpTokenValue(
+        document.getElementById("lp-ra").value,
+        document.getElementById("lp-rb").value,
+        document.getElementById("lp-supply").value,
+        document.getElementById("lp-yours").value
+      );
+      var out = document.getElementById("lp-result");
+      if (res === null) {
+        out.textContent = "Enter positive pool reserves for both tokens, a positive total LP supply, and your LP-token count (above 0 and at most the total supply).";
+        document.getElementById("lp-outa").value = "";
+        document.getElementById("lp-outb").value = "";
+      } else {
+        out.textContent = "Model output: your LP tokens are ≈ " + fmt(res.sharePct, 4) + "% of the pool's supply, redeeming for ≈ " +
+          res.amountA + " of token A and ≈ " + res.amountB + " of token B — both tokens, in the pool's current ratio — worth ≈ " +
+          fmt(res.valueInB, 6) + " B valued at the pool's own spot price (≈ " + fmt(res.priceBperA, 6) +
+          " B per A), with model reserves left of " + res.remainingReserveA + " A / " + res.remainingReserveB +
+          " B. That share shrinks as new LPs deposit and the supply grows, so re-check the supply rather than trusting the share you had at deposit. An LP-token model, not a live Raydium quote — CLMM positions are range-based and differ, and no withdrawal fee is modelled.";
+        document.getElementById("lp-outa").value = res.amountA;
+        document.getElementById("lp-outb").value = res.amountB;
       }
     });
 
