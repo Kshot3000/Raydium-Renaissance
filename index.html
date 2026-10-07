@@ -522,6 +522,23 @@
         <button type="submit" class="btn primary">Find my tolerance band</button>
         <p id="band-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="sym-calc">
+        <h3>22 · CLMM ±% range planner</h3>
+        <p>Tools 8 and 14 ask for a CLMM range as two raw prices — but the way a range is usually chosen is a width around the current price: “±25%”. Enter the current price, a width, and the token A you want to deposit: the planner builds the range <em>multiplicatively</em> symmetric (upper = price × multiple, lower = price ÷ multiple — the kind of symmetry where a rise and a fall undo each other) and plans the deposit with Tool 8's own maths. The percentage room honestly differs by side: a ±25% width is +25% of room up but only −20% down, because the lower edge is price ÷ 1.25, not price × 0.75. Add your pool's tick spacing and the edges are snapped the way pools require — lower down, upper up — <em>before</em> planning, so the split and liquidity describe the snapped range a real position would actually cover, not the one you typed. Educational model only — no fees modelled; your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="sym-price">Current price (token B per token A)</label>
+        <input id="sym-price" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="sym-width">Range width (± % around the current price)</label>
+        <input id="sym-width" inputmode="decimal" placeholder="e.g. 25" autocomplete="off">
+        <label for="sym-aa">Your deposit — token A</label>
+        <input id="sym-aa" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="sym-spacing">Pool tick spacing (optional, e.g. 10)</label>
+        <input id="sym-spacing" inputmode="numeric" placeholder="e.g. 10" autocomplete="off">
+        <label for="sym-reqb">Matching deposit — token B (model)</label>
+        <input id="sym-reqb" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan my ±% range</button>
+        <p id="sym-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -549,6 +566,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>

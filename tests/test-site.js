@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=19"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=20"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -823,6 +823,61 @@ check("BAND rejects junk / empty", app.ilToleranceBand("abc", "10") === null && 
 check("all band controls labelled", ["band-dep", "band-fees", "band-high", "band-low"].every(id => html.includes(`for="${id}"`)));
 check("band tool present in index.html", html.includes('id="band-calc"') && html.includes('id="band-result"'));
 check("band honesty: sqrt-price band and not-live labels", html.includes("square root") && html.includes("not a live quote, not financial advice"));
+
+/* ---------- 22 · CLMM symmetric-range (±%) planner ---------- */
+/* headline: price 1, ±25% width, 100 A — the multiplicative range is
+   exactly Tool 8's headline 0.8–1.25, so the plan must be Tool 8's own */
+const sym1 = app.clmmSymmetricRange("1", "25", "100", "");
+near("SYM headline lower is 0.8", sym1.effLower, 0.8, 1e-12);
+near("SYM headline upper is 1.25", sym1.effUpper, 1.25, 1e-12);
+near("SYM headline required B", sym1.requiredB, 100, 1e-9);
+near("SYM headline liquidity", sym1.liquidity, 947.2135955, 0.000001);
+check("SYM headline ticks", sym1.tickLower === -2232 && sym1.tickUpper === 2231);
+check("SYM headline not snapped without spacing", sym1.snapped === false && sym1.spacing === null);
+near("SYM headline up room is +25%", sym1.upRoomPct, 25, 1e-9);
+near("SYM headline down room is -20%, not -25%", sym1.downRoomPct, 20, 1e-9);
+/* consistency with Tool 8, exactly: the plan IS clmmRangePlan on the
+   effective range, at headline and arbitrary inputs alike */
+for (const [p, w, a] of [["1", "25", "100"], ["2", "25", "50"], ["0.5", "10", "250"], ["150.5", "40", "3"]]) {
+  const sym = app.clmmSymmetricRange(p, w, a, "");
+  const t8 = app.clmmRangePlan(p, String(sym.effLower), String(sym.effUpper), a);
+  check("SYM plan equals Tool 8 @" + p + " ±" + w + "%", sym !== null && t8 !== null && sym.requiredB === t8.requiredB && sym.liquidity === t8.liquidity);
+  check("SYM range straddles price multiplicatively @" + p + " ±" + w + "%",
+    Math.abs(sym.effUpper / Number(p) - Number(p) / sym.effLower) < 1e-9 && sym.effLower < Number(p) && Number(p) < sym.effUpper);
+}
+/* ±100% width: range 0.5–2, the wide-range liquidity of Tool 8's checks */
+const sym100 = app.clmmSymmetricRange("1", "100", "100", "");
+near("SYM 100% lower/upper", sym100.effLower + sym100.effUpper, 2.5, 1e-12);
+near("SYM 100% liquidity", sym100.liquidity, 341.4213562, 0.000001);
+near("SYM 100% down room is -50%", sym100.downRoomPct, 50, 1e-9);
+/* wider width = more room both sides, less liquidity for the same deposit */
+const sym10 = app.clmmSymmetricRange("1", "10", "100", "");
+check("SYM wider range = more room, lower liquidity", sym10.upRoomPct < sym1.upRoomPct && sym100.upRoomPct > sym1.upRoomPct && sym10.liquidity > sym1.liquidity && sym1.liquidity > sym100.liquidity);
+/* price scale-invariance: at price 2 the same ±25% / half the A deposit
+   needs the same B (100) — the range scales with the price */
+near("SYM price-2 required B", app.clmmSymmetricRange("2", "25", "50", "").requiredB, 100, 1e-9);
+/* tick spacing: edges snap OUTWARD (lower down, upper up) to spacing
+   multiples before planning — 0.8/-2232 -> -2240, 1.25/2231 -> 2240 —
+   and the plan equals Tool 8 on the snapped range's tick prices */
+const symSnap = app.clmmSymmetricRange("1", "25", "100", "10");
+check("SYM snapped flag and ticks", symSnap.snapped === true && symSnap.spacing === 10 && symSnap.tickLower === -2240 && symSnap.tickUpper === 2240);
+near("SYM snapped lower price", symSnap.effLower, 0.7993240861522392, 1e-12);
+near("SYM snapped upper price", symSnap.effUpper, 1.2510570084454333, 1e-12);
+check("SYM snapping widens the range", symSnap.effLower < sym1.effLower && symSnap.effUpper > sym1.effUpper);
+const t8Snap = app.clmmRangePlan("1", String(app.tickToPrice(-2240)), String(app.tickToPrice(2240)), "100");
+check("SYM snapped plan equals Tool 8 on snapped range", symSnap.requiredB === t8Snap.requiredB && symSnap.liquidity === t8Snap.liquidity);
+near("SYM snapped liquidity", symSnap.liquidity, 943.8348765987731, 1e-9);
+/* spacing 1 leaves the ticks themselves unchanged */
+const symS1 = app.clmmSymmetricRange("1", "25", "100", "1");
+check("SYM spacing 1 not flagged snapped", symS1.snapped === false && symS1.tickLower === -2232 && symS1.tickUpper === 2231);
+check("SYM rejects zero / negative width", app.clmmSymmetricRange("1", "0", "100", "") === null && app.clmmSymmetricRange("1", "-5", "100", "") === null);
+check("SYM rejects zero price / deposit", app.clmmSymmetricRange("0", "25", "100", "") === null && app.clmmSymmetricRange("1", "25", "0", "") === null);
+check("SYM rejects width beyond the standard tick range", app.clmmSymmetricRange("1", "1e30", "100", "") === null);
+check("SYM rejects bad spacing", app.clmmSymmetricRange("1", "25", "100", "0") === null && app.clmmSymmetricRange("1", "25", "100", "-10") === null && app.clmmSymmetricRange("1", "25", "100", "2.5") === null && app.clmmSymmetricRange("1", "25", "100", "x") === null);
+check("SYM rejects junk / empty", app.clmmSymmetricRange("x", "25", "100", "") === null && app.clmmSymmetricRange("1", "x", "100", "") === null && app.clmmSymmetricRange("", "25", "100", "") === null && app.clmmSymmetricRange("1", "", "100", "") === null && app.clmmSymmetricRange("1", "25", "", "") === null);
+check("all sym controls labelled", ["sym-price", "sym-width", "sym-aa", "sym-spacing", "sym-reqb"].every(id => html.includes(`for="${id}"`)));
+check("sym tool present in index.html", html.includes('id="sym-calc"') && html.includes('id="sym-result"'));
+check("sym honesty: multiplicative range and not-live labels", html.includes("multiplicatively") && html.includes("not a live quote, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

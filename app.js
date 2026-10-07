@@ -1,15 +1,16 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus twenty fully local
-   liquidity-pool tools — a constant-product swap model, an impermanent-loss
-   calculator, an LP fee estimator, a break-even fee calculator, a
-   liquidity deposit planner, an exact-out swap model, a liquidity
-   withdrawal planner, a CLMM range deposit planner, a CLMM position
-   checker, a slippage / minimum-received calculator, a CLMM tick /
-   price converter, a CLMM position-vs-holding calculator, a CLMM fee
-   estimator, a CLMM wallet-balance deposit planner, a CLMM
-   break-even days calculator, a constant-product arbitrage model,
-   a price-impact trade sizer, an LP-token share & value calculator,
-   a single-sided zap-in planner, and a single-sided zap-out planner.
+/* Raydium Renaissance hub logic: project filtering plus twenty-two fully
+   local liquidity-pool tools — a constant-product swap model, an
+   impermanent-loss calculator, an LP fee estimator, a break-even fee
+   calculator, a liquidity deposit planner, an exact-out swap model, a
+   liquidity withdrawal planner, a CLMM range deposit planner, a CLMM
+   position checker, a slippage / minimum-received calculator, a CLMM
+   tick / price converter, a CLMM position-vs-holding calculator, a CLMM
+   fee estimator, a CLMM wallet-balance deposit planner, a CLMM
+   break-even days calculator, a constant-product arbitrage model, a
+   price-impact trade sizer, an LP-token share & value calculator, a
+   single-sided zap-in planner, a single-sided zap-out planner, an IL
+   tolerance band, and a CLMM symmetric-range planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -948,8 +949,77 @@ function ilToleranceBand(depositStr, feesStr) {
   });
 }
 
+/* ---------- 22 · CLMM symmetric-range (±%) planner ---------- */
+/* Tools 8/14 ask for a CLMM range as two raw prices, but the way LPs
+   actually talk about a range is a width around the current price:
+   "±25%". This tool takes that form — current price P and a width w%
+   — and builds the range MULTIPLICATIVELY symmetric around P:
+     upper = P * m,  lower = P / m,  with m = 1 + w/100.
+   Multiplicative symmetry is the honest kind for prices (a rise and a
+   fall that undo each other), and it has a visible consequence the
+   tool reports rather than hides: the percentage room differs by
+   side — ±25% of width is +25% of room up but only −20% down,
+   because the lower edge is P/1.25, not P*(1 − 0.25).
+   With a pool tick spacing (optional), the raw edges are snapped the
+   way pools require BEFORE planning — lower tick down, upper tick up
+   (Tool 11's rule, floor division) — and the deposit is planned on
+   the SNAPPED range's prices, because that is the range a real
+   position would actually cover; without a spacing the raw range is
+   planned as-is. Ranges whose ticks fall outside the standard CLMM
+   tick range (-443636..443636, Tool 11) are rejected. The deposit
+   itself is planned by Tool 8's own clmmRangePlan, so the split and
+   liquidity can never drift from that tool's numbers. Model only —
+   no fees, and a real position is quoted live on the pool page. */
+function clmmSymmetricRange(currentStr, widthPctStr, amountAStr, spacingStr) {
+  var required = [currentStr, widthPctStr, amountAStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var current = Number(currentStr), widthPct = Number(widthPctStr), amountA = Number(amountAStr);
+  if (![current, widthPct, amountA].every(Number.isFinite)) return null;
+  if (current <= 0 || widthPct <= 0 || amountA <= 0) return null;
+  var m = 1 + widthPct / 100;
+  var rawLower = current / m, rawUpper = current * m;
+  var tickLower = priceToTick(rawLower), tickUpper = priceToTick(rawUpper);
+  if (tickLower < TICK_MIN || tickUpper > TICK_MAX) return null;
+  var effLower = rawLower, effUpper = rawUpper, snapped = false, spacing = null;
+  if (spacingStr != null && String(spacingStr).trim() !== "") {
+    spacing = Number(spacingStr);
+    if (!Number.isInteger(spacing) || spacing <= 0) return null;
+    var downTick = Math.floor(tickLower / spacing) * spacing;
+    var floorUp = Math.floor(tickUpper / spacing) * spacing;
+    var upTick = floorUp === tickUpper ? tickUpper : floorUp + spacing;
+    if (downTick < TICK_MIN || upTick > TICK_MAX) return null;
+    snapped = downTick !== tickLower || upTick !== tickUpper;
+    tickLower = downTick; tickUpper = upTick;
+    effLower = tickToPrice(downTick); effUpper = tickToPrice(upTick);
+    if (effLower == null || effUpper == null) return null;
+  }
+  var plan = clmmRangePlan(String(current), String(effLower), String(effUpper), String(amountA));
+  if (plan === null) return null;
+  return {
+    currentPrice: current,
+    widthPct: widthPct,
+    multiple: m,
+    rawLower: rawLower,
+    rawUpper: rawUpper,
+    effLower: effLower,
+    effUpper: effUpper,
+    snapped: snapped,
+    spacing: spacing,
+    tickLower: tickLower,
+    tickUpper: tickUpper,
+    amountA: amountA,
+    requiredB: plan.requiredB,
+    liquidity: plan.liquidity,
+    bValuePct: plan.bValuePct,
+    upRoomPct: (effUpper / current - 1) * 100,
+    downRoomPct: (1 - effLower / current) * 100
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -1512,6 +1582,34 @@ if (typeof document !== "undefined") {
           "exceeds the fees earned and holding would have been better. An IL tolerance model for a 50/50 constant-product position, not a live Raydium quote — fees are counted in token B terms outside the pool, with no compounding modelled, and CLMM positions are range-based and differ.";
         document.getElementById("band-high").value = fmt(res.priceRatioHigh, 6);
         document.getElementById("band-low").value = fmt(res.priceRatioLow, 6);
+      }
+    });
+
+    /* --- CLMM symmetric-range planner --- */
+    document.getElementById("sym-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmSymmetricRange(
+        document.getElementById("sym-price").value,
+        document.getElementById("sym-width").value,
+        document.getElementById("sym-aa").value,
+        document.getElementById("sym-spacing").value
+      );
+      var out = document.getElementById("sym-result");
+      if (res === null) {
+        out.textContent = "Enter a positive current price, a width above 0%, and a positive token A deposit (and, if you give a tick spacing, a whole number above 0). Ranges wider than the standard CLMM tick range are rejected.";
+        document.getElementById("sym-reqb").value = "";
+      } else {
+        out.textContent = "Model output: a ±" + fmt(res.widthPct, 4) + "% range around " + fmt(res.currentPrice, 6) +
+          " runs from ≈ " + fmt(res.effLower, 6) + " to ≈ " + fmt(res.effUpper, 6) + " B per A (ticks " + res.tickLower + " to " + res.tickUpper + ")" +
+          (res.snapped
+            ? " — snapped outward to multiples of your pool's tick spacing " + res.spacing + " before planning, because that snapped range is the one a real position would cover (the raw ±% edges were ≈ " + fmt(res.rawLower, 6) + " to ≈ " + fmt(res.rawUpper, 6) + ")"
+            : "") +
+          ". The room is asymmetric by construction: +" + fmt(res.upRoomPct, 4) + "% up but −" + fmt(res.downRoomPct, 4) +
+          "% down, because the range is symmetric in the price multiple, not in percentages. Depositing ≈ " + fmt(res.amountA, 6) +
+          " of token A needs ≈ " + fmt(res.requiredB, 6) + " of token B (≈ " + fmt(res.bValuePct, 2) +
+          "% of the position's value in B) for model liquidity L ≈ " + fmt(res.liquidity, 4) +
+          ". A CLMM range model, not a live Raydium quote — no fees are modelled, and CLMM deposits are range-based, not pool-ratio based.";
+        document.getElementById("sym-reqb").value = fmt(res.requiredB, 6);
       }
     });
 
