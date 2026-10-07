@@ -47,7 +47,10 @@ check("all slippage controls labelled",
 check("all tick-converter controls labelled",
   ["tick-price", "tick-spacing", "tick-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=9"));
+check("all vs-holding controls labelled",
+  ["vh-l", "vh-lower", "vh-upper", "vh-entry", "vh-check", "vh-fees"]
+    .every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=10"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -336,6 +339,52 @@ check("TICK rejects zero / negative / junk price", app.tickPriceConvert("0") ===
 check("TICK rejects price outside tick range", app.tickPriceConvert("1e30") === null && app.tickPriceConvert("1e-30") === null);
 check("TICK rejects bad spacing", app.tickPriceConvert("1.25", "0") === null && app.tickPriceConvert("1.25", "-10") === null && app.tickPriceConvert("1.25", "2.5") === null && app.tickPriceConvert("1.25", "x") === null);
 check("tick converter present in index.html", html.includes('id="tick-calc"') && html.includes('id="tick-result"'));
+
+/* CLMM position vs holding — known values: entry holdings valued at the check price vs the position's holdings there */
+/* position from Tools 8/9's headline case: range 0.8–1.25, L = 947.2135955, entered at price 1 holding 100 A / 100 B */
+const vhL = "947.2135954999579";
+/* at the entry price the position IS the holding: zero gap, zero fees needed */
+const vh0 = app.clmmVsHold(vhL, "0.8", "1.25", "1", "1");
+near("VH at entry price hold value", vh0.holdValueInB, 200, 1e-9);
+near("VH at entry price position value", vh0.positionValueInB, 200, 1e-9);
+near("VH at entry price diff is 0", vh0.diffInB, 0, 1e-9);
+near("VH at entry price fees needed is 0", vh0.feesNeededInB, 0, 1e-9);
+near("VH entry holdings are Tool 9's at entry", vh0.entryAmountA, 100, 1e-9);
+/* at the upper edge 1.25: position is 211.80339887 B, holding is 100*1.25+100 = 225 B => shortfall 13.19660113 B, -5.86515606% */
+const vhUp = app.clmmVsHold(vhL, "0.8", "1.25", "1", "1.25");
+near("VH at upper edge position value", vhUp.positionValueInB, 211.80339887, 0.000001);
+near("VH at upper edge hold value", vhUp.holdValueInB, 225, 1e-9);
+near("VH at upper edge fees needed", vhUp.feesNeededInB, 13.19660113, 0.000001);
+near("VH at upper edge pct vs hold", vhUp.vsHoldPct, -5.86515606, 0.000001);
+check("VH at upper edge check holdings all B", vhUp.checkAmountA === 0 && vhUp.checkStatus === "above");
+/* the reciprocal range makes the lower edge symmetric: at 0.8 the pct vs hold is the same -5.86515606% */
+const vhLo = app.clmmVsHold(vhL, "0.8", "1.25", "1", "0.8");
+near("VH at lower edge fees needed", vhLo.feesNeededInB, 10.5572809, 0.000001);
+near("VH lower edge pct equals upper edge pct", vhLo.vsHoldPct, vhUp.vsHoldPct, 1e-9);
+/* beyond the range the gap keeps growing: at 2, holding 300 B vs position still 211.80339887 B */
+const vhFar = app.clmmVsHold(vhL, "0.8", "1.25", "1", "2");
+near("VH far above hold value", vhFar.holdValueInB, 300, 1e-9);
+near("VH far above fees needed", vhFar.feesNeededInB, 88.19660113, 0.000001);
+near("VH far above pct vs hold", vhFar.vsHoldPct, -29.39886704, 0.000001);
+/* the position never beats holding, at any check price inside or outside the range */
+for (const p of ["0.5", "0.8", "0.9", "1", "1.1", "1.2", "1.25", "2"]) {
+  const r = app.clmmVsHold(vhL, "0.8", "1.25", "1", p);
+  check("VH position never beats holding @" + p, r !== null && r.diffInB <= 1e-9 && r.feesNeededInB >= -1e-9 && r.vsHoldPct <= 1e-9);
+}
+/* consistency with Tool 9: the check holdings here are exactly Tool 9's at the check price */
+const posAt12 = app.clmmPositionAtPrice(vhL, "0.8", "1.25", "1.2");
+const vh12 = app.clmmVsHold(vhL, "0.8", "1.25", "1", "1.2");
+near("VH check holdings match Tool 9 A", vh12.checkAmountA, posAt12.amountA, 1e-12);
+near("VH check holdings match Tool 9 B", vh12.checkAmountB, posAt12.amountB, 1e-12);
+near("VH at 1.2 pct vs hold", vh12.vsHoldPct, -3.92222635, 0.000001);
+/* entering out of range: entered below the range holding only A, checked at entry — still zero gap */
+const vhOut = app.clmmVsHold(vhL, "0.8", "1.25", "0.5", "0.5");
+near("VH out-of-range entry diff is 0", vhOut.diffInB, 0, 1e-9);
+check("VH out-of-range entry status", vhOut.entryStatus === "below" && vhOut.entryAmountB === 0);
+check("VH rejects zero liquidity / prices", app.clmmVsHold("0", "0.8", "1.25", "1", "1") === null && app.clmmVsHold(vhL, "0.8", "1.25", "0", "1") === null && app.clmmVsHold(vhL, "0.8", "1.25", "1", "0") === null);
+check("VH rejects inverted / empty range", app.clmmVsHold(vhL, "1.25", "0.8", "1", "1") === null && app.clmmVsHold(vhL, "1", "1", "1", "1") === null);
+check("VH rejects junk / empty", app.clmmVsHold("x", "0.8", "1.25", "1", "1") === null && app.clmmVsHold(vhL, "0.8", "1.25", "", "1") === null && app.clmmVsHold(vhL, "0.8", "1.25", "1", "") === null);
+check("vs-holding calculator present in index.html", html.includes('id="vh-calc"') && html.includes('id="vh-result"'));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

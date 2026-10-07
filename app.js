@@ -1,11 +1,11 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus eleven fully local
+/* Raydium Renaissance hub logic: project filtering plus twelve fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
    calculator, an LP fee estimator, a break-even fee calculator, a
    liquidity deposit planner, an exact-out swap model, a liquidity
    withdrawal planner, a CLMM range deposit planner, a CLMM position
-   checker, a slippage / minimum-received calculator, and a CLMM tick /
-   price converter. These are educational MODELS using
+   checker, a slippage / minimum-received calculator, a CLMM tick /
+   price converter, and a CLMM position-vs-holding calculator. These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
 
@@ -417,8 +417,51 @@ function tickPriceConvert(priceStr, spacingStr) {
   return out;
 }
 
+/* ---------- 12 · CLMM position vs holding (concentrated impermanent loss) ---------- */
+/* Tool 9 shows what a CLMM position holds at a price; Tool 2 quantifies
+   impermanent loss for a constant-product position. This joins the two:
+   it is Tool 2's question for a CLMM position. Take the position's
+   holdings at its ENTRY price (Tool 9's maths at that price) and value
+   them two ways at the CHECK price, both in token B:
+     holding value   = entryAmountA * checkPrice + entryAmountB
+     position value  = checkAmountA * checkPrice + checkAmountB
+   The position converts itself as price moves (selling the token that
+   rises, buying the one that falls), so position value never exceeds
+   holding value — the shortfall is concentrated liquidity's impermanent
+   loss at that price, and feesNeededInB is exactly the fee income (in
+   token B) the position must have earned to match simply holding. The
+   gap is zero at the entry price and grows the further price travels,
+   inside or outside the range. Model only: no fees earned are added,
+   and a real position's value is quoted live on the pool page. */
+function clmmVsHold(liquidityStr, lowerStr, upperStr, entryPriceStr, checkPriceStr) {
+  var entry = clmmPositionAtPrice(liquidityStr, lowerStr, upperStr, entryPriceStr);
+  var check = clmmPositionAtPrice(liquidityStr, lowerStr, upperStr, checkPriceStr);
+  if (entry === null || check === null) return null;
+  var holdValueInB = entry.amountA * check.price + entry.amountB;
+  var positionValueInB = check.valueInB;
+  var diffInB = positionValueInB - holdValueInB;
+  return {
+    liquidity: entry.liquidity,
+    lowerPrice: entry.lowerPrice,
+    upperPrice: entry.upperPrice,
+    entryPrice: entry.price,
+    checkPrice: check.price,
+    entryAmountA: entry.amountA,
+    entryAmountB: entry.amountB,
+    checkAmountA: check.amountA,
+    checkAmountB: check.amountB,
+    entryStatus: entry.status,
+    checkStatus: check.status,
+    holdValueInB: holdValueInB,
+    positionValueInB: positionValueInB,
+    diffInB: diffInB,
+    vsHoldPct: holdValueInB > 0 ? diffInB / holdValueInB * 100 : 0,
+    feesNeededInB: holdValueInB - positionValueInB
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -694,6 +737,32 @@ if (typeof document !== "undefined") {
           ". A tick model, not a live Raydium quote — real positions are quoted with the pool's own ticks on the pool page.";
       }
       if (res !== null) document.getElementById("tick-out").value = res.tick;
+    });
+
+    /* --- CLMM position vs holding --- */
+    document.getElementById("vh-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmVsHold(
+        document.getElementById("vh-l").value,
+        document.getElementById("vh-lower").value,
+        document.getElementById("vh-upper").value,
+        document.getElementById("vh-entry").value,
+        document.getElementById("vh-check").value
+      );
+      var out = document.getElementById("vh-result");
+      if (res === null) {
+        out.textContent = "Enter a positive model liquidity (Tool 8 reports it for a deposit), a range with lower below upper, and positive entry and check prices.";
+      } else if (Math.abs(res.diffInB) < 1e-12) {
+        out.textContent = "Model output: at the check price of " + fmt(res.checkPrice, 6) + " B per A the position is worth exactly what simply holding its entry tokens would be — ≈ " +
+          fmt(res.positionValueInB, 6) + " B either way, so $0 in fees is the break-even there. A CLMM position-vs-holding model, not a live Raydium quote.";
+      } else {
+        out.textContent = "Model output: at " + fmt(res.checkPrice, 6) + " B per A the position holds ≈ " + fmt(res.checkAmountA, 6) +
+          " A / " + fmt(res.checkAmountB, 6) + " B, worth ≈ " + fmt(res.positionValueInB, 6) + " B — but simply holding the tokens it started with (" +
+          fmt(res.entryAmountA, 6) + " A / " + fmt(res.entryAmountB, 6) + " B at entry) would be worth ≈ " + fmt(res.holdValueInB, 6) +
+          " B. That is " + fmt(res.vsHoldPct, 2) + "% vs holding, so the position needs ≈ " + fmt(res.feesNeededInB, 6) +
+          " B in fees earned to break even with holding. A CLMM position-vs-holding model, not a live Raydium quote — no fees earned are included.";
+      }
+      if (res !== null) document.getElementById("vh-fees").value = fmt(res.feesNeededInB, 6);
     });
 
     /* --- copy donation address --- */
