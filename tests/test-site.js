@@ -38,7 +38,10 @@ check("has <main> landmark", /<main[\s>]/.test(html));
 check("all main form controls labelled",
   ["q", "rin", "rout", "ain", "aout", "swap-fee", "ratio", "deposit", "volume", "tvl", "your-liq", "fee-fee", "be-ratio", "be-deposit", "be-daily", "dep-ra", "dep-rb", "dep-aa", "dep-reqb", "xo-rin", "xo-rout", "xo-aout", "xo-ain", "xo-fee", "wd-ra", "wd-rb", "wd-share", "wd-pct", "wd-outa", "wd-outb", "clmm-price", "clmm-lower", "clmm-upper", "clmm-aa", "clmm-reqb"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=6"));
+check("all position-checker controls labelled",
+  ["pos-l", "pos-lower", "pos-upper", "pos-price", "pos-outa", "pos-outb"]
+    .every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=7"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -222,6 +225,39 @@ check("CLMM rejects at/above upper for an A deposit", app.clmmRangePlan("1.25", 
 check("CLMM rejects inverted / empty range", app.clmmRangePlan("1", "1.25", "0.8", "100") === null && app.clmmRangePlan("1", "1", "1", "100") === null);
 check("CLMM rejects zero / junk inputs", app.clmmRangePlan("0", "0.8", "1.25", "100") === null && app.clmmRangePlan("1", "0.8", "1.25", "0") === null && app.clmmRangePlan("x", "0.8", "1.25", "100") === null && app.clmmRangePlan("1", "0.8", "1.25", "") === null);
 check("CLMM range planner present in index.html", html.includes('id="clmm-calc"') && html.includes('id="clmm-result"'));
+
+/* CLMM position checker — known values: amounts from L and the sqrt-price position maths */
+/* position from Tool 8's headline case: range 0.8–1.25, L = 947.2135955 (100 A deposited at price 1) */
+const L8 = "947.2135954999579";
+/* at the entry price 1 it must hold exactly what Tool 8 deposited: 100 A / 100 B, value 200 B, 50% in B */
+const p1 = app.clmmPositionAtPrice(L8, "0.8", "1.25", "1");
+near("POS at entry price holds 100 A", p1.amountA, 100, 1e-9);
+near("POS at entry price holds 100 B", p1.amountB, 100, 1e-9);
+near("POS at entry price value in B", p1.valueInB, 200, 1e-9);
+near("POS at entry price B value pct", p1.bValuePct, 50, 1e-9);
+check("POS at entry price in range", p1.status === "in" && p1.inRange === true);
+/* Tool 8 -> Tool 9 round trip: feeding Tool 8's own liquidity back at its own price returns its deposit pair */
+const plan8 = app.clmmRangePlan("1", "0.8", "1.25", "100");
+const pBack = app.clmmPositionAtPrice(String(plan8.liquidity), "0.8", "1.25", "1");
+near("POS round-trips Tool 8 deposit A", pBack.amountA, 100, 1e-9);
+near("POS round-trips Tool 8 deposit B", pBack.amountB, plan8.requiredB, 1e-9);
+/* at/below the lower edge: entirely token A, L*(1/sqrt(0.8) - 1/sqrt(1.25)) = 211.80339887 A, none of B */
+const pLow = app.clmmPositionAtPrice(L8, "0.8", "1.25", "0.8");
+near("POS at lower edge holds only A", pLow.amountA, 211.80339887, 0.000001);
+check("POS at lower edge holds no B", pLow.amountB === 0 && pLow.status === "below" && pLow.bValuePct === 0);
+check("POS below range holds the same A", Math.abs(app.clmmPositionAtPrice(L8, "0.8", "1.25", "0.5").amountA - pLow.amountA) < 1e-9);
+/* at/above the upper edge: entirely token B, L*(sqrt(1.25) - sqrt(0.8)) = 211.80339887 B, value all in B */
+const pHigh = app.clmmPositionAtPrice(L8, "0.8", "1.25", "1.25");
+near("POS at upper edge holds only B", pHigh.amountB, 211.80339887, 0.000001);
+check("POS at upper edge holds no A", pHigh.amountA === 0 && pHigh.status === "above" && pHigh.bValuePct === 100);
+check("POS above range holds the same B", Math.abs(app.clmmPositionAtPrice(L8, "0.8", "1.25", "2").amountB - pHigh.amountB) < 1e-9);
+/* inside the range a rising price converts A into B: at 1.2 the position is ~90% B by value, at 0.9 ~27% */
+check("POS rising price converts to B", app.clmmPositionAtPrice(L8, "0.8", "1.25", "1.2").bValuePct > p1.bValuePct && p1.bValuePct > app.clmmPositionAtPrice(L8, "0.8", "1.25", "0.9").bValuePct);
+near("POS at 1.2 B value pct", app.clmmPositionAtPrice(L8, "0.8", "1.25", "1.2").bValuePct, 90.0818, 0.001);
+check("POS rejects zero liquidity / price", app.clmmPositionAtPrice("0", "0.8", "1.25", "1") === null && app.clmmPositionAtPrice(L8, "0.8", "1.25", "0") === null);
+check("POS rejects inverted / empty range", app.clmmPositionAtPrice(L8, "1.25", "0.8", "1") === null && app.clmmPositionAtPrice(L8, "1", "1", "1") === null);
+check("POS rejects junk / empty", app.clmmPositionAtPrice("x", "0.8", "1.25", "1") === null && app.clmmPositionAtPrice(L8, "0.8", "1.25", "") === null && app.clmmPositionAtPrice(L8, "", "1.25", "1") === null);
+check("CLMM position checker present in index.html", html.includes('id="pos-calc"') && html.includes('id="pos-result"'));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

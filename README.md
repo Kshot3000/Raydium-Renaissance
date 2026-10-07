@@ -24,6 +24,7 @@ For the Raydium team — [@raydium-io](https://github.com/raydium-io) on GitHub 
 6. **Exact-out swap model** — the inverse of tool 1: given the reserves and the amount out you want, the amount in you'd need, grossed up for the fee and rounded up so the input is never short. Targets at or above the whole reserve out are rejected — a constant-product pool can never pay out everything it holds. Exact scaled-BigInt arithmetic (9 dp).
 7. **Liquidity withdrawal planner** — the exit side of tool 5: given a pool's current reserves and your share of the pool, what a full or partial withdrawal returns in both tokens (in the pool's current ratio), plus your remaining share and the reserves left behind. Exact scaled-BigInt arithmetic (9 dp), floored like on-chain programs. No withdrawal fee is modelled.
 8. **CLMM range deposit planner** — the range-based deposit the constant-product tools keep pointing at: given a current price, a chosen price range and a token-A deposit, the matching token-B amount the range's position maths requires (the split is set by where the price sits in the range), the model's liquidity, and the range's tick indices. Below the range the position is entirely token A; at or above the top it is entirely token B, so a token-A deposit is rejected there. Tick indices are modelled with floating-point logs and are not snapped to a pool's tick spacing; no fees are modelled.
+9. **CLMM position checker** — the follow-up to tool 8: given a position's model liquidity (tool 8 reports it), its price range, and a price to check, what the position holds at that price. Inside the range a rising price steadily converts the position into token B — concentrated liquidity's version of impermanent loss; at or outside either edge the position is entirely one token and earns no fees until price returns. No fees earned are included.
 
 Honest labels, always: these are **educational models** using numbers you type in — not live quotes, not live pool data, and not financial advice. Real pools live at <https://raydium.io/liquidity-pools/>.
 
@@ -50,7 +51,7 @@ Ecosystem:
 node tests/test-site.js
 ```
 
-Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all eight pool tools (known-value vectors, edge and rejection cases).
+Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all nine pool tools (known-value vectors, edge and rejection cases).
 
 ## Support
 

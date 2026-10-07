@@ -1,9 +1,10 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus eight fully local
+/* Raydium Renaissance hub logic: project filtering plus nine fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
    calculator, an LP fee estimator, a break-even fee calculator, a
    liquidity deposit planner, an exact-out swap model, a liquidity
-   withdrawal planner, and a CLMM range deposit planner. These are educational MODELS using
+   withdrawal planner, a CLMM range deposit planner, and a CLMM position
+   checker. These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
 
@@ -271,8 +272,62 @@ function clmmRangePlan(currentStr, lowerStr, upperStr, amountAStr) {
   };
 }
 
+/* ---------- 9 · CLMM position checker (what a position holds at a price) ---------- */
+/* Tool 8 plans a CLMM deposit; this is its follow-up question: as the
+   price moves, what does that position actually hold? A CLMM position's
+   token mix is set by its liquidity L and its range [lower, upper]
+   (price = token B per token A; s = sqrt(price) and friends):
+     price at/below lower:  amountA = L * (1/sqrt(lower) - 1/sqrt(upper)), amountB = 0
+     price inside range:    amountA = L * (1/s - 1/sqrt(upper)),
+                            amountB = L * (s - sqrt(lower))
+     price at/above upper:  amountA = 0,
+                            amountB = L * (sqrt(upper) - sqrt(lower))
+   So a rising price steadily converts the position into token B (the
+   token whose price rose is the one you end up holding LESS of — that
+   conversion is concentrated liquidity's version of impermanent loss),
+   and outside the range the position is entirely one token and earns
+   no fees until price returns. L here is the model liquidity Tool 8
+   reports for a deposit — copy it across. Model only: no fees earned
+   are added, no tick-spacing snapping, and a real position's amounts
+   are quoted live on the pool page. */
+function clmmPositionAtPrice(liquidityStr, lowerStr, upperStr, priceStr) {
+  var liquidity = Number(liquidityStr), lower = Number(lowerStr), upper = Number(upperStr), price = Number(priceStr);
+  if (![liquidity, lower, upper, price].every(Number.isFinite)) return null;
+  if (liquidity <= 0 || lower <= 0 || upper <= 0 || price <= 0) return null;
+  if (lower >= upper) return null;
+  var sa = Math.sqrt(lower), sb = Math.sqrt(upper), s = Math.sqrt(price);
+  var amountA, amountB, status;
+  if (price <= lower) {
+    amountA = liquidity * (1 / sa - 1 / sb);
+    amountB = 0;
+    status = "below";
+  } else if (price >= upper) {
+    amountA = 0;
+    amountB = liquidity * (sb - sa);
+    status = "above";
+  } else {
+    amountA = liquidity * (1 / s - 1 / sb);
+    amountB = liquidity * (s - sa);
+    status = "in";
+  }
+  if (!Number.isFinite(amountA) || !Number.isFinite(amountB) || amountA < 0 || amountB < 0) return null;
+  var valueInB = amountA * price + amountB;
+  return {
+    liquidity: liquidity,
+    lowerPrice: lower,
+    upperPrice: upper,
+    price: price,
+    amountA: amountA,
+    amountB: amountB,
+    status: status,
+    inRange: status === "in",
+    valueInB: valueInB,
+    bValuePct: valueInB > 0 ? amountB / valueInB * 100 : 0
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, clmmRangePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, clmmRangePlan, clmmPositionAtPrice, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -471,6 +526,37 @@ if (typeof document !== "undefined") {
           "). A CLMM range model, not a live Raydium quote — real positions snap ticks to the pool's tick spacing.";
       }
       if (res !== null) document.getElementById("clmm-reqb").value = fmt(res.requiredB, 6);
+    });
+
+    /* --- CLMM position checker --- */
+    document.getElementById("pos-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmPositionAtPrice(
+        document.getElementById("pos-l").value,
+        document.getElementById("pos-lower").value,
+        document.getElementById("pos-upper").value,
+        document.getElementById("pos-price").value
+      );
+      var out = document.getElementById("pos-result");
+      if (res === null) {
+        out.textContent = "Enter a positive model liquidity (Tool 8 reports it for a deposit), a range with lower below upper, and a positive price to check.";
+      } else if (res.status === "below") {
+        out.textContent = "Model output: at " + fmt(res.price, 6) + " B per A the price is at or below your range, so the position holds ≈ " +
+          fmt(res.amountA, 6) + " of token A and 0 of token B (value ≈ " + fmt(res.valueInB, 6) +
+          " B) and earns no fees until the price returns into the range. A CLMM position model, not a live Raydium quote.";
+      } else if (res.status === "above") {
+        out.textContent = "Model output: at " + fmt(res.price, 6) + " B per A the price is at or above your range, so the position holds 0 of token A and ≈ " +
+          fmt(res.amountB, 6) + " of token B (value ≈ " + fmt(res.valueInB, 6) +
+          " B) and earns no fees until the price returns into the range. A CLMM position model, not a live Raydium quote.";
+      } else {
+        out.textContent = "Model output: at " + fmt(res.price, 6) + " B per A the position holds ≈ " + fmt(res.amountA, 6) +
+          " of token A and ≈ " + fmt(res.amountB, 6) + " of token B (value ≈ " + fmt(res.valueInB, 6) +
+          " B; token B is ≈ " + fmt(res.bValuePct, 2) + "% of the value). As price rises inside the range the position converts into token B — that conversion is concentrated liquidity's version of impermanent loss. A CLMM position model, not a live Raydium quote — no fees earned are included.";
+      }
+      if (res !== null) {
+        document.getElementById("pos-outa").value = fmt(res.amountA, 6);
+        document.getElementById("pos-outb").value = fmt(res.amountB, 6);
+      }
     });
 
     /* --- copy donation address --- */
