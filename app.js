@@ -1,10 +1,10 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus nine fully local
+/* Raydium Renaissance hub logic: project filtering plus ten fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
    calculator, an LP fee estimator, a break-even fee calculator, a
    liquidity deposit planner, an exact-out swap model, a liquidity
-   withdrawal planner, a CLMM range deposit planner, and a CLMM position
-   checker. These are educational MODELS using
+   withdrawal planner, a CLMM range deposit planner, a CLMM position
+   checker, and a slippage / minimum-received calculator. These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
 
@@ -326,8 +326,48 @@ function clmmPositionAtPrice(liquidityStr, lowerStr, upperStr, priceStr) {
   };
 }
 
+/* ---------- 10 · Slippage / minimum-received calculator ---------- */
+/* Every swap and liquidity add carries a slippage tolerance: how far the
+   result may move against you between quote and execution before the
+   transaction should fail instead of fill badly. The bounds it produces
+   are simple — minimum received = expectedOut * (1 - tolerance) and,
+   for an exact-in trade, maximum input = expectedIn * (1 + tolerance) —
+   but the ROUNDING is the whole point: both bounds are floored in exact
+   scaled-BigInt (9 dp), never rounded up. A minimum that rounds up
+   (e.g. half-up: an expected 4 at 0.5% tolerance is exactly 3.98, which
+   half-up turns back into 4) is stricter than the tolerance you set and
+   makes transactions fail that should have filled; a maximum that rounds
+   up quietly lets you pay more than you authorised. Floored, neither
+   bound ever exceeds the tolerance — the same flooring the on-chain
+   programs and integer SDK paths use. Model only: your real bounds are
+   computed from the live quote on the swap / pool page. */
+function slippagePlan(expectedOutStr, slippageBps, expectedInStr) {
+  var out = parseScaled(expectedOutStr);
+  var bps = Number(slippageBps);
+  if (out === null || out <= 0n) return null;
+  if (!Number.isInteger(bps) || bps < 0 || bps > 9999) return null;
+  var minReceived = out * BigInt(10000 - bps) / 10000n;
+  if (minReceived <= 0n) return null;
+  var res = {
+    expectedOut: formatScaled(out),
+    minReceived: formatScaled(minReceived),
+    protectedAmount: formatScaled(out - minReceived),
+    slippageBps: bps,
+    slippagePct: bps / 100
+  };
+  if (expectedInStr != null && String(expectedInStr).trim() !== "") {
+    var inp = parseScaled(expectedInStr);
+    if (inp === null || inp <= 0n) return null;
+    var maxIn = inp * BigInt(10000 + bps) / 10000n;
+    if (maxIn <= 0n) return null;
+    res.expectedIn = formatScaled(inp);
+    res.maxIn = formatScaled(maxIn);
+  }
+  return res;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, clmmRangePlan, clmmPositionAtPrice, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, clmmRangePlan, clmmPositionAtPrice, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -557,6 +597,27 @@ if (typeof document !== "undefined") {
         document.getElementById("pos-outa").value = fmt(res.amountA, 6);
         document.getElementById("pos-outb").value = fmt(res.amountB, 6);
       }
+    });
+
+    /* --- slippage / minimum-received --- */
+    document.getElementById("slip-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = slippagePlan(
+        document.getElementById("slip-out").value,
+        document.getElementById("slip-bps").value,
+        document.getElementById("slip-in").value
+      );
+      var out = document.getElementById("slip-result");
+      if (res === null) {
+        out.textContent = "Enter a positive expected amount out (up to 9 decimal places) and a slippage tolerance in basis points (50 = 0.5%, at most 9999). Expected amount in, if given, must be positive too.";
+      } else {
+        out.textContent = "Model output: at a " + fmt(res.slippagePct, 2) + "% slippage tolerance, your minimum received is ≈ " +
+          res.minReceived + " tokens — the expected " + res.expectedOut + " minus a " + res.protectedAmount +
+          " tolerance band, floored and never rounded up, so the bound never exceeds the tolerance you set" +
+          (res.maxIn != null ? ". Your maximum input is ≈ " + res.maxIn + " tokens (expected in " + res.expectedIn + ", also floored)" : "") +
+          ". If the live result would cross either bound, the transaction fails instead of filling badly. A slippage model, not a live Raydium quote.";
+      }
+      if (res !== null) document.getElementById("slip-min").value = res.minReceived;
     });
 
     /* --- copy donation address --- */

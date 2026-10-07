@@ -298,6 +298,21 @@
         <button type="submit" class="btn primary">Check my position</button>
         <p id="pos-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="slip-calc">
+        <h3>10 · Slippage &amp; minimum-received calculator</h3>
+        <p>Every swap and liquidity add carries a slippage tolerance: how far the result may move against you before the transaction fails instead of filling badly. Enter the amount out you expect (Tools 1 and 6 model it) and your tolerance — the calculator shows your minimum received, floored and never rounded up: a minimum that rounds up is stricter than the tolerance you set, and a maximum input that rounds up lets you pay more than you authorised. Add your expected amount in to see the maximum input the same tolerance implies.</p>
+        <label for="slip-out">Expected amount out (tokens)</label>
+        <input id="slip-out" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="slip-bps">Slippage tolerance (basis points, 50 = 0.5%)</label>
+        <input id="slip-bps" inputmode="numeric" value="50" autocomplete="off">
+        <label for="slip-in">Expected amount in (tokens, optional)</label>
+        <input id="slip-in" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="slip-min">Minimum received (model)</label>
+        <input id="slip-min" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Calculate my bounds</button>
+        <p id="slip-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -325,6 +340,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

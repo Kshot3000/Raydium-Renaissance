@@ -41,7 +41,10 @@ check("all main form controls labelled",
 check("all position-checker controls labelled",
   ["pos-l", "pos-lower", "pos-upper", "pos-price", "pos-outa", "pos-outb"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=7"));
+check("all slippage controls labelled",
+  ["slip-out", "slip-bps", "slip-in", "slip-min"]
+    .every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=8"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -258,6 +261,37 @@ check("POS rejects zero liquidity / price", app.clmmPositionAtPrice("0", "0.8", 
 check("POS rejects inverted / empty range", app.clmmPositionAtPrice(L8, "1.25", "0.8", "1") === null && app.clmmPositionAtPrice(L8, "1", "1", "1") === null);
 check("POS rejects junk / empty", app.clmmPositionAtPrice("x", "0.8", "1.25", "1") === null && app.clmmPositionAtPrice(L8, "0.8", "1.25", "") === null && app.clmmPositionAtPrice(L8, "", "1.25", "1") === null);
 check("CLMM position checker present in index.html", html.includes('id="pos-calc"') && html.includes('id="pos-result"'));
+
+/* slippage / minimum-received — known values: min = out*(10000-bps)/10000 FLOORED, maxIn = in*(10000+bps)/10000 FLOORED */
+/* expected 1000 out at 50bps (0.5%) => exactly 995 min, 5 protected */
+const sl1 = app.slippagePlan("1000", 50);
+check("SLIP 1000 @50bps min exact", sl1.minReceived === "995" && sl1.protectedAmount === "5");
+near("SLIP slippage pct", sl1.slippagePct, 0.5, 1e-12);
+/* the rounding point of the tool: expected 4 @0.5% is exactly 3.98 — floored to 3.98, NEVER rounded back up to 4 */
+const sl2 = app.slippagePlan("4", 50);
+check("SLIP 4 @0.5% floors, never rounds up", sl2.minReceived === "3.98" && sl2.minReceived !== "4");
+check("SLIP protected amount on 4 @0.5%", sl2.protectedAmount === "0.02");
+/* 100 @33bps => 99.67; 1 @1bp => 0.9999 */
+check("SLIP 100 @33bps", app.slippagePlan("100", 33).minReceived === "99.67");
+check("SLIP 1 @1bp", app.slippagePlan("1", 1).minReceived === "0.9999");
+/* zero tolerance: min equals the expected out, nothing protected */
+check("SLIP zero tolerance", app.slippagePlan("1000", 0).minReceived === "1000" && app.slippagePlan("1000", 0).protectedAmount === "0");
+/* maximum input: expected 100 in @50bps => exactly 100.5 */
+const sl3 = app.slippagePlan("1000", 50, "100");
+check("SLIP max in exact", sl3.maxIn === "100.5" && sl3.expectedIn === "100");
+/* max input floors too: 1 smallest unit in @50% tolerance => 1.5 units, floored back to 1 unit, never rounded up */
+check("SLIP max in floors at the smallest unit", app.slippagePlan("1000", 5000, "0.000000001").maxIn === "0.000000001");
+/* bounds never cross the expected amounts at any tolerance */
+for (const bps of [1, 25, 50, 100, 500, 5000, 9999]) {
+  const r = app.slippagePlan("123.456", bps, "123.456");
+  check("SLIP bounds sane @" + bps + "bps", r !== null && parseFloat(r.minReceived) <= 123.456 && parseFloat(r.maxIn) >= 123.456);
+}
+check("SLIP without expected in has no maxIn", app.slippagePlan("1000", 50).maxIn === undefined);
+check("SLIP rejects tolerance out of range", app.slippagePlan("1000", 10000) === null && app.slippagePlan("1000", -1) === null && app.slippagePlan("1000", 25.5) === null);
+check("SLIP rejects zero / junk out", app.slippagePlan("0", 50) === null && app.slippagePlan("abc", 50) === null && app.slippagePlan("", 50) === null);
+check("SLIP rejects dust that floors to zero min", app.slippagePlan("0.000000001", 5000) === null);
+check("SLIP rejects junk expected in when given", app.slippagePlan("1000", 50, "abc") === null && app.slippagePlan("1000", 50, "0") === null);
+check("slippage calculator present in index.html", html.includes('id="slip-calc"') && html.includes('id="slip-result"'));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
