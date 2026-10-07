@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=16"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=17"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -677,6 +677,39 @@ check("LP rejects dust that floors to zero", app.lpTokenValue("0.000000001", "10
 check("all LP-token controls labelled", ["lp-ra", "lp-rb", "lp-supply", "lp-yours", "lp-outa", "lp-outb"].every(id => html.includes(`for="${id}"`)));
 check("LP-token tool present in index.html", html.includes('id="lp-calc"') && html.includes('id="lp-result"'));
 check("LP-token honesty: share shrinks as supply grows", html.includes("shrinks as new LPs deposit") && html.includes("not a live quote, not financial advice"));
+
+/* Single-sided zap-in — zero-fee known values: s = sqrt(Ra*(Ra+X)) - Ra */
+const zap0 = app.zapInPlan("1000", "1000", "100", 0);
+near("ZAP zero-fee swap split", zap0.swapIn, 48.80884817015158, 1e-9);
+near("ZAP zero-fee swap out", zap0.swapOut, 46.53741075440771, 1e-9);
+near("ZAP zero-fee deposit A", zap0.depositA, 51.19115182984842, 1e-9);
+check("ZAP deposit B is the swap out", zap0.depositB === zap0.swapOut);
+near("ZAP zero-fee share pct", zap0.sharePct, 4.653741075440766, 1e-9);
+/* fee 25 on the same pool: the swap leg is less efficient, so it swaps slightly more */
+const zapF = app.zapInPlan("1000", "1000", "100", 25);
+near("ZAP fee25 swap split", zapF.swapIn, 48.872780544104785, 1e-9);
+near("ZAP fee25 swap out", zapF.swapOut, 46.48445365195502, 1e-9);
+check("ZAP larger fee swaps more", zapF.swapIn > zap0.swapIn && app.zapInPlan("1000", "1000", "100", 100).swapIn > zapF.swapIn);
+/* headline asymmetric pool */
+const zapBig = app.zapInPlan("1000000", "500000", "10000", 25);
+near("ZAP big-pool swap split", zapBig.swapIn, 4993.835366421276, 1e-6);
+near("ZAP big-pool swap out", zapBig.swapOut, 2478.32995813749, 1e-6);
+for (const [label, z] of [["zero-fee", zap0], ["fee25", zapF], ["big", zapBig]]) {
+  near("ZAP " + label + " deposit ratio matches post-swap pool ratio", z.depositB / z.depositA, z.postSwapReserveB / z.postSwapReserveA, 1e-9);
+  near("ZAP " + label + " final B reserve returns to start", z.finalReserveB, z.reserveB, 1e-6);
+  near("ZAP " + label + " share same on both sides", z.depositB / z.finalReserveB * 100, z.sharePct, 1e-9);
+  check("ZAP " + label + " split uses the whole holding", Math.abs(z.swapIn + z.depositA - z.amountA) < 1e-9 && z.swapIn > 0 && z.swapIn < z.amountA);
+}
+/* consistency with Tool 1: the swap leg is exactly Tool 1's model at the solved split */
+near("ZAP swap leg matches Tool 1", Number(app.cpSwap("1000", "1000", zapF.swapIn.toFixed(9), 25).out), zapF.swapOut, 1e-4);
+/* consistency with Tool 5: depositing the remaining A into the post-swap pool needs the swap's B */
+near("ZAP deposit leg matches Tool 5", Number(app.depositPlan(zapF.postSwapReserveA.toFixed(6), zapF.postSwapReserveB.toFixed(6), zapF.depositA.toFixed(6)).requiredB), zapF.depositB, 1e-3);
+check("ZAP rejects zero / negative reserves and holding", app.zapInPlan("0", "1000", "100", 25) === null && app.zapInPlan("1000", "0", "100", 25) === null && app.zapInPlan("1000", "1000", "0", 25) === null && app.zapInPlan("1000", "1000", "-5", 25) === null);
+check("ZAP rejects bad fees", app.zapInPlan("1000", "1000", "100", -1) === null && app.zapInPlan("1000", "1000", "100", 10000) === null && app.zapInPlan("1000", "1000", "100", 2.5) === null);
+check("ZAP rejects junk / empty", app.zapInPlan("abc", "1000", "100", 25) === null && app.zapInPlan("1000", "1000", "", 25) === null && app.zapInPlan("", "1000", "100", 25) === null && app.zapInPlan("1000", "1000", "100", "") === null);
+check("all zap controls labelled", ["zap-ra", "zap-rb", "zap-aa", "zap-fee", "zap-swap", "zap-depb"].every(id => html.includes(`for="${id}"`)));
+check("zap tool present in index.html", html.includes('id="zap-calc"') && html.includes('id="zap-result"'));
+check("zap honesty: post-swap ratio and not-live labels", html.includes("post-swap") && html.includes("not a live quote, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

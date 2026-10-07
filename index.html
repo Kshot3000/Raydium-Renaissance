@@ -467,6 +467,25 @@
         <button type="submit" class="btn primary">Value my LP tokens</button>
         <p id="lp-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="zap-calc">
+        <h3>19 · Single-sided zap-in planner</h3>
+        <p>Tool 5 assumes you already hold both tokens in the pool's ratio — but a wallet often holds only <em>one</em> side. The standard way in from token A alone is a zap: swap part of your A for B in the same pool, then deposit the A that remains together with all the B the swap returned. Enter the pool's reserves, the token A you hold and the pool fee — the planner solves for the one split where the deposit matches the pool's <em>post-swap</em> ratio, so nothing is left over: too small a swap leaves you short of B, too large a swap leaves B unused. One honest invariant: the B comes straight back in as the deposit, so the pool's B reserve ends where it started. Educational model only — one pool, no routing, no price movement between the swap and the deposit (a real zap is a single transaction for exactly that reason); reserves are your inputs, not live pool state; not a live quote, not financial advice. CLMM entries are range-based and differ.</p>
+        <label for="zap-ra">Pool reserve — token A (current)</label>
+        <input id="zap-ra" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="zap-rb">Pool reserve — token B (current)</label>
+        <input id="zap-rb" inputmode="decimal" placeholder="e.g. 500000" autocomplete="off">
+        <label for="zap-aa">Token A you hold (single-sided entry)</label>
+        <input id="zap-aa" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="zap-fee">Pool fee (basis points, 25 = 0.25%)</label>
+        <input id="zap-fee" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="zap-swap">Swap first — token A (model)</label>
+        <input id="zap-swap" readonly placeholder="—" autocomplete="off">
+        <label for="zap-depb">Then deposit — token B from the swap (model)</label>
+        <input id="zap-depb" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan my zap-in</button>
+        <p id="zap-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -494,6 +513,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>

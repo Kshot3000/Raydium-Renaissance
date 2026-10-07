@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus eighteen fully local
+/* Raydium Renaissance hub logic: project filtering plus nineteen fully local
    liquidity-pool tools — a constant-product swap model, an impermanent-loss
    calculator, an LP fee estimator, a break-even fee calculator, a
    liquidity deposit planner, an exact-out swap model, a liquidity
@@ -8,7 +8,8 @@
    price converter, a CLMM position-vs-holding calculator, a CLMM fee
    estimator, a CLMM wallet-balance deposit planner, a CLMM
    break-even days calculator, a constant-product arbitrage model,
-   a price-impact trade sizer, and an LP-token share & value calculator.
+   a price-impact trade sizer, an LP-token share & value calculator,
+   and a single-sided zap-in planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -783,8 +784,66 @@ function lpTokenValue(reserveAStr, reserveBStr, totalSupplyStr, yourTokensStr) {
   };
 }
 
+/* ---------- 19 · Single-sided zap-in planner (constant-product pools) ---------- */
+/* Tools 5 and 14 assume you already hold both tokens in the right
+   ratio. A wallet often holds only ONE side — say token A — and the
+   standard way in is a "zap": swap part of the A for B in the same
+   pool, then deposit what remains of the A together with all of the
+   B the swap returned. The whole question is the split. The swap
+   follows Tool 1's model (net = grossIn * (1 - fee) reaches the
+   pool, out = reserveB * net / (reserveA + net), post-swap reserves
+   Ra+net / Rb-out), and the deposit must match the POST-swap ratio
+   (Tool 5), so with s the amount swapped and k = 1 - fee:
+     out / (X - s)  =  (Rb - out) / (Ra + k*s)
+   Substituting Tool 1's out and clearing denominators gives a
+   quadratic in s:  k^2*s^2 + Ra*(k+1)*s - Ra*X = 0, whose positive
+   root is the split (at zero fee it reduces to the classic
+   s = sqrt(Ra*(Ra + X)) - Ra). Two invariants fall out and are
+   tested: the B the swap takes out comes straight back in as the
+   deposit, so the pool's final B reserve equals the B reserve you
+   started with; and the deposit's share is the same fraction on
+   both sides. A larger fee makes the swap leg less efficient, so
+   the split swaps slightly MORE of the holding to raise the same
+   B. Model only — one trade in one pool, no routing, no price
+   movement between the swap and the deposit (a real zap is a
+   single transaction for exactly that reason), and the reserves
+   are your inputs, not live pool state. CLMM positions are
+   range-based and a single-sided CLMM entry is Tools 8/14's
+   entirely-one-token case, not this. Not financial advice. */
+function zapInPlan(reserveAStr, reserveBStr, amountAStr, feeBps) {
+  var required = [reserveAStr, reserveBStr, amountAStr, feeBps];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var ra = Number(reserveAStr), rb = Number(reserveBStr);
+  var x = Number(amountAStr), fee = Number(feeBps);
+  if (![ra, rb, x, fee].every(Number.isFinite)) return null;
+  if (ra <= 0 || rb <= 0 || x <= 0) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var k = 1 - fee / 10000;
+  var a = k * k, b = ra * (k + 1), c = -ra * x;
+  var s = (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a);
+  if (!Number.isFinite(s) || s <= 0 || s >= x) return null;
+  var netIn = s * k;
+  var amountOut = rb * netIn / (ra + netIn);
+  var depositA = x - s, depositB = amountOut;
+  if (!(amountOut > 0) || !(depositA > 0)) return null;
+  var postSwapReserveA = ra + netIn, postSwapReserveB = rb - amountOut;
+  var finalReserveA = postSwapReserveA + depositA;
+  var finalReserveB = postSwapReserveB + depositB;
+  return {
+    reserveA: ra, reserveB: rb, amountA: x, feeBps: fee,
+    swapIn: s, netIn: netIn, swapOut: amountOut,
+    depositA: depositA, depositB: depositB,
+    postSwapReserveA: postSwapReserveA, postSwapReserveB: postSwapReserveB,
+    finalReserveA: finalReserveA, finalReserveB: finalReserveB,
+    sharePct: depositA / finalReserveA * 100,
+    spotPrice: rb / ra
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -1259,6 +1318,31 @@ if (typeof document !== "undefined") {
           " B. That share shrinks as new LPs deposit and the supply grows, so re-check the supply rather than trusting the share you had at deposit. An LP-token model, not a live Raydium quote — CLMM positions are range-based and differ, and no withdrawal fee is modelled.";
         document.getElementById("lp-outa").value = res.amountA;
         document.getElementById("lp-outb").value = res.amountB;
+      }
+    });
+
+    /* --- single-sided zap-in planner --- */
+    document.getElementById("zap-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = zapInPlan(
+        document.getElementById("zap-ra").value,
+        document.getElementById("zap-rb").value,
+        document.getElementById("zap-aa").value,
+        document.getElementById("zap-fee").value
+      );
+      var out = document.getElementById("zap-result");
+      if (res === null) {
+        out.textContent = "Enter positive pool reserves for both tokens, a positive amount of token A you hold, and a fee in basis points (25 = 0.25%).";
+        document.getElementById("zap-swap").value = "";
+        document.getElementById("zap-depb").value = "";
+      } else {
+        out.textContent = "Model output: swap ≈ " + fmt(res.swapIn, 6) + " of token A for ≈ " + fmt(res.swapOut, 6) +
+          " of token B in the same pool, then deposit the remaining ≈ " + fmt(res.depositA, 6) + " A together with that ≈ " +
+          fmt(res.depositB, 6) + " B — the split the pool's post-swap ratio requires, so nothing is left over. Your share of the pool would be ≈ " +
+          fmt(res.sharePct, 4) + "%, with model reserves after both steps of " + fmt(res.finalReserveA, 2) + " A / " + fmt(res.finalReserveB, 2) +
+          " B (the B reserve returns to what it was — the swap's B comes straight back as the deposit). A single-sided entry model in one pool, not a live Raydium quote — no routing or price movement between the two steps is modelled, and CLMM entries are range-based and differ.";
+        document.getElementById("zap-swap").value = fmt(res.swapIn, 6);
+        document.getElementById("zap-depb").value = fmt(res.depositB, 6);
       }
     });
 

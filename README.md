@@ -34,6 +34,7 @@ For the Raydium team — [@raydium-io](https://github.com/raydium-io) on GitHub 
 16. **Constant-product arbitrage model** — why a pool's price tracks the wider market: given the pool's reserves and an external price you supply (no live feed — the tool finds no opportunities), the trade that moves the pool's price exactly to that external price: direction, size grossed up for the pool fee, and modelled profit valued in token B at your external price. The reserves at the target price are forced by x × y = k (√(k/Pe), √(k×Pe)). A price gap smaller than the fee honestly comes out unprofitable. No routing, other venues' depth/fees, or transaction costs are modelled.
 17. **Price-impact trade sizer** — the inverse of tool 1: given a pool's reserves (in the direction you'd trade) and a maximum price impact you choose, the largest pay-in that stays at that cap and what it returns, solved in closed form (grossIn = reserveIn × (p − fee) / ((1 − p) × (1 − fee))). Tool 1's impact measure includes the fee, so a cap at or below the fee tier honestly admits no positive trade at all; the same cap in a deeper pool allows a proportionally larger trade. Reserves are your inputs, not live pool state.
 18. **LP-token share & value calculator** — tools 5 and 7 work in share percentages, but a constant-product LP actually holds a count of LP tokens: given a pool's current reserves, its total LP-token supply and your token count, your share of the pool (count ÷ supply), what redeeming those tokens returns in both tokens (exact scaled-BigInt, floored like on-chain programs — the same amounts tool 7 gives for that share withdrawn in full), and the position's value in token B at the pool's own spot price. The honest catch: a fixed count's share shrinks as new LPs deposit and the supply grows. CLMM positions are range-based NFTs, not fungible LP tokens; no withdrawal fee is modelled.
+19. **Single-sided zap-in planner** — tools 5 and 14 assume you already hold both tokens in the right ratio; a wallet holding only token A enters a constant-product pool by zapping: swap part of the A for B in the same pool, then deposit the remaining A with all the B the swap returned. Given the reserves, the A you hold and the pool fee, the planner solves the quadratic the post-swap ratio condition forces (at zero fee it reduces to s = √(Ra·(Ra+X)) − Ra) for the one split that leaves nothing over. The B the swap removes returns as the deposit, so the pool's final B reserve equals the one you started with — an invariant the tests assert — and a larger fee swaps slightly more, because the swap leg is less efficient. One pool, no routing, no price movement between the two steps; CLMM entries are range-based and differ.
 
 Honest labels, always: these are **educational models** using numbers you type in — not live quotes, not live pool data, and not financial advice. Real pools live at <https://raydium.io/liquidity-pools/>.
 
@@ -60,7 +61,7 @@ Ecosystem:
 node tests/test-site.js
 ```
 
-Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all eighteen pool tools (known-value vectors, edge and rejection cases).
+Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all nineteen pool tools (known-value vectors, edge and rejection cases).
 
 ## Support
 
