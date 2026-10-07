@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raydium Renaissance — Building on Raydium liquidity pools, on Solana</title>
+<meta name="description" content="Raydium Renaissance by Kyle Cox (@kshot9000): my builder hub for Raydium on Solana — building, fixing and improving across Raydium, with a focus on liquidity pools: a live project catalogue and local pool tools for swaps, impermanent loss and LP fees.">
+<meta property="og:title" content="Raydium Renaissance — Building on Raydium">
+<meta property="og:description" content="Open-source Raydium / Solana liquidity-pool tools, apps and guides by Kyle Cox (@kshot9000), tagging @raydium-io. Independent builder hub — not affiliated with Raydium.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://kshot3000.github.io/Raydium-Renaissance/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23070714'/%3E%3Ccircle cx='13' cy='16' r='6' fill='%239945ff'/%3E%3Ccircle cx='21' cy='16' r='6' fill='%2314f195' fill-opacity='0.75'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<header class="site-head">
+  <a class="brand" href="./" aria-label="Raydium Renaissance home">
+    <span class="brand-mark" aria-hidden="true">💧</span>
+    <span>Raydium<strong>Renaissance</strong></span>
+  </a>
+  <nav aria-label="Main">
+    <a href="#projects">Projects</a>
+    <a href="#tools">Pool tools</a>
+    <a href="#guides">Guides</a>
+    <a href="#support">Support</a>
+    <a href="https://github.com/Kshot3000/Raydium-Renaissance">GitHub</a>
+  </nav>
+</header>
+
+<main id="main" tabindex="-1">
+  <section class="hero">
+    <p class="eyebrow">Open source · Built in public · By <a href="https://x.com/kshot9000">@kshot9000</a> · For <a href="https://github.com/raydium-io">@raydium-io</a> / <a href="https://x.com/Raydium">@Raydium</a></p>
+    <h1>Liquidity pools, rebuilt in the open.</h1>
+    <p class="lede">Raydium Renaissance is my builder hub for <strong>Raydium on Solana</strong>:
+    I build, fix and improve across all aspects of the Raydium project and its websites,
+    starting where Raydium lives — its <strong>liquidity pools</strong>. Everything here is
+    open source, and every tool on this page runs in your browser: pool maths you can check,
+    with no wallet, no signing, and nothing you type leaving this page.</p>
+    <div class="hero-cta">
+      <a class="btn primary" href="#projects">Browse the catalogue</a>
+      <a class="btn" href="#tools">Try the pool tools</a>
+      <a class="btn" href="https://raydium.io/liquidity-pools/">Raydium liquidity pools ↗</a>
+    </div>
+    <dl class="stats">
+      <div><dt>Focus</dt><dd>Liquidity pools</dd></div>
+      <div><dt>Catalogued projects</dt><dd>14 Raydium / Solana projects</dd></div>
+      <div><dt>Builder loop</dt><dd>Hourly, tested + verified</dd></div>
+    </dl>
+  </section>
+
+  <section id="concepts" aria-labelledby="concepts-h">
+    <h2 id="concepts-h">Raydium liquidity pools, in 30 seconds</h2>
+    <ul class="concept-list">
+      <li><strong>A pool is a pair of token vaults.</strong> A Raydium liquidity pool holds two tokens (say SOL and USDC). Traders swap against the pool; liquidity providers (LPs) deposit both sides and earn a share of the trading fees.</li>
+      <li><strong>Constant product (AMM v4 / CPMM).</strong> The classic pool type prices swaps with x × y = k — the larger your trade against the reserves, the worse your price. That curve is exactly what Tool 1 below models.</li>
+      <li><strong>CLMM = concentrated liquidity.</strong> CLMM pools let LPs place liquidity inside a chosen price range, earning more fees while the price stays in range — and nothing when it leaves it. Capital-efficient, but it needs active range management.</li>
+      <li><strong>CP-Swap = the newer standard pool.</strong> Raydium's CP-Swap pools use constant-product maths too, without the old OpenBook market requirement, and support Token-2022 tokens.</li>
+      <li><strong>Fees vary by pool.</strong> Each pool carries its own fee tier; a configured share of each swap fee goes to LPs in proportion to their share of the pool. Always check the fee tier on the actual pool page before depositing.</li>
+      <li><strong>The risk has a name: impermanent loss.</strong> If one token's price moves against the other, an LP can end up with less than simply holding — Tool 2 quantifies it. Fees earned are what compensate LPs for taking that risk.</li>
+    </ul>
+  </section>
+
+  <section id="projects" aria-labelledby="projects-h">
+    <h2 id="projects-h">Project catalogue</h2>
+    <p>My own Solana work first and labelled as mine — everything after it is Raydium's and the wider Solana ecosystem, linked for credit, not claimed as my work. Filter by what you need:</p>
+    <div class="filter-row" role="group" aria-label="Filter projects">
+      <label for="q">Search projects</label>
+      <input id="q" type="search" placeholder="e.g. pools, CLMM, SDK, wallet…" autocomplete="off">
+      <div class="chips" role="group" aria-label="Filter by category">
+        <button type="button" class="chip active" data-filter="all">All</button>
+        <button type="button" class="chip" data-filter="mine">My work</button>
+        <button type="button" class="chip" data-filter="pools">Pools &amp; trading</button>
+        <button type="button" class="chip" data-filter="official">Official Raydium</button>
+        <button type="button" class="chip" data-filter="dev">Developer</button>
+        <button type="button" class="chip" data-filter="eco">Ecosystem</button>
+      </div>
+    </div>
+    <p id="filter-status" class="sr-status" role="status" aria-live="polite"></p>
+    <ul class="cards" id="cards">
+      <li class="card" data-cat="mine eco" data-name="solana pay link desk my project kyle payment links qr sol usdc usdg">
+        <h3><a href="https://kshot3000.github.io/solana-pay-link-desk/">Solana Pay Link Desk — my Solana tool</a> <span class="badge mine">My project · Live</span></h3>
+        <p>My own Solana Pay tool, built in the separate solana-pay-link-desk repo: create Solana Pay payment links and QR codes for SOL / USDC / USDG and verify payments on-chain. Zero backend, open source.</p>
+        <p class="card-links"><a href="https://kshot3000.github.io/solana-pay-link-desk/">Visit site</a> · <a href="https://github.com/Kshot3000/solana-pay-link-desk">Source</a></p>
+      </li>
+      <li class="card" data-cat="official pools" data-name="raydium liquidity pools official provide liquidity earn fees">
+        <h3><a href="https://raydium.io/liquidity-pools/">Raydium Liquidity Pools</a> <span class="badge eco">Official</span></h3>
+        <p>The centre of this hub: Raydium's live liquidity pools page — browse pools, check fee tiers, TVL and volume, and provide liquidity. This is the real product; my tools below only model how pools like these behave.</p>
+        <p class="card-links"><a href="https://raydium.io/liquidity-pools/">Open pools</a></p>
+      </li>
+      <li class="card" data-cat="official pools" data-name="raydium swap trade tokens official dex">
+        <h3><a href="https://raydium.io/swap/">Raydium Swap</a> <span class="badge eco">Official</span></h3>
+        <p>Raydium's swap interface — trade Solana tokens against its pools with routing across pool types.</p>
+        <p class="card-links"><a href="https://raydium.io/swap/">Open swap</a></p>
+      </li>
+      <li class="card" data-cat="official pools" data-name="raydium launchlab launchpad token launches official">
+        <h3><a href="https://raydium.io/launchpad/">Raydium LaunchLab</a> <span class="badge eco">Official</span></h3>
+        <p>Raydium's token launch platform — new tokens launch here and graduate into Raydium pools.</p>
+        <p class="card-links"><a href="https://raydium.io/launchpad/">Open LaunchLab</a></p>
+      </li>
+      <li class="card" data-cat="official" data-name="raydium staking ray token stake official">
+        <h3><a href="https://raydium.io/staking/">Raydium Staking</a> <span class="badge eco">Official</span></h3>
+        <p>Stake RAY, Raydium's native token, on the official staking page.</p>
+        <p class="card-links"><a href="https://raydium.io/staking/">Open staking</a></p>
+      </li>
+      <li class="card" data-cat="official" data-name="raydium home official site raydium io">
+        <h3><a href="https://raydium.io/">Raydium</a> <span class="badge eco">Official</span></h3>
+        <p>The official home of Raydium — the on-chain DEX and liquidity protocol on Solana, live since 2021.</p>
+        <p class="card-links"><a href="https://raydium.io/">Visit site</a></p>
+      </li>
+      <li class="card" data-cat="official dev" data-name="raydium documentation docs developers integration official">
+        <h3><a href="https://docs.raydium.io/">Raydium Documentation</a> <span class="badge eco">Official</span></h3>
+        <p>The official developer docs — pool types, SDK integration and API references, straight from the Raydium team.</p>
+        <p class="card-links"><a href="https://docs.raydium.io/">Read the docs</a> · <a href="https://github.com/raydium-io/raydium-docs">Source</a></p>
+      </li>
+      <li class="card" data-cat="official dev" data-name="raydium sdk v2 typescript developers library github">
+        <h3><a href="https://github.com/raydium-io/raydium-sdk-V2">Raydium SDK V2</a> <span class="badge eco">Official</span></h3>
+        <p>The open-source TypeScript SDK for building on Raydium — fetch pools, quote swaps and build transactions programmatically.</p>
+        <p class="card-links"><a href="https://github.com/raydium-io/raydium-sdk-V2">Source</a></p>
+      </li>
+      <li class="card" data-cat="official dev pools" data-name="raydium clmm concentrated liquidity program rust github">
+        <h3><a href="https://github.com/raydium-io/raydium-clmm">Raydium CLMM program</a> <span class="badge eco">Official</span></h3>
+        <p>The open-source concentrated liquidity market maker program — the on-chain code behind Raydium's CLMM pools.</p>
+        <p class="card-links"><a href="https://github.com/raydium-io/raydium-clmm">Source</a></p>
+      </li>
+      <li class="card" data-cat="official dev pools" data-name="raydium cp swap constant product program rust github">
+        <h3><a href="https://github.com/raydium-io/raydium-cp-swap">Raydium CP-Swap program</a> <span class="badge eco">Official</span></h3>
+        <p>The open-source constant-product swap program behind CP-Swap pools — no OpenBook market ID required, Token-2022 support.</p>
+        <p class="card-links"><a href="https://github.com/raydium-io/raydium-cp-swap">Source</a></p>
+      </li>
+      <li class="card" data-cat="official dev pools" data-name="raydium amm v4 constant product openbook program rust github">
+        <h3><a href="https://github.com/raydium-io/raydium-amm">Raydium AMM program</a> <span class="badge eco">Official</span></h3>
+        <p>The original constant-product AMM program, integrated with the OpenBook central limit order book.</p>
+        <p class="card-links"><a href="https://github.com/raydium-io/raydium-amm">Source</a></p>
+      </li>
+      <li class="card" data-cat="official dev" data-name="raydium idl interface definition developers github">
+        <h3><a href="https://github.com/raydium-io/raydium-idl">Raydium IDL</a> <span class="badge eco">Official</span></h3>
+        <p>Interface definitions for Raydium's programs — the machine-readable contracts client code is generated from.</p>
+        <p class="card-links"><a href="https://github.com/raydium-io/raydium-idl">Source</a></p>
+      </li>
+      <li class="card" data-cat="eco" data-name="solana blockchain official site high throughput chain">
+        <h3><a href="https://solana.com/">Solana</a> <span class="badge eco">Ecosystem</span></h3>
+        <p>The chain Raydium runs on — fast, low-fee block production is what makes on-chain pool trading practical at all.</p>
+        <p class="card-links"><a href="https://solana.com/">Visit site</a></p>
+      </li>
+      <li class="card" data-cat="eco pools" data-name="jupiter aggregator routing raydium pools swap solana">
+        <h3><a href="https://jup.ag/">Jupiter</a> <span class="badge eco">Ecosystem</span></h3>
+        <p>Solana's big swap aggregator — it routes trades across many venues, including Raydium pools, hunting the best execution.</p>
+        <p class="card-links"><a href="https://jup.ag/">Visit site</a></p>
+      </li>
+    </ul>
+    <p id="no-results" hidden>No projects match that filter yet — try “all”.</p>
+  </section>
+
+  <section id="tools" aria-labelledby="tools-h">
+    <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
+    <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
+    <div class="tool-grid">
+      <form class="tool" id="swap-calc">
+        <h3>1 · Constant-product swap model</h3>
+        <p>The x × y = k maths behind AMM v4 / CPMM pools. Enter a pool's reserves and a trade size; the model takes the fee off the input, then prices the swap on the curve.</p>
+        <label for="rin">Reserve in (tokens)</label>
+        <input id="rin" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="rout">Reserve out (tokens)</label>
+        <input id="rout" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="ain">Amount in (tokens)</label>
+        <input id="ain" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="aout">Amount out (model)</label>
+        <input id="aout" readonly placeholder="—" autocomplete="off">
+        <label for="swap-fee">Swap fee (basis points, 25 = 0.25%)</label>
+        <input id="swap-fee" inputmode="numeric" value="25" autocomplete="off">
+        <button type="submit" class="btn primary">Model this swap</button>
+        <p id="swap-result" role="status" aria-live="polite"></p>
+      </form>
+
+      <form class="tool" id="il-calc">
+        <h3>2 · Impermanent-loss calculator</h3>
+        <p>For a 50/50 constant-product position: if one token's price moves by a multiple against the other, how far behind simply holding do you end up — before fees?</p>
+        <label for="ratio">Price multiple (2 = doubled, 0.5 = halved)</label>
+        <input id="ratio" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="deposit">Deposit value in $ (optional)</label>
+        <input id="deposit" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <button type="submit" class="btn primary">Calculate IL</button>
+        <p id="il-result" role="status" aria-live="polite"></p>
+      </form>
+
+      <form class="tool" id="fee-calc">
+        <h3>3 · LP fee estimator</h3>
+        <p>Your slice of a pool's swap fees is your share of its TVL. Enter a pool's 24h volume and TVL and your deposit to estimate daily fees — assuming nothing changes, which it always does.</p>
+        <label for="volume">Pool volume, 24h ($)</label>
+        <input id="volume" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="tvl">Pool TVL ($)</label>
+        <input id="tvl" inputmode="decimal" placeholder="e.g. 5000000" autocomplete="off">
+        <label for="your-liq">Your liquidity ($)</label>
+        <input id="your-liq" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="fee-fee">Pool fee (basis points, 25 = 0.25%)</label>
+        <input id="fee-fee" inputmode="numeric" value="25" autocomplete="off">
+        <button type="submit" class="btn primary">Estimate my fees</button>
+        <p id="fee-result" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+  </section>
+
+  <section id="guides" aria-labelledby="guides-h">
+    <h2 id="guides-h">Field guides</h2>
+    <ul class="guide-list">
+      <li><a href="guides/getting-started-raydium-pools.md">Getting started with Raydium liquidity pools</a> — pool types, what to check before depositing, and the official resources in the order I'd learn them.</li>
+      <li><a href="https://github.com/Kshot3000/Raydium-Renaissance/blob/main/README.md">The mission log (README)</a> — what I'm building here, the full catalogue and how the hourly loop works.</li>
+    </ul>
+  </section>
+
+  <section id="support" aria-labelledby="support-h">
+    <h2 id="support-h">Support this work</h2>
+    <p>I'm an independent builder — not affiliated with Raydium or the Solana Foundation. If these tools or apps help you, tips in SOL are appreciated and keep the hourly builder loop fed:</p>
+    <div class="donate">
+      <code id="donation-address">9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</code>
+      <button type="button" class="btn" id="copy-address">Copy SOL address</button>
+      <span id="copy-status" role="status" aria-live="polite"></span>
+    </div>
+    <p class="team-tag">Built by Kyle Cox — <a href="https://x.com/kshot9000">@kshot9000</a> on X · <a href="https://github.com/Kshot3000">github.com/Kshot3000</a>. For the Raydium team: <a href="https://github.com/raydium-io">@raydium-io</a> on GitHub · <a href="https://x.com/Raydium">@Raydium</a> on X — feedback and corrections welcome, here or on the repo.</p>
+  </section>
+</main>
+
+<footer>
+  <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
+  <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
+</footer>
+<script src="app.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+"use strict";
+/* Raydium Renaissance site tests — run: node tests/test-site.js */
+const fs = require("fs");
+const path = require("path");
+const root = path.join(__dirname, "..");
+const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
+const guide = fs.readFileSync(path.join(root, "guides", "getting-started-raydium-pools.md"), "utf8");
+const app = require(path.join(root, "app.js"));
+
+const SOL = "9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8";
+let failures = 0;
+function check(name, cond) {
+  console.log((cond ? "PASS" : "FAIL") + " " + name);
+  if (!cond) failures++;
+}
+function near(name, got, want, tol) {
+  check(name + " (got " + got + ", want ~" + want + ")", typeof got === "number" && Math.abs(got - want) <= tol);
+}
+
+/* attribution on every user-facing surface */
+for (const [label, doc] of [["index.html", html], ["README", readme], ["guide", guide]]) {
+  check("SOL donation address in " + label, doc.includes(SOL));
+  check("@kshot9000 in " + label, doc.includes("@kshot9000"));
+  check("Raydium team GitHub tag in " + label, doc.includes("@raydium-io"));
+  check("Raydium team X tag in " + label, doc.includes("@Raydium"));
+}
+check("honesty line in index.html", html.includes("Not affiliated with Raydium"));
+check("honesty line in README", readme.includes("not affiliated with Raydium"));
+check("models labelled not live in index.html", html.includes("not") && html.includes("live quotes") && html.includes("not financial advice"));
+check("liquidity pools focus linked", html.includes("https://raydium.io/liquidity-pools/") && readme.includes("https://raydium.io/liquidity-pools/"));
+
+/* document structure */
+check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
+check("has <main> landmark", /<main[\s>]/.test(html));
+check("all main form controls labelled",
+  ["q", "rin", "rout", "ain", "aout", "swap-fee", "ratio", "deposit", "volume", "tvl", "your-liq", "fee-fee"]
+    .every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=1"));
+check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
+
+/* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
+const LINKS = [
+  "https://kshot3000.github.io/solana-pay-link-desk/", "https://github.com/Kshot3000/solana-pay-link-desk",
+  "https://raydium.io/liquidity-pools/", "https://raydium.io/swap/", "https://raydium.io/launchpad/",
+  "https://raydium.io/staking/", "https://raydium.io/", "https://docs.raydium.io/",
+  "https://github.com/raydium-io/raydium-docs", "https://github.com/raydium-io/raydium-sdk-V2",
+  "https://github.com/raydium-io/raydium-clmm", "https://github.com/raydium-io/raydium-cp-swap",
+  "https://github.com/raydium-io/raydium-amm", "https://github.com/raydium-io/raydium-idl",
+  "https://solana.com/", "https://jup.ag/"
+];
+for (const url of LINKS) {
+  check("catalogue linked in index.html: " + url, html.includes(url));
+  check("catalogue linked in README: " + url, readme.includes(url));
+}
+check("Solana Pay Link Desk labelled as my project", html.includes("My project") && html.includes("Solana Pay Link Desk"));
+
+/* scaled decimal parsing */
+check("parseScaled integer", app.parseScaled("2") === 2000000000n);
+check("parseScaled fraction", app.parseScaled("1.5") === 1500000000n);
+check("parseScaled smallest unit", app.parseScaled("0.000000001") === 1n);
+check("parseScaled rejects 10dp", app.parseScaled("0.0000000001") === null);
+check("parseScaled rejects junk", app.parseScaled("abc") === null && app.parseScaled("-1") === null && app.parseScaled("") === null);
+check("formatScaled round trip", app.formatScaled(app.parseScaled("42.123456789")) === "42.123456789");
+check("formatScaled whole", app.formatScaled(1000000000n) === "1");
+
+/* constant-product swap model — known values */
+/* reserves 1000/1000, in 100, no fee: out = 1000*100/1100 = 90.909090... */
+const s0 = app.cpSwap("1000", "1000", "100", 0);
+near("cpSwap no-fee out", parseFloat(s0.out), 90.9090909, 0.000001);
+near("cpSwap no-fee spot", s0.spotPrice, 1, 1e-12);
+near("cpSwap no-fee impact", s0.priceImpactPct, 9.090909, 0.001);
+/* reserves 1000/1000, in 100, 25bps: inAfterFee 99.75, out = 1000*99.75/1099.75 = 90.7025... */
+const s1 = app.cpSwap("1000", "1000", "100", 25);
+near("cpSwap 25bps out", parseFloat(s1.out), 90.702523, 0.001);
+check("cpSwap fee lowers output", parseFloat(s1.out) < parseFloat(s0.out));
+/* asymmetric reserves 2000000 in / 500000 out, spot 0.25 */
+const s2 = app.cpSwap("2000000", "500000", "10000", 25);
+near("cpSwap asymmetric spot", s2.spotPrice, 0.25, 1e-12);
+check("cpSwap asymmetric out sane", parseFloat(s2.out) > 2400 && parseFloat(s2.out) < 2500);
+check("cpSwap rejects zero reserves", app.cpSwap("0", "1000", "100", 25) === null);
+check("cpSwap rejects zero amount", app.cpSwap("1000", "1000", "0", 25) === null);
+check("cpSwap rejects junk", app.cpSwap("abc", "1000", "100", 25) === null);
+check("cpSwap rejects bad fee", app.cpSwap("1000", "1000", "100", -1) === null && app.cpSwap("1000", "1000", "100", 10000) === null);
+check("cpSwap larger trade = larger impact", app.cpSwap("1000", "1000", "500", 25).priceImpactPct > s1.priceImpactPct);
+
+/* impermanent loss — known values: IL(r) = 2*sqrt(r)/(1+r) - 1 */
+near("IL at 1x is 0", app.impermanentLoss(1).ilPct, 0, 1e-9);
+near("IL at 2x", app.impermanentLoss(2).ilPct, -5.719, 0.01);
+near("IL at 0.5x equals IL at 2x", app.impermanentLoss(0.5).ilPct, app.impermanentLoss(2).ilPct, 1e-9);
+near("IL at 4x is -20%", app.impermanentLoss(4).ilPct, -20, 1e-9);
+const ilDep = app.impermanentLoss(4, "1000");
+near("IL deposit hold value at 4x", ilDep.holdValue, 2500, 1e-9);
+near("IL deposit LP value at 4x", ilDep.lpValue, 2000, 1e-9);
+check("IL rejects 0 / negative / junk", app.impermanentLoss(0) === null && app.impermanentLoss(-2) === null && app.impermanentLoss("x") === null);
+
+/* LP fee estimator — known values */
+/* volume $1,000,000, fee 25bps => $2,500 pool fees/day; your $10k of $1M TVL = 1% => $25/day, APR 91.25% */
+const f1 = app.lpFees("1000000", 25, "10000", "1000000");
+near("LP share pct", f1.sharePct, 1, 1e-9);
+near("LP daily fees", f1.dailyFees, 25, 1e-9);
+near("LP monthly fees", f1.monthlyFees, 750, 1e-9);
+near("LP naive APR", f1.aprPct, 91.25, 1e-9);
+check("LP zero volume = zero fees", app.lpFees("0", 25, "10000", "1000000").dailyFees === 0);
+check("LP rejects your > TVL", app.lpFees("1000", 25, "2000000", "1000000") === null);
+check("LP rejects junk", app.lpFees("x", 25, "1", "2") === null && app.lpFees("1", 25, "0", "2") === null);
+
+console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
+process.exit(failures === 0 ? 0 : 1);
