@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=37"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=38"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists thirty-seven tools", readme.includes("thirty-seven pool tools") || readme.includes("all thirty-seven"));
+check("README lists thirty-eight tools", readme.includes("thirty-eight pool tools") || readme.includes("all thirty-eight"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1721,6 +1721,57 @@ check("all cwd controls labelled", ["cwd-l", "cwd-lower", "cwd-upper", "cwd-pric
 check("cwd tool present in index.html", html.includes('id="cwd-calc"') && html.includes('id="cwd-result"'));
 check("cwd honesty: fees-separate and not-live labels", html.includes("collects accrued fees separately") && html.includes("not live pool state") && html.includes("not financial advice"));
 check("guide covers sizing a CLMM withdrawal", guide.includes("Size a CLMM exit before you make it"));
+
+/* ---------- 38 · constant-product wallet-balance deposit planner ---------- */
+/* headline: balanced pool, balanced balances — both used in full */
+const cpw1 = app.cpWalletPlan("1000", "1000", "100", "100");
+check("CPW balanced settles", cpw1 !== null);
+check("CPW balanced uses both in full", cpw1.usedA === "100" && cpw1.usedB === "100" && cpw1.leftoverA === "0" && cpw1.leftoverB === "0");
+check("CPW balanced limiting is both", cpw1.limiting === "both");
+near("CPW balanced share", cpw1.sharePct, 9.090909090909092, 1e-9);
+check("CPW balanced new reserves", cpw1.newReserveA === "1100" && cpw1.newReserveB === "1100");
+/* A-limited: 1000/500 pool, 100 A needs only 50 B of the 100 B held */
+const cpw2 = app.cpWalletPlan("1000", "500", "100", "100");
+check("CPW A-limited settles", cpw2 !== null && cpw2.limiting === "A");
+check("CPW A-limited uses A in full, B partly", cpw2.usedA === "100" && cpw2.usedB === "50" && cpw2.leftoverA === "0" && cpw2.leftoverB === "50");
+check("CPW A-limited new reserves", cpw2.newReserveA === "1100" && cpw2.newReserveB === "550");
+/* B-limited mirror: only 25 B held caps the deposit at 50 A */
+const cpw3 = app.cpWalletPlan("1000", "500", "100", "25");
+check("CPW B-limited settles", cpw3 !== null && cpw3.limiting === "B");
+check("CPW B-limited uses B in full, A partly", cpw3.usedA === "50" && cpw3.usedB === "25" && cpw3.leftoverA === "50" && cpw3.leftoverB === "0");
+near("CPW B-limited share", cpw3.sharePct, 4.761904761904762, 1e-9);
+/* exact-ratio balances on an asymmetric pool are used in full */
+const cpw4 = app.cpWalletPlan("2000", "1000", "40", "20");
+check("CPW exact-ratio limiting is both", cpw4 !== null && cpw4.limiting === "both" && cpw4.leftoverA === "0" && cpw4.leftoverB === "0");
+/* the 9dp dust case: B-limited at 3000/700 with 10 B leaves exactly one scaled unit of B */
+const cpwDust = app.cpWalletPlan("3000", "700", "123.456", "10");
+check("CPW dust settles B-limited", cpwDust !== null && cpwDust.limiting === "B");
+check("CPW dust used amounts", cpwDust.usedA === "42.857142857" && cpwDust.usedB === "9.999999999");
+check("CPW dust leftover is exactly one unit of B", cpwDust.leftoverB === "0.000000001" && cpwDust.leftoverA === "80.598857143");
+/* composition sweep: legs are tool 5 verbatim, balances conserve in scaled BigInt, limiting side behaves */
+for (const [ra, rb, ba, bb] of [["1000", "1000", "100", "100"], ["1000", "500", "100", "25"], ["5000", "1234", "77.7", "3.3"], ["250", "4000", "999", "1"], ["123456", "654321", "111.111", "222.222"], ["1000000", "500000", "10000", "4000"], ["3000", "700", "10", "123.456"]]) {
+  const r = app.cpWalletPlan(ra, rb, ba, bb);
+  check("CPW sweep settles at " + ra + "/" + rb + " bal " + ba + "/" + bb, r !== null);
+  const dp = app.depositPlan(ra, rb, r.usedA);
+  check("CPW sweep used B is tool 5 requiredB at " + ra + "/" + rb + " bal " + ba + "/" + bb, dp.requiredB === r.usedB);
+  near("CPW sweep share is tool 5 share at " + ra + "/" + rb + " bal " + ba + "/" + bb, r.sharePct, dp.sharePct, 1e-12);
+  check("CPW sweep A conserves at " + ra + "/" + rb + " bal " + ba + "/" + bb, app.parseScaled(r.usedA) + app.parseScaled(r.leftoverA) === app.parseScaled(ba));
+  check("CPW sweep B conserves at " + ra + "/" + rb + " bal " + ba + "/" + bb, app.parseScaled(r.usedB) + app.parseScaled(r.leftoverB) === app.parseScaled(bb));
+  check("CPW sweep new reserves are tool 5 at " + ra + "/" + rb + " bal " + ba + "/" + bb, r.newReserveA === dp.newReserveA && r.newReserveB === dp.newReserveB);
+  if (r.limiting === "A") check("CPW sweep A-limited leaves A empty, B over at " + ra + "/" + rb, r.leftoverA === "0" && app.parseScaled(r.leftoverB) > 0n);
+  if (r.limiting === "B") check("CPW sweep B-limited leaves A over, B flooring-dust only at " + ra + "/" + rb, app.parseScaled(r.leftoverA) > 0n && app.parseScaled(r.leftoverB) <= BigInt(Math.ceil(Number(rb) / Number(ra)) + 1));
+  if (r.limiting === "both") check("CPW sweep both leaves nothing at " + ra + "/" + rb, r.leftoverA === "0" && r.leftoverB === "0");
+}
+/* rejections */
+check("CPW rejects blank fields", app.cpWalletPlan("", "1000", "100", "100") === null && app.cpWalletPlan("1000", "1000", "", "100") === null && app.cpWalletPlan("1000", "1000", "100", " ") === null);
+check("CPW rejects a zero balance on either side", app.cpWalletPlan("1000", "1000", "0", "100") === null && app.cpWalletPlan("1000", "1000", "100", "0") === null);
+check("CPW rejects zero reserves", app.cpWalletPlan("0", "1000", "100", "100") === null && app.cpWalletPlan("1000", "0", "100", "100") === null);
+check("CPW rejects junk and negatives", app.cpWalletPlan("1000", "1000", "abc", "100") === null && app.cpWalletPlan("1000", "1000", "-5", "100") === null && app.cpWalletPlan("1000", "1000", "100", "1.0000000001") === null);
+check("CPW rejects a deposit whose other leg floors to zero", app.cpWalletPlan("1000000", "1", "0.000000001", "100") === null);
+check("all cpw controls labelled", ["cpw-ra", "cpw-rb", "cpw-bal-a", "cpw-bal-b", "cpw-outb"].every(id => html.includes(`for="${id}"`)));
+check("cpw tool present in index.html", html.includes('id="cpw-calc"') && html.includes('id="cpw-result"'));
+check("cpw honesty: dust and not-live labels", html.includes("smallest units of token B behind as dust") && html.includes("not live pool state") && html.includes("not financial advice"));
+check("guide covers planning a CP deposit from a wallet", guide.includes("Plan a constant-product deposit from your wallet"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

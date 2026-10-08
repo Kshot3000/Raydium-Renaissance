@@ -846,6 +846,23 @@
         <button type="submit" class="btn primary">Plan my withdrawal</button>
         <p id="cwd-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="cpw-calc">
+        <h3>38 · Constant-product wallet-balance deposit planner</h3>
+        <p>Tool 14's question for an ordinary constant-product pool (AMM v4 / CPMM / CP-Swap). Tool 5 asks how much token B a chosen token-A deposit needs — this asks the wallet's question instead: you hold a fixed amount of <em>both</em> tokens, and the deposit must land in the pool's existing ratio, so what is the biggest deposit those balances can fund, and what is left over? Whichever side is scarcer in ratio terms caps the deposit and is used in full; the other side is partly left unused. If your balances are exactly in the pool's ratio, both are used in full. On the token-B-capped side the model's 9-decimal flooring can leave a few smallest units of token B behind as dust. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="cpw-ra">Pool reserve — token A</label>
+        <input id="cpw-ra" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="cpw-rb">Pool reserve — token B</label>
+        <input id="cpw-rb" inputmode="decimal" placeholder="e.g. 500000" autocomplete="off">
+        <label for="cpw-bal-a">Your balance — token A</label>
+        <input id="cpw-bal-a" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="cpw-bal-b">Your balance — token B</label>
+        <input id="cpw-bal-b" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="cpw-outb">Token B you deposit (model)</label>
+        <input id="cpw-outb" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan from my balances</button>
+        <p id="cpw-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -873,6 +890,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=37"></script>
+<script src="app.js?v=38"></script>
 </body>
 </html>

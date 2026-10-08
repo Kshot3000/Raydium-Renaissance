@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus thirty-seven fully
+/* Raydium Renaissance hub logic: project filtering plus thirty-eight fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -18,7 +18,8 @@
    constant-product required-volume planner, a CLMM single-sided
    zap-in planner, a CLMM single-sided zap-out planner, a CLMM
    token-B deposit planner, a CLMM re-centre / rebalance planner,
-   and a CLMM withdrawal planner.
+   a CLMM withdrawal planner, and a constant-product wallet-balance
+   deposit planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1980,8 +1981,64 @@ function clmmWithdrawPlan(liquidityStr, lowerStr, upperStr, priceStr, withdrawPc
   };
 }
 
+/* ---------- 38 · Constant-product wallet-balance deposit planner ---------- */
+/* Tool 14's question for an ordinary constant-product pool. Tool 5
+   asks how much token B a chosen token-A deposit needs; a wallet
+   instead holds fixed amounts of BOTH tokens, and a constant-product
+   deposit must land in the pool's existing ratio — so the biggest
+   deposit those balances can fund is capped by whichever side is
+   scarcer in ratio terms. If token A's balance needs no more B than
+   the wallet holds (reserveB * balanceA / reserveA <= balanceB, exact
+   scaled-BigInt floored at 9 dp), A limits: the whole A balance is
+   deposited and B is left over. Otherwise B limits: the deposit's A
+   leg is floor(reserveA * balanceB / reserveB) and the pair is then
+   settled by Tool 5's own depositPlan, so the B actually deposited is
+   exactly Tool 5's requiredB for that A leg and can never drift from
+   it. One honest rounding edge: on the B-limited side the 9 dp floors
+   can leave a few smallest units of token B behind as dust (bounded
+   by the pool's B-per-A ratio in those units) — the tests pin a
+   case that leaves exactly one unit, 0.000000001. A zero balance on either
+   side funds nothing (both tokens are required) and is rejected, as
+   is a deposit whose other leg floors to zero. Model only: no fees,
+   and a real deposit is quoted live on the pool page. */
+function cpWalletPlan(reserveAStr, reserveBStr, balanceAStr, balanceBStr) {
+  var required = [reserveAStr, reserveBStr, balanceAStr, balanceBStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var ra = parseScaled(reserveAStr), rb = parseScaled(reserveBStr);
+  var ba = parseScaled(balanceAStr), bb = parseScaled(balanceBStr);
+  if (ra === null || rb === null || ba === null || bb === null) return null;
+  if (ra <= 0n || rb <= 0n || ba <= 0n || bb <= 0n) return null;
+  var reqBforA = rb * ba / ra;
+  var usedA, limiting;
+  if (reqBforA <= bb) {
+    usedA = ba;
+    limiting = reqBforA === bb ? "both" : "A";
+  } else {
+    usedA = ra * bb / rb;
+    limiting = "B";
+  }
+  if (usedA <= 0n) return null;
+  var plan = depositPlan(reserveAStr, reserveBStr, formatScaled(usedA));
+  if (plan === null) return null;
+  var usedB = parseScaled(plan.requiredB);
+  if (usedB <= 0n || usedB > bb) return null;
+  return {
+    usedA: formatScaled(usedA),
+    usedB: plan.requiredB,
+    leftoverA: formatScaled(ba - usedA),
+    leftoverB: formatScaled(bb - usedB),
+    limiting: limiting,
+    sharePct: plan.sharePct,
+    newReserveA: plan.newReserveA,
+    newReserveB: plan.newReserveB,
+    priceBperA: plan.priceBperA
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -3008,6 +3065,34 @@ if (typeof document !== "undefined") {
         " B (worth ≈ " + fmt(res.outValueInB, 4) + " B at this price, before any fees the position has earned — a real withdrawal collects those separately). " + left +
         ". A CLMM withdrawal model — not a live quote, not financial advice.";
       document.getElementById("cwd-outb").value = fmt(res.outB, 4);
+    });
+
+    document.getElementById("cpw-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = cpWalletPlan(
+        document.getElementById("cpw-ra").value,
+        document.getElementById("cpw-rb").value,
+        document.getElementById("cpw-bal-a").value,
+        document.getElementById("cpw-bal-b").value
+      );
+      var out = document.getElementById("cpw-result");
+      if (res === null) {
+        out.textContent = "Enter positive pool reserves and positive balances of both tokens (up to 9 decimal places) — a constant-product deposit needs both sides, so a zero balance on either side funds nothing.";
+        document.getElementById("cpw-outb").value = "";
+        return;
+      }
+      var limitText = res.limiting === "both"
+        ? "Your balances are exactly in the pool's ratio, so both sides are used in full"
+        : res.limiting === "A"
+          ? "Token A is the scarcer side in ratio terms, so it is used in full and some token B is left over"
+          : "Token B is the scarcer side in ratio terms, so it caps the deposit and some token A is left over (settling the B leg through tool 5's floored maths can also leave a few smallest units of token B as dust)";
+      out.textContent = "Model output: deposit ≈ " + res.usedA + " of token A and ≈ " + res.usedB +
+        " of token B (pool ratio ≈ " + fmt(res.priceBperA, 6) + " B per A). " + limitText +
+        ". Left in your wallet: ≈ " + res.leftoverA + " A and ≈ " + res.leftoverB +
+        " B. Your share of the pool after depositing would be ≈ " + fmt(res.sharePct, 4) +
+        "%, with model reserves of " + res.newReserveA + " A / " + res.newReserveB +
+        " B. A constant-product wallet-balance deposit model, not a live Raydium quote — not financial advice.";
+      document.getElementById("cpw-outb").value = res.usedB;
     });
 
     /* --- copy donation address --- */
