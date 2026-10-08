@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=47"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=48"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists forty-three tools", readme.includes("forty-three pool tools") || readme.includes("all forty-three"));
+check("README lists forty-four tools", readme.includes("forty-four pool tools") || readme.includes("all forty-four"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1992,8 +1992,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts forty-three tools and names the CLMM two-range swap model",
-  appSrc.includes("plus forty-three fully") && appSrc.includes("CLMM two-range swap model.\n   These are educational MODELS"));
+check("app.js header counts forty-four tools and names the CLMM single-range exact-out swap model",
+  appSrc.includes("plus forty-four fully") && appSrc.includes("CLMM single-range exact-out\n   swap model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -2072,6 +2072,76 @@ check("all xswap controls labelled", ["xswap-liq", "xswap-lower", "xswap-upper",
 check("xswap tool present in index.html", html.includes('id="xswap-calc"') && html.includes('id="xswap-result"'));
 check("xswap honesty: second wall and not-live labels", html.includes("The second range is a wall too") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("unfilled, not absorbed"));
 check("guide covers CLMM two-range swap", guide.includes("The second range sets the cliff"));
+
+
+/* ---------- Tool 44: CLMM single-range exact-out swap model (CXO) ---------- */
+const CXO_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
+const cxoInv = app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "9.87104909056809", 25, "ab");
+check("CXO headline settles inside the range", cxoInv !== null && cxoInv.hitBoundary === false);
+near("CXO inverts tool 42's headline fill back to 10 in", cxoInv.amountIn, 10, 1e-9);
+near("CXO headline new price is tool 42's new price", cxoInv.newPrice, 0.9792663126327764, 1e-9);
+near("CXO headline impact matches tool 42", cxoInv.priceImpactPct, 1.2895090943191079, 1e-6);
+near("CXO headline fee is the tier's share of the amount in", cxoInv.feePaid, cxoInv.amountIn * 25 / 10000, 1e-9);
+near("CXO headline max out is tool 9's B holding", cxoInv.maxOut, app.clmmPositionAtPrice(CXO_L, "0.8", "1.25", "1").amountB, 1e-9);
+const cxo50ab = app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "50", 25, "ab");
+const cxo50ba = app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "50", 25, "ba");
+near("CXO target 50 amount in", cxo50ab.amountIn, 52.91870125317499, 1e-9);
+near("CXO target 50 new price", cxo50ab.newPrice, 0.8972135954999578, 1e-9);
+near("CXO target 50 impact", cxo50ab.priceImpactPct, 5.515443848879176, 1e-9);
+check("CXO centred range mirrors exactly", cxo50ba.amountIn === cxo50ab.amountIn && cxo50ba.feePaid === cxo50ab.feePaid && cxo50ba.priceImpactPct === cxo50ab.priceImpactPct);
+near("CXO mirror new price", cxo50ba.newPrice, 1.1145618000168243, 1e-9);
+near("CXO mirror max out is tool 9's A holding", cxo50ba.maxOut, app.clmmPositionAtPrice(CXO_L, "0.8", "1.25", "1").amountA, 1e-9);
+const cxo0 = app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "10", 0, "ab");
+check("CXO zero-fee charges no fee", cxo0.feePaid === 0);
+near("CXO zero-fee amount in is the closed form", cxo0.amountIn, 947.2135954999577 * (1 / (1 - 10 / 947.2135954999577) - 1), 1e-9);
+near("CXO zero-fee new price", cxo0.newPrice, 0.9789968943799848, 1e-9);
+const cxoMax = app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "100", 25, "ab");
+check("CXO target equal to the holding hits the boundary", cxoMax !== null && cxoMax.hitBoundary === true);
+near("CXO max target walks the price to the lower edge", cxoMax.newPrice, 0.8, 1e-9);
+near("CXO max target costs tool 42's capped used-in", cxoMax.amountIn, app.clmmSwap(CXO_L, "0.8", "1.25", "1", "100000", 25, "ab").usedIn, 1e-9);
+near("CXO max target amount in value", cxoMax.amountIn, 112.08360789472633, 1e-9);
+const cxoMaxBa = app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "100", 25, "ba");
+check("CXO max pay-B hits the upper boundary", cxoMaxBa !== null && cxoMaxBa.hitBoundary === true);
+near("CXO max pay-B new price is the upper edge", cxoMaxBa.newPrice, 1.25, 1e-9);
+check("CXO rejects a target above the range's holding", app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "100.000001", 25, "ab") === null && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "101", 25, "ba") === null && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1.2", "17.47016", 25, "ba") === null);
+near("CXO max out at 1.2 is tool 9's A holding there", app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1.2", "10", 25, "ba").maxOut, app.clmmPositionAtPrice(CXO_L, "0.8", "1.25", "1.2").amountA, 1e-9);
+near("CXO at 1.2 target 10 amount in", app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1.2", "10", 25, "ba").amountIn, 12.170829883690581, 1e-9);
+near("CXO tiny target impact is the fee plus a whisper of curve", app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "0.01", 25, "ab").priceImpactPct, 0.2510530895384333, 1e-9);
+check("CXO rejects a price at or outside the range", app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1.25", "10", 25, "ab") === null && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "0.8", "10", 25, "ba") === null && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1.3", "10", 25, "ab") === null);
+check("CXO rejects bad ranges, amounts, fees and directions", app.clmmSwapExactOut(CXO_L, "1.25", "0.8", "1", "10", 25, "ab") === null && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "0", 25, "ab") === null && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "-5", 25, "ab") === null && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "10", 10000, "ab") === null && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "10", -1, "ab") === null && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "10", 25, "xx") === null && app.clmmSwapExactOut("abc", "0.8", "1.25", "1", "10", 25, "ab") === null && app.clmmSwapExactOut("0", "0.8", "1.25", "1", "10", 25, "ab") === null);
+for (const [liq, lo, hi, px, tgt, fee, dir] of [
+  [CXO_L, "0.8", "1.25", "1", "25", 25, "ab"],
+  [CXO_L, "0.8", "1.25", "1", "25", 25, "ba"],
+  ["5000", "0.5", "2", "1.1", "100", 30, "ab"],
+  ["5000", "0.5", "2", "0.9", "100", 5, "ba"],
+  ["123.456", "2.4", "2.6", "2.5", "2", 60, "ab"],
+  ["123.456", "2.4", "2.6", "2.5", "1", 60, "ba"],
+  ["1000000", "0.99", "1.01", "1", "1000", 1, "ba"],
+  [CXO_L, "0.8", "1.25", "1.2", "10", 25, "ba"]
+]) {
+  const x = app.clmmSwapExactOut(liq, lo, hi, px, tgt, fee, dir);
+  const tag = "CXO sweep " + dir + " " + tgt + " @ " + px + " in " + lo + "-" + hi;
+  check(tag + " settles", x !== null);
+  near(tag + " fee is the tier's share of the amount in", x.feePaid, x.amountIn * fee / 10000, 1e-9);
+  near(tag + " net in plus fee is the amount in", x.netIn + x.feePaid, x.amountIn, 1e-9);
+  const rt = app.clmmSwap(liq, lo, hi, px, String(x.amountIn), fee, dir);
+  check(tag + " round-trips through tool 42", rt !== null && rt.hitBoundary === x.hitBoundary);
+  near(tag + " tool 42 returns the target out", rt.amountOut, Number(tgt), 1e-6);
+  near(tag + " tool 42 lands on the same new price", rt.newPrice, x.newPrice, 1e-9);
+  const posAfter = app.clmmPositionAtPrice(liq, lo, hi, String(x.newPrice));
+  const posBefore = app.clmmPositionAtPrice(liq, lo, hi, px);
+  if (dir === "ab") {
+    near(tag + " target is the B the position sheds (Tool 9)", x.amountOut, posBefore.amountB - posAfter.amountB, 1e-6);
+    near(tag + " net in is the A the position gains (Tool 9)", x.netIn, posAfter.amountA - posBefore.amountA, 1e-6);
+  } else {
+    near(tag + " target is the A the position sheds (Tool 9)", x.amountOut, posBefore.amountA - posAfter.amountA, 1e-6);
+    near(tag + " net in is the B the position gains (Tool 9)", x.netIn, posAfter.amountB - posBefore.amountB, 1e-6);
+  }
+}
+check("all cxo controls labelled", ["cxo-liq", "cxo-lower", "cxo-upper", "cxo-price", "cxo-dir", "cxo-aout", "cxo-fee", "cxo-ain", "cxo-newprice", "cxo-maxout"].every(id => html.includes(`for="${id}"`)));
+check("cxo tool present in index.html", html.includes('id="cxo-calc"') && html.includes('id="cxo-result"'));
+check("cxo honesty: hard limit and not-live labels", html.includes("becomes a hard limit here") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("is rejected, not priced"));
+check("guide covers CLMM single-range exact-out swap", guide.includes("Exact-out against a range has a ceiling, not just a price"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

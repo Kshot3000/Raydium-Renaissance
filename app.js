@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus forty-three fully
+/* Raydium Renaissance hub logic: project filtering plus forty-four fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -21,8 +21,9 @@
    a CLMM withdrawal planner, a constant-product wallet-balance
    deposit planner, a two-hop exact-out swap model, a
    constant-product break-even days calculator, a split-route
-   exact-out swap model, a CLMM single-range swap model, and a
-   CLMM two-range swap model.
+   exact-out swap model, a CLMM single-range swap model, a
+   CLMM two-range swap model, and a CLMM single-range exact-out
+   swap model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -2430,8 +2431,85 @@ function clmmCrossSwap(liquidityStr, lowerStr, upperStr, priceStr, amountInStr, 
   });
 }
 
+/* ---------- 44 · CLMM single-range exact-out swap model ---------- */
+/* Tool 42 prices a CLMM swap forwards — a fixed amount in, whatever
+   comes out — and tool 6 prices a constant-product swap backwards.
+   This is tool 42 backwards: the user names the exact amount out a
+   concentrated range must pay, and the model solves the range's own
+   curve for the amount in that buys it. Paying A for B, the target
+   sets the new sqrt-price directly (s' = s − out/L) and the net A
+   owed is L × (1/s' − 1/s); paying B for A is the mirror
+   (1/s' = 1/s − out/L, net B = L × (s' − s)). The net amount is then
+   grossed up for the fee — amountIn = net / (1 − fee share) — exactly
+   the way tool 42 takes the fee off the input first, so feeding this
+   tool's amountIn back into tool 42 returns the target out (the tests
+   assert that round trip across a sweep). The wall tool 42 warns
+   about becomes a hard limit here, not a partial fill: the most one
+   range can ever pay out is the out-token it actually holds at the
+   current price — tool 9's own holding (L × (s − √lower) of B paying
+   A, L × (1/s − 1/√upper) of A paying B) — so a target above that
+   holding is rejected, not priced down or capped. A real swap would
+   continue into the next tick range (tool 43 supplies one for the
+   forwards case); this exact-out model has no next range and does
+   not invent one, so an impossible-in-one-range target stays
+   impossible here even though a live pool might fill it across
+   ranges. A target exactly equal to the holding is priced: it walks
+   the price to the edge, and its gross input is exactly tool 42's
+   capped used-in for that same walk. Single range only, floating
+   point like every CLMM tool here. Model only: a real CLMM pool's
+   liquidity varies tick by tick and its live quote is on the pool
+   page. */
+function clmmSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amountOutStr, feeBps, direction) {
+  var liquidity = Number(liquidityStr), lower = Number(lowerStr), upper = Number(upperStr);
+  var price = Number(priceStr), amountOut = Number(amountOutStr), fee = Number(feeBps);
+  if (![liquidity, lower, upper, price, amountOut].every(Number.isFinite)) return null;
+  if (liquidity <= 0 || lower <= 0 || upper <= 0 || price <= 0 || amountOut <= 0) return null;
+  if (lower >= upper) return null;
+  if (price <= lower || price >= upper) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  if (direction !== "ab" && direction !== "ba") return null;
+  var f = fee / 10000;
+  var sa = Math.sqrt(lower), sb = Math.sqrt(upper), s = Math.sqrt(price);
+  var maxOut, sNew, netIn, spotRate;
+  if (direction === "ab") {
+    maxOut = liquidity * (s - sa);
+    if (amountOut > maxOut) return null;
+    sNew = s - amountOut / liquidity;
+    netIn = liquidity * (1 / sNew - 1 / s);
+    spotRate = price;
+  } else {
+    maxOut = liquidity * (1 / s - 1 / sb);
+    if (amountOut > maxOut) return null;
+    sNew = 1 / (1 / s - amountOut / liquidity);
+    netIn = liquidity * (sNew - s);
+    spotRate = 1 / price;
+  }
+  if (!Number.isFinite(netIn) || netIn <= 0 || !Number.isFinite(sNew)) return null;
+  var amountIn = netIn / (1 - f);
+  var effectiveRate = amountOut / amountIn;
+  return {
+    liquidity: liquidity,
+    lowerPrice: lower,
+    upperPrice: upper,
+    price: price,
+    direction: direction,
+    amountOut: amountOut,
+    maxOut: maxOut,
+    amountIn: amountIn,
+    netIn: netIn,
+    feePaid: amountIn - netIn,
+    newPrice: sNew * sNew,
+    spotRate: spotRate,
+    effectiveRate: effectiveRate,
+    priceImpactPct: (1 - effectiveRate / spotRate) * 100,
+    hitBoundary: Math.abs(amountOut - maxOut) <= Math.max(1e-9, maxOut * 1e-12),
+    feePct: fee / 100,
+    feeBps: fee
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -3675,6 +3753,47 @@ if (typeof document !== "undefined") {
         document.getElementById("xswap-out").value = fmt(res.amountOut, 9);
         document.getElementById("xswap-newprice").value = fmt(res.newPrice, 9);
         document.getElementById("xswap-used").value = fmt(res.usedIn, 9);
+      }
+    });
+
+    /* --- CLMM single-range exact-out swap model --- */
+    document.getElementById("cxo-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmSwapExactOut(
+        document.getElementById("cxo-liq").value,
+        document.getElementById("cxo-lower").value,
+        document.getElementById("cxo-upper").value,
+        document.getElementById("cxo-price").value,
+        document.getElementById("cxo-aout").value,
+        document.getElementById("cxo-fee").value,
+        document.getElementById("cxo-dir").value
+      );
+      var out = document.getElementById("cxo-result");
+      var inName = res !== null && res.direction === "ba" ? "B" : "A";
+      var outName = res !== null && res.direction === "ba" ? "A" : "B";
+      if (res === null) {
+        out.textContent = "Enter a positive model liquidity L (tool 8 reports it for a deposit), a range with lower below upper, a current price strictly inside the range, an exact amount out above 0 and no more than this range holds of that token at the current price, and a fee tier between 0 and 9999 bps. A target above the range's holding is rejected, not priced — one range cannot pay out more than it holds.";
+        document.getElementById("cxo-ain").value = "";
+        document.getElementById("cxo-newprice").value = "";
+        document.getElementById("cxo-maxout").value = "";
+      } else if (res.hitBoundary) {
+        out.textContent = "Model output: receiving exactly " + fmt(res.amountOut, 4) + " " + outName + " takes every " + outName +
+          " this range holds at the starting price and walks the price to your range's " + (res.direction === "ab" ? "lower" : "upper") + " edge at " +
+          fmt(res.direction === "ab" ? res.lowerPrice : res.upperPrice, 4) + " B per A. You need ≈ " + fmt(res.amountIn, 4) + " " + inName +
+          " in (≈ " + fmt(res.feePaid, 6) + " of it is the fee at a " + fmt(res.feeBps, 0) + " bps tier) — exactly tool 42's capped used-in for the same walk. One unit more out has no price inside this range at all. Price impact ≈ " + fmt(res.priceImpactPct, 2) +
+          "% against the starting price, fee included. A CLMM single-range exact-out swap model — not a live quote, not financial advice.";
+        document.getElementById("cxo-ain").value = fmt(res.amountIn, 9);
+        document.getElementById("cxo-newprice").value = fmt(res.newPrice, 9);
+        document.getElementById("cxo-maxout").value = fmt(res.maxOut, 9);
+      } else {
+        out.textContent = "Model output: receiving exactly " + fmt(res.amountOut, 4) + " " + outName + " needs ≈ " + fmt(res.amountIn, 4) + " " + inName +
+          " in (≈ " + fmt(res.feePaid, 6) + " of it is the fee at a " + fmt(res.feeBps, 0) + " bps tier), walking the price from " + fmt(res.price, 4) +
+          " to ≈ " + fmt(res.newPrice, 4) + " B per A — still inside your range, which holds at most ≈ " + fmt(res.maxOut, 4) + " " + outName +
+          " to pay out at the starting price. Price impact ≈ " + fmt(res.priceImpactPct, 2) +
+          "% against the starting price, fee included, measured the way tool 1 measures it. Feeding that amount in to tool 42 returns this target. A CLMM single-range exact-out swap model — not a live quote, not financial advice.";
+        document.getElementById("cxo-ain").value = fmt(res.amountIn, 9);
+        document.getElementById("cxo-newprice").value = fmt(res.newPrice, 9);
+        document.getElementById("cxo-maxout").value = fmt(res.maxOut, 9);
       }
     });
 

@@ -998,6 +998,36 @@
         <button type="submit" class="btn primary">Price this two-range CLMM swap</button>
         <p id="xswap-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="cxo-calc">
+        <h3>44 · CLMM single-range exact-out swap model</h3>
+        <p>Tool 42 prices a CLMM swap forwards — a fixed amount in, whatever comes out — and tool 6 prices a constant-product swap backwards. This prices a concentrated range backwards: enter the range's liquidity L (tool 8 reports it), the range, the current price and the exact amount out you need, and it solves the range's own curve for the amount in that buys it, grossed up for the fee exactly the way tool 42 takes the fee off the input — so feeding the answer back into tool 42 returns your target. The wall from tool 42 becomes a hard limit here, not a partial fill: the most one range can ever pay out is the token it actually holds at the current price, so a target above that holding is rejected, not priced — a real swap would continue into the next tick range, which this single-range model does not invent, and a live pool might fill a target this model refuses. A target exactly equal to the holding is priced: it walks the price to the range's edge and costs exactly tool 42's capped used-in for the same walk. One range at one L only — a real pool's liquidity varies tick by tick. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="cxo-liq">Range liquidity L (model — tool 8 reports it)</label>
+        <input id="cxo-liq" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="cxo-lower">Range lower price (token B per token A)</label>
+        <input id="cxo-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="cxo-upper">Range upper price (token B per token A)</label>
+        <input id="cxo-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="cxo-price">Current price (token B per token A)</label>
+        <input id="cxo-price" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="cxo-dir">Direction</label>
+        <select id="cxo-dir">
+          <option value="ab">Pay token A, receive token B (price falls)</option>
+          <option value="ba">Pay token B, receive token A (price rises)</option>
+        </select>
+        <label for="cxo-aout">Exact amount out wanted (token you receive)</label>
+        <input id="cxo-aout" inputmode="decimal" placeholder="e.g. 50" autocomplete="off">
+        <label for="cxo-fee">Fee, basis points (25 = 0.25%)</label>
+        <input id="cxo-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="cxo-ain">Amount in needed (model)</label>
+        <input id="cxo-ain" readonly placeholder="—" autocomplete="off">
+        <label for="cxo-newprice">Price after the swap, B per A (model)</label>
+        <input id="cxo-newprice" readonly placeholder="—" autocomplete="off">
+        <label for="cxo-maxout">Most this range can pay out at the starting price (model)</label>
+        <input id="cxo-maxout" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Price this exact-out CLMM swap</button>
+        <p id="cxo-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1025,6 +1055,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=47"></script>
+<script src="app.js?v=48"></script>
 </body>
 </html>
