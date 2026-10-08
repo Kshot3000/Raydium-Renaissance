@@ -2295,7 +2295,14 @@ function clmmSwap(liquidityStr, lowerStr, upperStr, priceStr, amountInStr, feeBp
       sNew = sa;
       hitBoundary = true;
     }
-    amountOut = liquidity * (s - sNew);
+    /* Uncapped, the output is formed as netUsed·s·sNew (paying A) or
+       netUsed/(s·sNew) (paying B) — algebraically L·(s − sNew) and
+       L·(1/s − 1/sNew), but without their cancellation: when the price
+       barely moves (a small swap against a deep range), sNew rounds
+       back to s and the difference form returns exactly 0, which the
+       guard below would reject as invalid input. The capped branch
+       keeps the edge difference, where sNew IS the edge, assigned. */
+    amountOut = hitBoundary ? liquidity * (s - sNew) : netUsed * s * sNew;
     spotRate = price;
   } else {
     netMax = liquidity * (sb - s);
@@ -2309,7 +2316,7 @@ function clmmSwap(liquidityStr, lowerStr, upperStr, priceStr, amountInStr, feeBp
       sNew = sb;
       hitBoundary = true;
     }
-    amountOut = liquidity * (1 / s - 1 / sNew);
+    amountOut = hitBoundary ? liquidity * (1 / s - 1 / sNew) : netUsed / (s * sNew);
     spotRate = 1 / price;
   }
   if (!Number.isFinite(amountOut) || amountOut <= 0) return null;
@@ -2406,7 +2413,11 @@ function clmmCrossSwap(liquidityStr, lowerStr, upperStr, priceStr, amountInStr, 
     } else {
       netUsed2 = netMax2; used2 = netMax2 / (1 - f); sNew = sOut; hitSecond = true;
     }
-    out2 = liquidity2 * (sB - sNew);
+    /* Cancellation-free output, as in tool 42: netUsed2·sB·sNew here,
+       netUsed2/(sB·sNew) paying B; the capped branch keeps the edge
+       difference. A remainder that barely enters this range against a
+       deep L2 otherwise rounds sNew back to sB and reads as 0 out. */
+    out2 = hitSecond ? liquidity2 * (sB - sNew) : netUsed2 * sB * sNew;
   } else {
     netMax2 = liquidity2 * (sOut - sB);
     if (remaining * (1 - f) <= netMax2) {
@@ -2415,7 +2426,7 @@ function clmmCrossSwap(liquidityStr, lowerStr, upperStr, priceStr, amountInStr, 
     } else {
       netUsed2 = netMax2; used2 = netMax2 / (1 - f); sNew = sOut; hitSecond = true;
     }
-    out2 = liquidity2 * (1 / sB - 1 / sNew);
+    out2 = hitSecond ? liquidity2 * (1 / sB - 1 / sNew) : netUsed2 / (sB * sNew);
   }
   if (!Number.isFinite(out2) || out2 <= 0) return null;
   var usedIn = leg1.usedIn + used2;
@@ -2479,13 +2490,22 @@ function clmmSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amountOutS
     maxOut = liquidity * (s - sa);
     if (amountOut > maxOut) return null;
     sNew = s - amountOut / liquidity;
-    netIn = liquidity * (1 / sNew - 1 / s);
+    /* Cancellation-free net-in: L·(1/sNew − 1/s) formed as
+       amountOut/(s·sNew) — since s − sNew is exactly amountOut/L,
+       the reciprocal difference is the product form without its
+       cancellation. A dust target against a deep range otherwise
+       rounds sNew back to s, reads as 0 in, and is rejected below;
+       a target a few ulps larger prices off a quantized reciprocal
+       difference with errors of tens of percent. */
+    netIn = amountOut / (s * sNew);
     spotRate = price;
   } else {
     maxOut = liquidity * (1 / s - 1 / sb);
     if (amountOut > maxOut) return null;
     sNew = 1 / (1 / s - amountOut / liquidity);
-    netIn = liquidity * (sNew - s);
+    /* Mirror: L·(sNew − s) formed as amountOut·s·sNew, since
+       1/s − 1/sNew is exactly amountOut/L. */
+    netIn = amountOut * s * sNew;
     spotRate = 1 / price;
   }
   if (!Number.isFinite(netIn) || netIn <= 0 || !Number.isFinite(sNew)) return null;
@@ -2601,10 +2621,13 @@ function clmmCrossSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amoun
   var sNew, net2;
   if (direction === "ab") {
     sNew = sa - remainder / liquidity2;
-    net2 = liquidity2 * (1 / sNew - 1 / sa);
+    /* Cancellation-free leg-2 net-in, as in tool 44: remainder/(sa·sNew)
+       instead of L2·(1/sNew − 1/sa). A dust remainder against a deep
+       second range otherwise rounds sNew back to sa and reads as 0. */
+    net2 = remainder / (sa * sNew);
   } else {
     sNew = 1 / (1 / sb - remainder / liquidity2);
-    net2 = liquidity2 * (sNew - sb);
+    net2 = remainder * sb * sNew;
   }
   if (!Number.isFinite(net2) || net2 <= 0 || !Number.isFinite(sNew)) return null;
   var in2 = net2 / (1 - f);
@@ -2691,7 +2714,12 @@ function clmmTripleSwap(liquidityStr, lowerStr, upperStr, priceStr, amountInStr,
     } else {
       netUsed3 = netMax3; used3 = netMax3 / (1 - f); sNew = sOut; hitThird = true;
     }
-    out3 = liquidity3 * (sB - sNew);
+    /* Cancellation-free output, as in tools 42/43: netUsed3·sB·sNew
+       here, netUsed3/(sB·sNew) paying B; the capped branch keeps the
+       edge difference. A remainder that barely enters this range
+       against a deep L3 otherwise rounds sNew back to sB, reads as
+       0 out, and the whole swap is rejected as invalid input. */
+    out3 = hitThird ? liquidity3 * (sB - sNew) : netUsed3 * sB * sNew;
   } else {
     netMax3 = liquidity3 * (sOut - sB);
     if (remaining * (1 - f) <= netMax3) {
@@ -2700,7 +2728,7 @@ function clmmTripleSwap(liquidityStr, lowerStr, upperStr, priceStr, amountInStr,
     } else {
       netUsed3 = netMax3; used3 = netMax3 / (1 - f); sNew = sOut; hitThird = true;
     }
-    out3 = liquidity3 * (1 / sB - 1 / sNew);
+    out3 = hitThird ? liquidity3 * (1 / sB - 1 / sNew) : netUsed3 / (sB * sNew);
   }
   if (!Number.isFinite(out3) || out3 <= 0) return null;
   var usedIn = prev.usedIn + used3;

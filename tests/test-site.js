@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=52"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=53"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1960,7 +1960,13 @@ check("CSWAP near the top a modest pay-B still caps", cswCap.hitBoundary === tru
 near("CSWAP capped out is the A the position holds at 1.2 (Tool 9)", cswCap.amountOut, app.clmmPositionAtPrice(CSWAP_L, "0.8", "1.25", "1.2").amountA, 1e-9);
 near("CSWAP capped used-in", cswCap.usedIn, 21.450113597138653, 1e-9);
 const cswTiny = app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "0.01", 25, "ab");
-near("CSWAP tiny swap impact is the fee plus a whisper of curve", cswTiny.priceImpactPct, 0.251050443696, 1e-9);
+near("CSWAP tiny swap impact is the fee plus a whisper of curve", cswTiny.priceImpactPct, 0.251050444986, 1e-9);
+const cswDust = app.clmmSwap("1000000000000", "0.64", "1.44", "1", "0.00005", 0, "ab");
+check("CSWAP dust swap against a deep range still settles", cswDust !== null);
+near("CSWAP dust swap out is the net in at the spot price", cswDust && cswDust.amountOut, 0.00005, 1e-9);
+const cswDustBa = app.clmmSwap("1000000000000", "0.64", "1.44", "1", "0.00005", 0, "ba");
+check("CSWAP dust swap paying B still settles", cswDustBa !== null);
+near("CSWAP dust swap paying B out is the net in at the spot price", cswDustBa && cswDustBa.amountOut, 0.00005, 1e-9);
 check("CSWAP rejects a price at or outside the range", app.clmmSwap(CSWAP_L, "0.8", "1.25", "1.25", "10", 25, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "0.8", "10", 25, "ba") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "1.3", "10", 25, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "0.7", "10", 25, "ba") === null);
 check("CSWAP rejects bad ranges, amounts, fees and directions", app.clmmSwap(CSWAP_L, "1.25", "0.8", "1", "10", 25, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "0", 25, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "-5", 25, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "10", 10000, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "10", -1, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "10", 25, "xx") === null && app.clmmSwap("abc", "0.8", "1.25", "1", "10", 25, "ab") === null && app.clmmSwap("0", "0.8", "1.25", "1", "10", 25, "ab") === null);
 for (const [liq, lo, hi, px, ain, fee, dir] of [
@@ -2043,6 +2049,13 @@ near("XSWAP just-past leg 2 used-in", xsJust.leg2UsedIn, 0.9163921052736725, 1e-
 near("XSWAP just-past leg 2 out", xsJust.leg2Out, 0.7306502319430709, 1e-9);
 check("XSWAP rejects an outer edge on the wrong side or at the shared edge", app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", XSWAP_L, "0.9") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", XSWAP_L, "0.8") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ba", XSWAP_L, "1.1") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ba", XSWAP_L, "1.25") === null);
 check("XSWAP rejects a second range with no liquidity or bad inputs", app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", "0", "0.64") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", "abc", "0.64") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", XSWAP_L, "abc") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "xx", XSWAP_L, "0.64") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "0", 25, "ab", XSWAP_L, "0.64") === null);
+const xsDust = app.clmmCrossSwap("100", "0.64", "1.44", "1", "25.00005", 0, "ab", "1000000000000", "0.36");
+check("XSWAP dust remainder past the wall against a deep second range still settles", xsDust !== null && xsDust.crossed === true);
+near("XSWAP dust remainder leg 2 out", xsDust && xsDust.leg2Out, 0.000032, 1e-6);
+near("XSWAP dust remainder total out", xsDust && xsDust.amountOut, 20.000032, 1e-9);
+const xsDustBa = app.clmmCrossSwap("100", String(1 / 1.44), String(1 / 0.64), "1", "25.00005", 0, "ba", "1000000000000", String(1 / 0.36));
+check("XSWAP dust remainder paying B still settles", xsDustBa !== null && xsDustBa.crossed === true);
+near("XSWAP dust remainder paying B leg 2 out", xsDustBa && xsDustBa.leg2Out, 0.000032, 1e-6);
 check("XSWAP inherits tool 42's rejection of a price outside the active range", app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1.3", "200", 25, "ab", XSWAP_L, "0.64") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "0.8", "200", 25, "ba", XSWAP_L, "1.5625") === null);
 for (const [liq, lo, hi, px, ain, fee, dir, liq2, outer] of [
   [XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", XSWAP_L, "0.64"],
@@ -2088,7 +2101,12 @@ const cxo50ba = app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "50", 25, "ba");
 near("CXO target 50 amount in", cxo50ab.amountIn, 52.91870125317499, 1e-9);
 near("CXO target 50 new price", cxo50ab.newPrice, 0.8972135954999578, 1e-9);
 near("CXO target 50 impact", cxo50ab.priceImpactPct, 5.515443848879176, 1e-9);
-check("CXO centred range mirrors exactly", cxo50ba.amountIn === cxo50ab.amountIn && cxo50ba.feePaid === cxo50ab.feePaid && cxo50ba.priceImpactPct === cxo50ab.priceImpactPct);
+/* The cancellation-free net-in forms (amountOut/(s·s′) paying A,
+   amountOut·s·s′ paying B) round per direction, so the mirror agrees
+   to within ~1 ulp rather than bit-exactly — both directions sit
+   within 1 ulp of the 60-digit value 52.918701253174998958…; the old
+   difference forms' bit-equality was a rounding coincidence. */
+check("CXO centred range mirrors to within a rounding ulp per direction", Math.abs(cxo50ba.amountIn - cxo50ab.amountIn) <= 1e-12 && cxo50ba.feePaid === cxo50ab.feePaid && Math.abs(cxo50ba.priceImpactPct - cxo50ab.priceImpactPct) <= 1e-12);
 near("CXO mirror new price", cxo50ba.newPrice, 1.1145618000168243, 1e-9);
 near("CXO mirror max out is tool 9's A holding", cxo50ba.maxOut, app.clmmPositionAtPrice(CXO_L, "0.8", "1.25", "1").amountA, 1e-9);
 const cxo0 = app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "10", 0, "ab");
@@ -2108,6 +2126,14 @@ check("CXO tiny range half-drained is NOT the boundary", cxoTiny !== null && cxo
 near("CXO tiny half-drained new price stays inside", cxoTiny.newPrice, 0.8972135954999579, 1e-9);
 const cxoTinyBa = app.clmmSwapExactOut("0.00000001", "0.8", "1.25", "1", "0.000000000527864045", 25, "ba");
 check("CXO tiny range half-drained pay-B is NOT the boundary", cxoTinyBa !== null && cxoTinyBa.hitBoundary === false);
+const cxoDust = app.clmmSwapExactOut("1000000000000", "0.64", "1.44", "1", "0.00005", 0, "ab");
+check("CXO dust target against a deep range still settles", cxoDust !== null);
+near("CXO dust target amount in is the target at the spot price", cxoDust && cxoDust.amountIn, 0.00005, 1e-12);
+near("CXO dust amount in round-trips through tool 42", cxoDust && app.clmmSwap("1000000000000", "0.64", "1.44", "1", String(cxoDust.amountIn), 0, "ab").amountOut, 0.00005, 1e-12);
+const cxoDustBa = app.clmmSwapExactOut("1000000000000", "0.64", "1.44", "1", "0.00005", 0, "ba");
+check("CXO dust target paying B still settles", cxoDustBa !== null);
+near("CXO dust target paying B amount in is the target at the spot price", cxoDustBa && cxoDustBa.amountIn, 0.00005, 1e-12);
+near("CXO near-dust target prices off the curve, not a quantized reciprocal difference", app.clmmSwapExactOut("1000000000000", "0.64", "1.44", "1", "0.0005", 0, "ab").amountIn, 0.0005, 1e-12);
 check("CXO near-max within relative tolerance is the boundary, 1e-9 short is not", app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", String(100 * (1 - 5e-13)), 25, "ab").hitBoundary === true && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", String(100 * (1 - 1e-9)), 25, "ab").hitBoundary === false);
 check("CXO rejects a target above the range's holding", app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "100.000001", 25, "ab") === null && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "101", 25, "ba") === null && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1.2", "17.47016", 25, "ba") === null);
 near("CXO max out at 1.2 is tool 9's A holding there", app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1.2", "10", 25, "ba").maxOut, app.clmmPositionAtPrice(CXO_L, "0.8", "1.25", "1.2").amountA, 1e-9);
@@ -2196,6 +2222,13 @@ near("XXO thin second range amount in for 105", xxoThin.amountIn, 118.7422447914
 near("XXO deep second range amount in for 105", xxoDeep.amountIn, 118.3529720454146, 1e-9);
 check("XXO a thinner second range costs more and walks further", xxoThin.amountIn > xxoDeep.amountIn && xxoThin.newPrice < xxoDeep.newPrice);
 check("XXO a thin second range shrinks the combined ceiling", app.clmmCrossSwapExactOut(XXO_L, "0.8", "1.25", "1", "150", 25, "ab", "94.72135954999577", "0.64") === null);
+const xxoDust = app.clmmCrossSwapExactOut("100", "0.64", "1.44", "1", "20.00005", 0, "ab", "1000000000000", "0.36");
+check("XXO dust remainder past the wall against a deep second range still settles", xxoDust !== null && xxoDust.crossed === true);
+near("XXO dust remainder leg 2 out", xxoDust && xxoDust.leg2Out, 0.00005, 1e-9);
+near("XXO dust remainder leg 2 in is the remainder at the edge price", xxoDust && xxoDust.leg2In, 0.000078125, 1e-9);
+const xxoDustBa = app.clmmCrossSwapExactOut("100", String(1 / 1.44), String(1 / 0.64), "1", "20.00005", 0, "ba", "1000000000000", String(1 / 0.36));
+check("XXO dust remainder paying B still settles", xxoDustBa !== null && xxoDustBa.crossed === true);
+near("XXO dust remainder paying B leg 2 out", xxoDustBa && xxoDustBa.leg2Out, 0.00005, 1e-9);
 const xxo0 = app.clmmCrossSwapExactOut(XXO_L, "0.8", "1.25", "1", "150", 0, "ab", XXO_L, "0.64");
 check("XXO zero-fee charges no fee", xxo0.feePaid === 0);
 near("XXO zero-fee amount in is the net in", xxo0.amountIn, 178.22330191934265, 1e-9);
@@ -2288,6 +2321,13 @@ near("TSWAP zero-fee amount out", tsZero.amountOut, 227.83914453408232, 1e-9);
 check("TSWAP zero fee charges no fee", tsZero.feePaid === 0);
 check("TSWAP rejects a third outer edge on the wrong side or at the second edge", app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "0.7") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "0.64") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ba", TSWAP_L, "1.5625", TSWAP_L, "1.4") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ba", TSWAP_L, "1.5625", TSWAP_L, "1.5625") === null);
 check("TSWAP rejects bad third ranges and inherited bad inputs", app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ab", TSWAP_L, "0.64", "0", "0.512") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "abc") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "xx", TSWAP_L, "0.64", TSWAP_L, "0.512") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 10000, "ab", TSWAP_L, "0.64", TSWAP_L, "0.512") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1.25", "300", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "0.512") === null);
+const tsDust = app.clmmTripleSwap("100", "0.64", "1.44", "1", "66.66671666666667", 0, "ab", "100", "0.36", "1000000000000", "0.16");
+check("TSWAP dust remainder past the second wall against a deep third range still settles", tsDust !== null && tsDust.enteredThird === true);
+near("TSWAP dust remainder leg 3 out", tsDust && tsDust.leg3Out, 0.000018, 1e-6);
+near("TSWAP dust remainder total out", tsDust && tsDust.amountOut, 40.000018, 1e-9);
+const tsDustBa = app.clmmTripleSwap("100", String(1 / 1.44), String(1 / 0.64), "1", "66.66671666666667", 0, "ba", "100", String(1 / 0.36), "1000000000000", String(1 / 0.16));
+check("TSWAP dust remainder paying B still settles", tsDustBa !== null && tsDustBa.enteredThird === true);
+near("TSWAP dust remainder paying B leg 3 out", tsDustBa && tsDustBa.leg3Out, 0.000018, 1e-6);
 for (const [liq, lo, hi, px, ain, fee, dir, liq2, outer, liq3, outer3] of [
   [TSWAP_L, "0.8", "1.25", "1", "75", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "0.512"],
   [TSWAP_L, "0.8", "1.25", "1.2", "500", 25, "ba", TSWAP_L, "1.5625", "500", "2"],
