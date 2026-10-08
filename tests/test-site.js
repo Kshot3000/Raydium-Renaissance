@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=22"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=23"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -993,6 +993,69 @@ check("NET rejects bad fees", app.netLpReturn(2, "1000", "-1") === null && app.n
 check("all net controls labelled", ["net-ratio", "net-deposit", "net-fees", "net-out"].every(id => html.includes(`for="${id}"`)));
 check("net tool present in index.html", html.includes('id="net-calc"') && html.includes('id="net-result"'));
 check("net honesty: still-behind-holding and not-live labels", html.includes("still behind holding") && html.includes("not a live quote, not financial advice"));
+
+/* ---------- 25 · CLMM capital-efficiency calculator ---------- */
+/* headline vectors verified in a clean foreground run BEFORE these
+   tests were written: L=1000 in 0.8-1.25 at price 1 — ranged position
+   holds 105.57280900008415 of each token (Tool 9), worth
+   211.1456180001683 B; a full-range position with the same L holds
+   1000 of each, worth 2000 B; efficiency 9.472135954999576 */
+const eff1 = app.clmmCapitalEfficiency("1000", "0.8", "1.25", "1");
+near("EFF headline ranged amount A", eff1.rangeAmountA, 105.57280900008415, 1e-9);
+near("EFF headline ranged amount B", eff1.rangeAmountB, 105.57280900008415, 1e-9);
+near("EFF headline ranged value", eff1.rangeValueB, 211.1456180001683, 1e-9);
+near("EFF headline full amount A", eff1.fullAmountA, 1000, 1e-12);
+near("EFF headline full amount B", eff1.fullAmountB, 1000, 1e-12);
+near("EFF headline full value", eff1.fullValueB, 2000, 1e-9);
+near("EFF headline efficiency", eff1.efficiency, 9.472135954999576, 1e-9);
+near("EFF headline capital saved", eff1.capitalSavedPct, 89.44271909999159, 1e-9);
+/* the closed form for a geometrically centred range: upper = P*m,
+   lower = P/m gives efficiency exactly 1 / (1 - 1/sqrt(m)) */
+near("EFF matches closed form 1/(1-1/sqrt(m))", eff1.efficiency, 1 / (1 - 1 / Math.sqrt(1.25)), 1e-12);
+/* the same multiple at a different price scale: 1.6-2.5 at price 2 is
+   the same m = 1.25 geometry, so the efficiency is the same number */
+const effGeo = app.clmmCapitalEfficiency("500", "1.6", "2.5", "2");
+near("EFF geometric scaling keeps efficiency", effGeo.efficiency, eff1.efficiency, 1e-9);
+/* efficiency is a property of the range and price, not of L: the same
+   range at L=250 quotes the same multiple as at L=1000 */
+const effSmall = app.clmmCapitalEfficiency("250", "0.8", "1.25", "1");
+near("EFF efficiency independent of L", effSmall.efficiency, eff1.efficiency, 1e-12);
+near("EFF capital scales with L", effSmall.rangeValueB, eff1.rangeValueB / 4, 1e-9);
+/* composition: the ranged holdings ARE Tool 9's at the same inputs,
+   and feeding Tool 8's own planned liquidity returns Tool 8's exact
+   deposit amounts — the tool can never drift from its own forms */
+for (const [l, lo, up, p] of [["1000", "0.8", "1.25", "1"], ["500", "1.6", "2.5", "2"], ["777.5", "0.5", "3", "1.1"], ["250", "90", "110", "100"]]) {
+  const e = app.clmmCapitalEfficiency(l, lo, up, p);
+  const pos = app.clmmPositionAtPrice(l, lo, up, p);
+  check("EFF composes Tool 9 @" + p, e !== null && pos !== null && e.rangeAmountA === pos.amountA && e.rangeAmountB === pos.amountB && e.rangeValueB === pos.valueInB);
+}
+const effPlan = app.clmmRangePlan("1", "0.8", "1.25", "100");
+const effFromPlan = app.clmmCapitalEfficiency(String(effPlan.liquidity), "0.8", "1.25", "1");
+check("EFF Tool 8 liquidity returns Tool 8 deposits", effFromPlan.rangeAmountA === effPlan.amountA && effFromPlan.rangeAmountB === effPlan.requiredB);
+/* full-range holdings are the ranged formulas at the limits: exactly
+   L/sqrt(P) of A and L*sqrt(P) of B, worth 2*L*sqrt(P) in B */
+for (const [l, lo, up, p] of [["1000", "0.8", "1.25", "1"], ["500", "1.6", "2.5", "2"], ["250", "90", "110", "100"]]) {
+  const e = app.clmmCapitalEfficiency(l, lo, up, p);
+  near("EFF full-range identity @" + p, e.fullValueB, 2 * Number(l) * Math.sqrt(Number(p)), 1e-6);
+  check("EFF full range always costs more @" + p, e.efficiency > 1 && e.capitalSavedPct > 0 && e.capitalSavedPct < 100);
+}
+/* narrower range = more efficiency, wider = less, and a very wide
+   range tends to the full-range 1x: 0.01-100 at price 1 is 10/9 */
+const effNarrow = app.clmmCapitalEfficiency("1000", "0.9", "1.111111111", "1");
+const effWide = app.clmmCapitalEfficiency("1000", "0.01", "100", "1");
+check("EFF narrower range is more efficient", effNarrow.efficiency > eff1.efficiency && eff1.efficiency > effWide.efficiency);
+near("EFF wide-range efficiency tends to 1", effWide.efficiency, 10 / 9, 1e-9);
+/* off-centre inside the range still quotes, and differs from centred:
+   at price 1.1 in 0.8-1.25 the multiple is 9.564161970472108 */
+const effOff = app.clmmCapitalEfficiency("1000", "0.8", "1.25", "1.1");
+near("EFF off-centre efficiency", effOff.efficiency, 9.564161970472108, 1e-9);
+check("EFF rejects price at or outside the edges", app.clmmCapitalEfficiency("1000", "0.8", "1.25", "0.8") === null && app.clmmCapitalEfficiency("1000", "0.8", "1.25", "1.25") === null && app.clmmCapitalEfficiency("1000", "0.8", "1.25", "0.5") === null && app.clmmCapitalEfficiency("1000", "0.8", "1.25", "2") === null);
+check("EFF rejects bad liquidity", app.clmmCapitalEfficiency("0", "0.8", "1.25", "1") === null && app.clmmCapitalEfficiency("-5", "0.8", "1.25", "1") === null && app.clmmCapitalEfficiency("", "0.8", "1.25", "1") === null);
+check("EFF rejects bad range / price", app.clmmCapitalEfficiency("1000", "1.25", "0.8", "1") === null && app.clmmCapitalEfficiency("1000", "1", "1", "1") === null && app.clmmCapitalEfficiency("1000", "0", "1.25", "1") === null && app.clmmCapitalEfficiency("1000", "0.8", "1.25", "0") === null);
+check("EFF rejects junk", app.clmmCapitalEfficiency("x", "0.8", "1.25", "1") === null && app.clmmCapitalEfficiency("1000", "x", "1.25", "1") === null && app.clmmCapitalEfficiency("1000", "0.8", "1.25", "") === null);
+check("all eff controls labelled", ["eff-l", "eff-lower", "eff-upper", "eff-price", "eff-out"].every(id => html.includes(`for="${id}"`)));
+check("eff tool present in index.html", html.includes('id="eff-calc"') && html.includes('id="eff-result"'));
+check("eff honesty: not-free-money and not-live labels", html.includes("not free money") && html.includes("no efficiency is quoted"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

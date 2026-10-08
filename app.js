@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus twenty-four fully
+/* Raydium Renaissance hub logic: project filtering plus twenty-five fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -11,7 +11,8 @@
    price-impact trade sizer, an LP-token share & value calculator, a
    single-sided zap-in planner, a single-sided zap-out planner, an IL
    tolerance band, a CLMM symmetric-range planner, a two-hop swap
-   model, and a net LP return calculator.
+   model, a net LP return calculator, and a CLMM capital-efficiency
+   calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1107,8 +1108,58 @@ function netLpReturn(priceRatio, depositStr, feesStr) {
   };
 }
 
+/* ---------- 25 · CLMM capital-efficiency calculator ---------- */
+/* Why concentrated liquidity exists at all: a position spread over every
+   possible price (a constant-product pool, in CLMM terms the full range
+   0 to infinity) keeps most of its capital parked at prices the market
+   never visits. A CLMM range position puts the same model liquidity L
+   to work with far less capital. The comparison is exact at the current
+   price: the ranged position holds Tool 9's own amounts for that L, and
+   a full-range position with the same L holds L/sqrt(P) of A and
+   L*sqrt(P) of B (the ranged formulas as lower -> 0 and upper -> inf).
+   Capital efficiency = full-range value in B / ranged value in B, both
+   valued at the current price. For a geometrically centred range
+   (lower = P/m, upper = P*m) it collapses to 1 / (1 - 1/sqrt(m)) —
+   the 0.8-1.25 range at price 1 (m = 1.25) is 9.47x — and the tests
+   assert that closed form exactly. The honest half the headline hides:
+   the multiple is not free money. The ranged position earns fees only
+   while the price stays inside the range, and its impermanent loss per
+   unit of liquidity is amplified by the same concentration (Tool 12
+   measures it). Efficiency here compares capital for the same L at one
+   price, nothing more. The price must sit strictly inside the range —
+   at or outside an edge the position is single-sided and out of the
+   market, so "efficiency" would be a number about a position that is
+   not providing tradeable liquidity at the current price. Model only:
+   no live pool state, not financial advice. */
+function clmmCapitalEfficiency(liquidityStr, lowerStr, upperStr, priceStr) {
+  var pos = clmmPositionAtPrice(liquidityStr, lowerStr, upperStr, priceStr);
+  if (pos === null || pos.status !== "in") return null;
+  var s = Math.sqrt(pos.price);
+  var fullAmountA = pos.liquidity / s;
+  var fullAmountB = pos.liquidity * s;
+  var fullValueB = fullAmountA * pos.price + fullAmountB;
+  if (!Number.isFinite(fullValueB) || !(fullValueB > 0) || !(pos.valueInB > 0)) return null;
+  var efficiency = fullValueB / pos.valueInB;
+  if (!Number.isFinite(efficiency) || !(efficiency > 0)) return null;
+  return {
+    liquidity: pos.liquidity,
+    lowerPrice: pos.lowerPrice,
+    upperPrice: pos.upperPrice,
+    price: pos.price,
+    rangeAmountA: pos.amountA,
+    rangeAmountB: pos.amountB,
+    rangeValueB: pos.valueInB,
+    rangeBValuePct: pos.bValuePct,
+    fullAmountA: fullAmountA,
+    fullAmountB: fullAmountB,
+    fullValueB: fullValueB,
+    efficiency: efficiency,
+    capitalSavedPct: (1 - pos.valueInB / fullValueB) * 100
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -1756,6 +1807,30 @@ if (typeof document !== "undefined") {
           ". Against the $" + fmt(res.deposit, 2) + " deposit itself that is a net return of " + fmt(res.netReturnPct, 2) +
           "% — a different bottom line: a position can be up on its deposit and still behind holding, and only the holding comparison says whether providing liquidity beat doing nothing. A net-return model for a 50/50 constant-product position, not a live Raydium quote — fees are counted in $ terms outside the pool, with no compounding modelled, and CLMM positions are range-based and differ.";
         document.getElementById("net-out").value = fmt(res.netVsHold, 2);
+      }
+    });
+
+    /* --- CLMM capital efficiency --- */
+    document.getElementById("eff-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmCapitalEfficiency(
+        document.getElementById("eff-l").value,
+        document.getElementById("eff-lower").value,
+        document.getElementById("eff-upper").value,
+        document.getElementById("eff-price").value
+      );
+      var out = document.getElementById("eff-result");
+      if (res === null) {
+        out.textContent = "Enter a model liquidity above 0, a lower price below an upper price, and a current price strictly inside the range — at or outside an edge the position is single-sided and out of the market, so capital efficiency is not quoted for it.";
+        document.getElementById("eff-out").value = "";
+      } else {
+        out.textContent = "Model output: at price " + fmt(res.price, 6) + " B per A, liquidity " + fmt(res.liquidity, 4) +
+          " inside " + fmt(res.lowerPrice, 6) + "–" + fmt(res.upperPrice, 6) + " needs " + fmt(res.rangeAmountA, 4) + " A + " +
+          fmt(res.rangeAmountB, 4) + " B (worth " + fmt(res.rangeValueB, 4) + " B). A full-range position with the same liquidity needs " +
+          fmt(res.fullAmountA, 4) + " A + " + fmt(res.fullAmountB, 4) + " B (worth " + fmt(res.fullValueB, 4) +
+          " B) — so the ranged position puts the same liquidity to work with " + fmt(res.efficiency, 2) +
+          "x less capital (" + fmt(res.capitalSavedPct, 2) + "% less). The honest half: that multiple is not free money — the position earns fees only while the price stays inside the range, and its impermanent loss per unit of liquidity is amplified by the same concentration (Tool 12 measures it). A capital-efficiency model at one price, not a live Raydium quote.";
+        document.getElementById("eff-out").value = fmt(res.efficiency, 4);
       }
     });
 
