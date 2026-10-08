@@ -907,6 +907,33 @@
         <button type="submit" class="btn primary">How long to break even?</button>
         <p id="cpbed-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="sxo-calc">
+        <h3>41 · Split-route exact-out swap model</h3>
+        <p>Tool 28 splits a fixed amount in across two pools for the same pair; tool 6 prices a fixed amount out of one pool. This composes them: enter the exact amount out you need and two pools for the same pair, and it splits the target across them so the total amount in is smallest — each leg priced by tool 6's own exact-out maths, so the legs can never drift from that tool. Two identical 1,000/1,000 pools at 25 bps split a target of exactly 100 about evenly and charge ≈105.53 in total, against ≈111.39 from either pool alone. Deeper pools and lower-fee pools take the larger share of the target, and a pool that cannot supply any of it is routed around entirely. One honest case the single-pool tool cannot express: a target at or above either pool's whole reserve out has no single-pool price at all, yet the two pools combined can still supply it — then splitting is not a saving, it is the only route, and the tool says so rather than inventing a comparison. A target at or above the two reserves out combined can never be paid out, so it is rejected, not priced. Only two pools, same pair and direction — a real aggregator searches many venues, and the extra leg's network and transaction costs are not modelled. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="sxo-r1in">Pool 1 — reserve in (token you pay)</label>
+        <input id="sxo-r1in" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sxo-r1out">Pool 1 — reserve out (token you receive)</label>
+        <input id="sxo-r1out" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sxo-fee1">Pool 1 — fee, basis points (25 = 0.25%)</label>
+        <input id="sxo-fee1" inputmode="numeric" value="25" autocomplete="off">
+        <label for="sxo-r2in">Pool 2 — reserve in (token you pay)</label>
+        <input id="sxo-r2in" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sxo-r2out">Pool 2 — reserve out (token you receive)</label>
+        <input id="sxo-r2out" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sxo-fee2">Pool 2 — fee, basis points (25 = 0.25%)</label>
+        <input id="sxo-fee2" inputmode="numeric" value="25" autocomplete="off">
+        <label for="sxo-aout">Exact amount out wanted (token you receive)</label>
+        <input id="sxo-aout" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="sxo-ain">Total amount in needed (model)</label>
+        <input id="sxo-ain" readonly placeholder="—" autocomplete="off">
+        <label for="sxo-o1">Amount out from pool 1 (model)</label>
+        <input id="sxo-o1" readonly placeholder="—" autocomplete="off">
+        <label for="sxo-o2">Amount out from pool 2 (model)</label>
+        <input id="sxo-o2" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Price this split exact-out</button>
+        <p id="sxo-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -934,6 +961,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=42"></script>
+<script src="app.js?v=43"></script>
 </body>
 </html>

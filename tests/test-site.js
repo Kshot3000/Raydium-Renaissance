@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=42"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=43"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists forty tools", readme.includes("forty pool tools") || readme.includes("all forty"));
+check("README lists forty-one tools", readme.includes("forty-one pool tools") || readme.includes("all forty-one"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1853,6 +1853,73 @@ check("all cpbed controls labelled", ["cpbed-ratio", "cpbed-deposit", "cpbed-vol
 check("cpbed tool present in index.html", html.includes('id="cpbed-calc"') && html.includes('id="cpbed-result"'));
 check("cpbed honesty: joined tools and not-live labels", html.includes("This joins them") && html.includes("not live pool state") && html.includes("not a forecast") && html.includes("never breaks even"));
 check("guide covers CP break-even days", guide.includes("Ask how long break-even takes, in days"));
+
+/* ---------- Tool 41: Split-route exact-out swap model (SXO) ---------- */
+const sxo1 = app.splitExactOut("1000", "1000", "1000", "1000", "100", 25, 25);
+check("SXO headline settles", sxo1 !== null);
+check("SXO headline amounts", sxo1.totalIn === "105.526975335" && sxo1.in1 === "52.762998935" && sxo1.in2 === "52.7639764" && sxo1.out1 === "49.999560021" && sxo1.out2 === "50.000439979");
+check("SXO headline total out is the canonical target", sxo1.totalOut === "100" && app.splitExactOut("1000", "1000", "1000", "1000", "100.00", 25, 25).totalOut === "100");
+check("SXO headline singles and best single", sxo1.single1In === "111.389585075" && sxo1.single2In === "111.389585075" && sxo1.bestSingleIn === "111.389585075");
+near("SXO headline saving vs best single", sxo1.savingVsBestSingle, 5.86260974, 1e-9);
+near("SXO headline split is about even", sxo1.splitPct1, 49.999560021, 1e-9);
+check("SXO headline legs are Tool 6 verbatim", app.cpSwapExactOut("1000", "1000", sxo1.out1, 25).amountIn === sxo1.in1 && app.cpSwapExactOut("1000", "1000", sxo1.out2, 25).amountIn === sxo1.in2);
+check("SXO headline leg outs sum exactly to the target", app.parseScaled(sxo1.out1) + app.parseScaled(sxo1.out2) === app.parseScaled("100"));
+check("SXO headline leg ins sum exactly to the total in", app.parseScaled(sxo1.in1) + app.parseScaled(sxo1.in2) === app.parseScaled(sxo1.totalIn));
+check("SXO headline round-trip: paying each leg's in forward returns at least its out",
+  app.parseScaled(app.cpSwap("1000", "1000", sxo1.in1, 25).out) >= app.parseScaled(sxo1.out1) &&
+  app.parseScaled(app.cpSwap("1000", "1000", sxo1.in2, 25).out) >= app.parseScaled(sxo1.out2));
+const sxo0 = app.splitExactOut("1000", "1000", "1000", "1000", "100", 0, 0);
+check("SXO zero-fee amounts", sxo0 !== null && sxo0.totalIn === "105.263157896" && sxo0.bestSingleIn === "111.111111112");
+near("SXO zero-fee total is the closed form plus ceiling dust", Number(sxo0.totalIn), 2 * 1000 * 50 / 950, 2e-9);
+const sxoDeep = app.splitExactOut("1000", "1000", "10000", "10000", "100", 25, 25);
+check("SXO deep pool takes most of the target", sxoDeep !== null && sxoDeep.splitPct1 < 10 && sxoDeep.totalIn === "101.170357088" && sxoDeep.bestSingleIn === "101.263259159");
+const sxoDeep500 = app.splitExactOut("1000", "1000", "10000", "10000", "500", 25, 25);
+check("SXO deep pool at target 500", sxoDeep500 !== null && sxoDeep500.totalIn === "525.122329636" && sxoDeep500.bestSingleIn === "527.634876666" && sxoDeep500.splitPct1 > 9 && sxoDeep500.splitPct1 < 9.2);
+const sxoFee = app.splitExactOut("1000", "1000", "1000", "1000", "100", 25, 100);
+check("SXO cheaper-fee pool takes the larger share", sxoFee !== null && sxoFee.splitPct1 > 51 && sxoFee.splitPct1 < 53 && sxoFee.totalIn === "105.919156749");
+const sxoSpot = app.splitExactOut("500", "2000", "2000", "500", "200", 30, 5);
+check("SXO much better spot price takes the whole target", sxoSpot !== null && sxoSpot.out1 === "200" && sxoSpot.out2 === "0" && sxoSpot.totalIn === "55.722723728" && sxoSpot.totalIn === sxoSpot.single1In);
+const sxoOnly = app.splitExactOut("1000", "1000", "1000", "1000", "1500", 25, 25);
+check("SXO target no single pool can supply still settles split", sxoOnly !== null && sxoOnly.out1 === "750" && sxoOnly.out2 === "750" && sxoOnly.totalIn === "6015.037593986");
+check("SXO split-only case honestly has no single-pool comparison", sxoOnly.single1In === null && sxoOnly.single2In === null && sxoOnly.bestSingleIn === null && sxoOnly.savingVsBestSingle === null);
+const sxoDrain = app.splitExactOut("1000", "1000", "1000", "1000", "1999", 25, 25);
+check("SXO near-drain target settles evenly", sxoDrain !== null && sxoDrain.splitPct1 === 50 && sxoDrain.bestSingleIn === null);
+check("SXO target at or above the combined reserves is rejected, not priced",
+  app.splitExactOut("1000", "1000", "1000", "1000", "2000", 25, 25) === null &&
+  app.splitExactOut("1000", "1000", "1000", "1000", "2500", 25, 25) === null);
+const sxoFallback = app.splitExactOut("1000", "1000", "1000", "1000", "100", 10000, 25);
+check("SXO unusable pool is routed around entirely", sxoFallback !== null && sxoFallback.out1 === "0" && sxoFallback.in1 === "0" && sxoFallback.totalIn === sxoFallback.single2In);
+check("SXO blank pool falls back, blank target is rejected",
+  app.splitExactOut("", "1000", "1000", "1000", "100", 25, 25).totalIn === "111.389585075" &&
+  app.splitExactOut("1000", "1000", "1000", "1000", "", 25, 25) === null &&
+  app.splitExactOut("1000", "1000", "1000", "1000", " ", 25, 25) === null);
+check("SXO both pools unusable is rejected", app.splitExactOut("1000", "1000", "1000", "1000", "100", 10000, -1) === null);
+const sxoDust = app.splitExactOut("1000", "1000", "1000", "1000", "0.000000001", 25, 25);
+check("SXO dust target settles through one leg", sxoDust !== null && sxoDust.totalIn === "0.000000003" && app.parseScaled(sxoDust.out1) + app.parseScaled(sxoDust.out2) === 1n);
+check("SXO rejects zero, negative and junk targets", app.splitExactOut("1000", "1000", "1000", "1000", "0", 25, 25) === null && app.splitExactOut("1000", "1000", "1000", "1000", "-5", 25, 25) === null && app.splitExactOut("1000", "1000", "1000", "1000", "abc", 25, 25) === null);
+for (const [r1in, r1out, r2in, r2out, tgt, f1, f2] of [
+  ["1000", "1000", "1000", "1000", "100", 25, 25],
+  ["1000", "1000", "10000", "10000", "500", 25, 25],
+  ["1234", "987", "5555", "4444", "321", 30, 10],
+  ["500", "2000", "2000", "500", "200", 30, 5],
+  ["777", "3333", "2222", "888", "250", 5, 60]
+]) {
+  const x = app.splitExactOut(r1in, r1out, r2in, r2out, tgt, f1, f2);
+  const tag = "SXO sweep " + tgt + " @" + r1in + "/" + r1out + "+" + r2in + "/" + r2out;
+  check(tag + " settles", x !== null);
+  check(tag + " outs sum exactly to target", app.parseScaled(x.out1) + app.parseScaled(x.out2) === app.parseScaled(tgt));
+  check(tag + " ins sum exactly to total", app.parseScaled(x.in1) + app.parseScaled(x.in2) === app.parseScaled(x.totalIn));
+  check(tag + " leg 1 is Tool 6 verbatim", x.out1 === "0" || app.cpSwapExactOut(r1in, r1out, x.out1, f1).amountIn === x.in1);
+  check(tag + " leg 2 is Tool 6 verbatim", x.out2 === "0" || app.cpSwapExactOut(r2in, r2out, x.out2, f2).amountIn === x.in2);
+  check(tag + " never costs more than the best single pool", x.bestSingleIn === null || app.parseScaled(x.totalIn) <= app.parseScaled(x.bestSingleIn));
+  const rt1 = x.in1 === "0" ? 0n : app.parseScaled(app.cpSwap(r1in, r1out, x.in1, f1).out);
+  const rt2 = x.in2 === "0" ? 0n : app.parseScaled(app.cpSwap(r2in, r2out, x.in2, f2).out);
+  check(tag + " round-trip returns at least each leg's out", rt1 >= app.parseScaled(x.out1) && rt2 >= app.parseScaled(x.out2));
+}
+check("all sxo controls labelled", ["sxo-r1in", "sxo-r1out", "sxo-fee1", "sxo-r2in", "sxo-r2out", "sxo-fee2", "sxo-aout", "sxo-ain", "sxo-o1", "sxo-o2"].every(id => html.includes(`for="${id}"`)));
+check("sxo tool present in index.html", html.includes('id="sxo-calc"') && html.includes('id="sxo-result"'));
+check("sxo honesty: composed tools and not-live labels", html.includes("splits the target across them") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("network and transaction costs are not modelled"));
+check("guide covers split-route exact-out", guide.includes("Split the target, don't just split the payment"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

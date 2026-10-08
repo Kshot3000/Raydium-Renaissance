@@ -1331,6 +1331,80 @@ function splitSwap(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2OutStr,
   };
 }
 
+/* ---------- 41 · Split-route exact-out swap model ---------- */
+/* Tool 28 splits a fixed amount IN across two pools for the same pair;
+   Tool 6 prices a fixed amount OUT of one pool. This composes them:
+   given an exact amount out wanted, the target is split across the two
+   pools so the TOTAL amount in is smallest, with every candidate leg
+   priced by Tool 6's own cpSwapExactOut — so each leg is exactly what
+   Tool 6 would quote for that leg, rounded up at 9dp the way Tool 6
+   rounds. The total input is convex in the split (each pool's marginal
+   cost of one more unit out rises as its reserve drains), so a ternary
+   search over the split share finds it; endpoints are candidates too,
+   so a pool that cannot supply any of the target (dust/invalid
+   reserves, or a target at or above its whole reserve out) is routed
+   around entirely. Three honest edges: a target no single pool can
+   supply (at or above either pool's reserve out) can still be priced
+   when the pools COMBINE to cover it — then there is no single-pool
+   figure to save against, and bestSingleIn/saving are null, not a
+   made-up comparison; a target at or above the two reserves combined
+   can never be paid out (a constant-product pool never pays its whole
+   reserve), so it is rejected, not priced; and the modelled saving
+   ignores the extra leg's network/transaction costs, exactly as
+   Tool 28 discloses. Only two pools, same pair and direction. */
+function splitExactOut(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2OutStr, amountOutStr, fee1Bps, fee2Bps) {
+  if (amountOutStr == null || String(amountOutStr).trim() === "") return null;
+  var target = parseScaled(amountOutStr);
+  if (target === null || target <= 0n) return null;
+  var single1 = cpSwapExactOut(reserve1InStr, reserve1OutStr, amountOutStr, fee1Bps);
+  var single2 = cpSwapExactOut(reserve2InStr, reserve2OutStr, amountOutStr, fee2Bps);
+  function legIn(which, y) {
+    if (y === 0n) return 0n;
+    var r = which === 1
+      ? cpSwapExactOut(reserve1InStr, reserve1OutStr, formatScaled(y), fee1Bps)
+      : cpSwapExactOut(reserve2InStr, reserve2OutStr, formatScaled(y), fee2Bps);
+    return r === null ? null : parseScaled(r.amountIn);
+  }
+  function combinedIn(y) {
+    var a = legIn(1, y), b = legIn(2, target - y);
+    return (a === null || b === null) ? null : a + b;
+  }
+  var lo = 0, hi = 1, i, midFrac;
+  for (i = 0; i < 200; i++) {
+    var m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
+    var v1 = combinedIn(BigInt(Math.round(m1 * Number(target))));
+    var v2 = combinedIn(BigInt(Math.round(m2 * Number(target))));
+    if (v1 === null && v2 === null) break;
+    if (v2 === null || (v1 !== null && v1 <= v2)) hi = m2; else lo = m1;
+  }
+  var mid = BigInt(Math.round(((lo + hi) / 2) * Number(target)));
+  var cands = [0n, target, mid, mid - 1n, mid + 1n];
+  var bestY = null, bestIn = null;
+  for (i = 0; i < cands.length; i++) {
+    var y = cands[i];
+    if (y < 0n || y > target) continue;
+    var v = combinedIn(y);
+    if (v !== null && (bestIn === null || v < bestIn)) { bestIn = v; bestY = y; }
+  }
+  if (bestY === null) return null;
+  var in1 = legIn(1, bestY), in2 = legIn(2, target - bestY);
+  var single1Scaled = single1 === null ? null : parseScaled(single1.amountIn);
+  var single2Scaled = single2 === null ? null : parseScaled(single2.amountIn);
+  var bestSingle = single1Scaled === null ? single2Scaled
+    : (single2Scaled === null ? single1Scaled : (single1Scaled < single2Scaled ? single1Scaled : single2Scaled));
+  return {
+    in1: formatScaled(in1), in2: formatScaled(in2),
+    out1: formatScaled(bestY), out2: formatScaled(target - bestY),
+    totalIn: formatScaled(bestIn),
+    totalOut: formatScaled(target),
+    single1In: single1 === null ? null : single1.amountIn,
+    single2In: single2 === null ? null : single2.amountIn,
+    bestSingleIn: bestSingle === null ? null : formatScaled(bestSingle),
+    savingVsBestSingle: bestSingle === null ? null : scaledToNumber(bestSingle - bestIn),
+    splitPct1: scaledToNumber(bestY) / scaledToNumber(target) * 100
+  };
+}
+
 /* ---------- 29 · CLMM net return calculator ---------- */
 /* Tool 24 settles a constant-product position against holding with the
    fees it actually earned; this is that settlement for a CLMM position.
@@ -2142,7 +2216,7 @@ function twoHopExactOut(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2Ou
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -3254,6 +3328,42 @@ if (typeof document !== "undefined") {
           " bps tier × your " + fmt(res.sharePct, 4) + "% share), covering that shortfall takes ≈ " + fmt(res.daysToBreakEven, 2) +
           " days — assuming volume, tier, share and price all hold still, which they will not. A constant-product break-even days model — not a live quote, not financial advice.";
         document.getElementById("cpbed-out").value = fmt(res.daysToBreakEven, 2);
+      }
+    });
+
+    /* --- split-route exact-out model --- */
+    document.getElementById("sxo-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = splitExactOut(
+        document.getElementById("sxo-r1in").value,
+        document.getElementById("sxo-r1out").value,
+        document.getElementById("sxo-r2in").value,
+        document.getElementById("sxo-r2out").value,
+        document.getElementById("sxo-aout").value,
+        document.getElementById("sxo-fee1").value,
+        document.getElementById("sxo-fee2").value
+      );
+      var out = document.getElementById("sxo-result");
+      if (res === null) {
+        out.textContent = "Enter an exact amount out wanted (up to 9 decimal places) that the two pools' reserves out can cover between them, and two pools with positive reserves — at least one usable pool — plus each pool's fee in basis points (25 = 0.25%). A target at or above the two reserves out combined can never be paid out, so it is rejected, not priced.";
+        document.getElementById("sxo-ain").value = "";
+        document.getElementById("sxo-o1").value = "";
+        document.getElementById("sxo-o2").value = "";
+      } else if (res.bestSingleIn === null) {
+        out.textContent = "Model output: no single pool can supply ≈ " + res.totalOut + " — the target is at or above either pool's reserve out — but split across both it takes ≈ " + res.totalIn +
+          " in total: ≈ " + res.out1 + " from pool 1 for ≈ " + res.in1 + " in, and ≈ " + res.out2 + " from pool 2 for ≈ " + res.in2 +
+          " in. Each leg is priced by Tool 6's own exact-out model for that pool. A split-route exact-out model over two pools you typed — not a live aggregator quote, not financial advice.";
+        document.getElementById("sxo-ain").value = res.totalIn;
+        document.getElementById("sxo-o1").value = res.out1;
+        document.getElementById("sxo-o2").value = res.out2;
+      } else {
+        out.textContent = "Model output: receiving exactly ≈ " + res.totalOut + " costs ≈ " + res.totalIn +
+          " in total when split — ≈ " + res.out1 + " from pool 1 (" + fmt(res.splitPct1, 2) + "% of the target) for ≈ " + res.in1 +
+          " in, and ≈ " + res.out2 + " from pool 2 for ≈ " + res.in2 + " in. The cheapest single-pool route costs ≈ " + res.bestSingleIn +
+          ", so splitting saves ≈ " + fmt(res.savingVsBestSingle, 6) + " in this model, before the extra leg's network and transaction costs, which are not modelled. Each leg is priced by Tool 6's own exact-out model for that pool. A split-route exact-out model over two pools you typed — not a live aggregator quote, not financial advice.";
+        document.getElementById("sxo-ain").value = res.totalIn;
+        document.getElementById("sxo-o1").value = res.out1;
+        document.getElementById("sxo-o2").value = res.out2;
       }
     });
 
