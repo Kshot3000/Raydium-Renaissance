@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=39"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=40"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1778,6 +1778,7 @@ check("guide covers planning a CP deposit from a wallet", guide.includes("Plan a
 const hxo1 = app.twoHopExactOut("1000", "1000", "1000", "1000", "100", 25, 25);
 check("HXO headline settles", hxo1 !== null);
 check("HXO headline amounts", hxo1.amountIn === "125.666720863" && hxo1.midIn === "111.389585075" && hxo1.out === "100");
+check("HXO out is canonical for padded spellings", app.twoHopExactOut("1000", "1000", "1000", "1000", "100.00", 25, 25).out === "100" && app.twoHopExactOut("1000", "1000", "1000", "1000", " 100 ", 25, 25).out === "100" && app.twoHopExactOut("1000", "1000", "1000", "1000", "0100", 25, 25).out === "100");
 near("HXO headline combined impact", hxo1.priceImpactPct, 20.42443750162103, 1e-9);
 near("HXO headline spot is product of hops", hxo1.spotPrice, 1, 1e-12);
 check("HXO combined impact worse than either hop", hxo1.priceImpactPct > hxo1.hop1ImpactPct && hxo1.priceImpactPct > hxo1.hop2ImpactPct);

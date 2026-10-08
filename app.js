@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus thirty-eight fully
+/* Raydium Renaissance hub logic: project filtering plus thirty-nine fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -18,8 +18,8 @@
    constant-product required-volume planner, a CLMM single-sided
    zap-in planner, a CLMM single-sided zap-out planner, a CLMM
    token-B deposit planner, a CLMM re-centre / rebalance planner,
-   a CLMM withdrawal planner, and a constant-product wallet-balance
-   deposit planner.
+   a CLMM withdrawal planner, a constant-product wallet-balance
+   deposit planner, and a two-hop exact-out swap model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -2072,7 +2072,7 @@ function twoHopExactOut(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2Ou
   return {
     amountIn: hop1.amountIn,
     midIn: hop2.amountIn,
-    out: amountOutStr,
+    out: formatScaled(parseScaled(amountOutStr)),
     hop1ImpactPct: hop1.priceImpactPct,
     hop2ImpactPct: hop2.priceImpactPct,
     spotPrice: spotPrice,
