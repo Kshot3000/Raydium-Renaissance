@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=35"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=36"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1632,6 +1632,11 @@ check("REB narrower liquidity exceeds the old", rbNarrow.newLiquidity > 947.2135
 near("REB narrower target A unchanged", rbNarrow.targetA, 100, 1e-6);
 near("REB narrower target B unchanged", rbNarrow.targetB, 100, 1e-6);
 near("REB narrower swap is ~zero", rbNarrow.swapSellAmount, 0, 1e-6);
+check("REB narrower same-centre needs NO swap (dust delta is not a swap)", rbNarrow.swapSide === "none" && rbNarrow.deltaA === 0 && rbNarrow.deltaB === 0 && rbNarrow.swapSellAmount === 0 && rbNarrow.swapBuyAmount === 0);
+const rbWide = app.clmmRebalance(L36, "0.8", "1.25", "1", "50");
+check("REB wider same-centre needs NO swap", rbWide.swapSide === "none" && rbWide.swapSellAmount === 0);
+near("REB wider target A unchanged", rbWide.targetA, 100, 1e-6);
+near("REB wider target B unchanged", rbWide.targetB, 100, 1e-6);
 /* composition sweep: value preserved, target 50/50, swap identity deltaB = -deltaA * P */
 for (const [l, lo, hi, cur, w] of [[L36, "0.8", "1.25", "1.1", "20"], [L36, "0.8", "1.25", "0.9", "50"], ["500", "0.5", "2", "1.7", "10"], ["250", "2", "4.5", "3", "33"], [L36, "0.8", "1.25", "1.25", "25"]]) {
   const p = app.clmmRebalance(l, lo, hi, cur, w);

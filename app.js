@@ -1874,6 +1874,13 @@ function clmmRebalance(liquidityStr, oldLowerStr, oldUpperStr, currentStr, width
   if (target === null) return null;
   var deltaA = target.amountA - cur.amountA;
   var deltaB = target.amountB - cur.amountB;
+  /* A re-centre that keeps the price at the old range's centre (only the
+     width changes) needs NO swap in exact maths — the holdings are already
+     split 50/50 — but floating point leaves a dust delta (~1e-12), which
+     would otherwise surface as "Swap ≈ 0.0000 of token B for ≈ 0.0000 of
+     token A". A swap worth at most 1e-9 of the position's value is dust:
+     snap it to no swap. */
+  if (Math.abs(deltaA * current) <= 1e-9 * cur.valueInB) { deltaA = 0; deltaB = 0; }
   var swapSide = "none", swapSellToken = null, swapSellAmount = 0, swapBuyToken = null, swapBuyAmount = 0;
   if (deltaA > 0) {
     swapSide = "buyA"; swapSellToken = "B"; swapSellAmount = deltaA * current; swapBuyToken = "A"; swapBuyAmount = deltaA;
@@ -2905,7 +2912,7 @@ if (typeof document !== "undefined") {
       }
       var state = res.curStatus === "in" ? "inside its old range" : (res.curStatus === "below" ? "below its old range, holding only token A" : "above its old range, holding only token B");
       var swapText = res.swapSide === "none"
-        ? "No swap is needed — your old range already is that centred range, so the position carries over unchanged"
+        ? "No swap is needed — the re-centred position holds exactly the token mix you already have (only the range and its liquidity change)"
         : "Swap ≈ " + fmt(res.swapSellAmount, 4) + " of token " + res.swapSellToken + " for ≈ " + fmt(res.swapBuyAmount, 4) + " of token " + res.swapBuyToken + " at the current spot price (a real swap also pays its fee and price impact — see tools 1, 33 and 34)";
       out.textContent = "Model output: at " + fmt(res.currentPrice, 4) + " B per A your position is " + state + ", holding ≈ " + fmt(res.curA, 4) + " A and ≈ " + fmt(res.curB, 4) +
         " B (worth ≈ " + fmt(res.valueInB, 4) + " B). Re-centred ±" + fmt(res.widthPct, 2) + "% it covers " + fmt(res.newLower, 4) + "–" + fmt(res.newUpper, 4) +
