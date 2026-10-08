@@ -1400,7 +1400,11 @@ function clmmIlBand(liquidityStr, lowerStr, upperStr, entryPriceStr, feesStr) {
   var atEntry = clmmVsHold(liquidityStr, lowerStr, upperStr, entryPriceStr, entryPriceStr);
   if (atEntry === null) return null;
   var entry = atEntry.entryPrice, lower = atEntry.lowerPrice, upper = atEntry.upperPrice;
-  if (entry < lower || entry > upper) return null;
+  /* Strictly inside: at exactly an edge Tool 8 classifies the position
+     as below/above (single token), so an edge entry has no two-sided
+     band either — the lower edge used to slip through with a degenerate
+     zero-cap band while the upper edge fell out as null. */
+  if (entry <= lower || entry >= upper) return null;
   var entryValueInB = atEntry.entryAmountA * entry + atEntry.entryAmountB;
   var base = {
     liquidity: atEntry.liquidity, lowerPrice: lower, upperPrice: upper,

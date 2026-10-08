@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=28"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=29"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1296,6 +1296,8 @@ const cb0 = app.clmmIlBand("947.2135955", "0.8", "1.25", "1", "0");
 check("CBAND zero fees collapse to entry", cb0.priceHigh === 1 && cb0.priceLow === 1 && cb0.moveUpPct === 0 && cb0.moveDownPct === 0 && cb0.downUnbounded === false);
 check("CBAND rejects negative or blank fees", app.clmmIlBand("947.2135955", "0.8", "1.25", "1", "-1") === null && app.clmmIlBand("947.2135955", "0.8", "1.25", "1", "") === null);
 check("CBAND rejects entry outside the range", app.clmmIlBand("947.2135955", "0.8", "1.25", "2", "5") === null && app.clmmIlBand("947.2135955", "0.8", "1.25", "0.5", "5") === null);
+check("CBAND rejects entry exactly on either range edge (single-token position)", app.clmmIlBand("947.2135955", "0.8", "1.25", "0.8", "5") === null && app.clmmIlBand("947.2135955", "0.8", "1.25", "1.25", "5") === null && app.clmmIlBand("947.2135955", "0.8", "1.25", "0.8", "0") === null);
+check("CBAND accepts entry just inside either edge", app.clmmIlBand("947.2135955", "0.8", "1.25", "0.800001", "5") !== null && app.clmmIlBand("947.2135955", "0.8", "1.25", "1.249999", "5") !== null);
 check("CBAND rejects bad position inputs", app.clmmIlBand("0", "0.8", "1.25", "1", "5") === null && app.clmmIlBand("947.2135955", "1.25", "0.8", "1", "5") === null && app.clmmIlBand("947.2135955", "0.8", "1.25", "0", "5") === null);
 check("all cband controls labelled", ["cband-l", "cband-lower", "cband-upper", "cband-entry", "cband-fees", "cband-out"].every(id => html.includes(`for="${id}"`)));
 check("cband tool present in index.html", html.includes('id="cband-calc"') && html.includes('id="cband-result"'));
