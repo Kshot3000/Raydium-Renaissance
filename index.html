@@ -1028,6 +1028,40 @@
         <button type="submit" class="btn primary">Price this exact-out CLMM swap</button>
         <p id="cxo-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="xxo-calc">
+        <h3>45 · CLMM two-range exact-out swap model</h3>
+        <p>Tool 44 prices an exact-out swap against the active range alone and rejects any target above what that range holds, because a real fill would cross into the next tick range. This model supplies that second range instead of inventing it: enter the active range (its liquidity L, its bounds, the current price), the exact amount out you need and your direction, then the second range's own liquidity L and its outer edge — the two ranges share the active range's edge by construction, so paying token A the second range runs from your outer edge up to the active range's lower edge, and paying token B from its upper edge up to your outer edge. If the target fits inside the active range, the second range is never entered and the answer is exactly tool 44's. If it crosses, the active range is drained first at exactly tool 44's edge price, and the remainder is solved on the second range's own curve from the shared edge, under the same maths and the same fee tier — so the total fee is still exactly the tier's share of the total input. The ceiling is combined now, and it is still a ceiling: a target above what the two ranges hold together is rejected, not priced — a real fill would need a third range, which this model does not invent either. That second range's depth is the price of crossing: the same remainder costs noticeably more input, and walks the price noticeably further, against a thin second range than against a deep one. Two ranges at two constant L values only — a real pool's liquidity varies tick by tick. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="xxo-liq">Active range liquidity L (model — tool 8 reports it)</label>
+        <input id="xxo-liq" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="xxo-lower">Active range lower price (token B per token A)</label>
+        <input id="xxo-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="xxo-upper">Active range upper price (token B per token A)</label>
+        <input id="xxo-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="xxo-price">Current price (token B per token A)</label>
+        <input id="xxo-price" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="xxo-dir">Direction</label>
+        <select id="xxo-dir">
+          <option value="ab">Pay token A, receive token B (price falls)</option>
+          <option value="ba">Pay token B, receive token A (price rises)</option>
+        </select>
+        <label for="xxo-aout">Exact amount out wanted (token you receive)</label>
+        <input id="xxo-aout" inputmode="decimal" placeholder="e.g. 150" autocomplete="off">
+        <label for="xxo-fee">Fee, basis points (25 = 0.25%)</label>
+        <input id="xxo-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="xxo-liq2">Second range liquidity L (model)</label>
+        <input id="xxo-liq2" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="xxo-outer">Second range outer edge price (token B per token A)</label>
+        <input id="xxo-outer" inputmode="decimal" placeholder="e.g. 0.64 paying A · 1.5625 paying B" autocomplete="off">
+        <label for="xxo-ain">Amount in needed (model)</label>
+        <input id="xxo-ain" readonly placeholder="—" autocomplete="off">
+        <label for="xxo-newprice">Price after the swap, B per A (model)</label>
+        <input id="xxo-newprice" readonly placeholder="—" autocomplete="off">
+        <label for="xxo-maxout">Most the two ranges can pay out together (model)</label>
+        <input id="xxo-maxout" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Price this two-range exact-out CLMM swap</button>
+        <p id="xxo-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1055,6 +1089,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=49"></script>
+<script src="app.js?v=50"></script>
 </body>
 </html>

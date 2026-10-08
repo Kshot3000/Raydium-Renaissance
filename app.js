@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus forty-four fully
+/* Raydium Renaissance hub logic: project filtering plus forty-five fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -22,8 +22,8 @@
    deposit planner, a two-hop exact-out swap model, a
    constant-product break-even days calculator, a split-route
    exact-out swap model, a CLMM single-range swap model, a
-   CLMM two-range swap model, and a CLMM single-range exact-out
-   swap model.
+   CLMM two-range swap model, a CLMM single-range exact-out
+   swap model, and a CLMM two-range exact-out swap model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -2511,8 +2511,113 @@ function clmmSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amountOutS
   };
 }
 
+/* ---------- 45 · CLMM two-range exact-out swap model ---------- */
+/* Tool 44 prices an exact-out swap against the one active range and
+   rejects any target above what that range holds, because a real fill
+   would cross into the next tick range at liquidity the single-range
+   model refused to invent. Tool 43 supplies that next range for the
+   forwards case; this tool supplies it backwards. The two ranges
+   share the active range's edge by construction — paying A, the
+   second range is [outer, lower]; paying B it is [upper, outer] — so
+   only its liquidity L2 and its outer edge are inputs. A target that
+   fits inside the first range IS tool 44's answer, verbatim
+   (crossed false, both legs but the first zero). A bigger target
+   drains the first range completely — leg 1 is tool 44 priced at
+   exactly that range's holding, which costs exactly tool 42's capped
+   used-in — and the remainder is solved on the second range's own
+   curve starting from the shared edge (paying A: s' = √lower −
+   remainder/L2, net A = L2 × (1/s' − 1/√lower); paying B mirrored),
+   grossed up for the fee the same way on both legs, so the total fee
+   is still exactly the tier's share of the total input. Feeding the
+   total amount in back into tool 43 returns the target and lands on
+   the same price (asserted across a sweep in the tests). The ceiling
+   is now combined, and it is still a ceiling: the most the two
+   ranges can pay out together is what they hold together — the first
+   range's holding at the current price plus the second range's
+   holding of the out-token at the shared edge — and a target above
+   that sum is rejected, not priced, because the third range a live
+   fill would need is not invented here either. A target exactly
+   equal to the combined holding is priced and walks the price to the
+   outer edge. The second range's depth is the price of crossing:
+   the same remainder out of a tenth-depth second range costs more
+   input and walks the price far further than out of a deep one.
+   Two ranges at two constant L values only, floating point like
+   every CLMM tool here. Model only: a real CLMM pool's liquidity
+   varies tick by tick and its live quote is on the pool page. */
+function clmmCrossSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amountOutStr, feeBps, direction, secondLiquidityStr, secondOuterStr) {
+  var liquidity = Number(liquidityStr), lower = Number(lowerStr), upper = Number(upperStr);
+  var price = Number(priceStr), amountOut = Number(amountOutStr), fee = Number(feeBps);
+  var liquidity2 = Number(secondLiquidityStr), outer = Number(secondOuterStr);
+  if (![liquidity, lower, upper, price, amountOut, liquidity2, outer].every(Number.isFinite)) return null;
+  if (liquidity <= 0 || lower <= 0 || upper <= 0 || price <= 0 || amountOut <= 0 || liquidity2 <= 0 || outer <= 0) return null;
+  if (lower >= upper) return null;
+  if (price <= lower || price >= upper) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  if (direction !== "ab" && direction !== "ba") return null;
+  if (direction === "ab" && !(outer < lower)) return null;
+  if (direction === "ba" && !(outer > upper)) return null;
+  var f = fee / 10000;
+  var sa = Math.sqrt(lower), sb = Math.sqrt(upper), s = Math.sqrt(price), sOut = Math.sqrt(outer);
+  var maxOut1, maxOut2, spotRate;
+  if (direction === "ab") {
+    maxOut1 = liquidity * (s - sa);
+    maxOut2 = liquidity2 * (sa - sOut);
+    spotRate = price;
+  } else {
+    maxOut1 = liquidity * (1 / s - 1 / sb);
+    maxOut2 = liquidity2 * (1 / sb - 1 / sOut);
+    spotRate = 1 / price;
+  }
+  var base = {
+    liquidity: liquidity, lowerPrice: lower, upperPrice: upper,
+    secondLiquidity: liquidity2,
+    secondLowerPrice: direction === "ab" ? outer : upper,
+    secondUpperPrice: direction === "ab" ? lower : outer,
+    boundaryPrice: direction === "ab" ? lower : upper,
+    price: price, direction: direction, amountOut: amountOut,
+    maxOut: maxOut1 + maxOut2, firstMaxOut: maxOut1, secondMaxOut: maxOut2,
+    feeBps: fee, feePct: fee / 100, spotRate: spotRate
+  };
+  if (amountOut <= maxOut1) {
+    var leg1 = clmmSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amountOutStr, feeBps, direction);
+    if (leg1 === null) return null;
+    return Object.assign(base, {
+      crossed: false, hitSecondBoundary: false,
+      amountIn: leg1.amountIn, netIn: leg1.netIn, feePaid: leg1.feePaid,
+      leg1In: leg1.amountIn, leg1Out: leg1.amountOut, leg2In: 0, leg2Out: 0,
+      newPrice: leg1.newPrice, effectiveRate: leg1.effectiveRate,
+      priceImpactPct: leg1.priceImpactPct
+    });
+  }
+  var remainder = amountOut - maxOut1;
+  if (remainder > maxOut2) return null;
+  var leg1Full = clmmSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, String(maxOut1), feeBps, direction);
+  if (leg1Full === null) return null;
+  var sNew, net2;
+  if (direction === "ab") {
+    sNew = sa - remainder / liquidity2;
+    net2 = liquidity2 * (1 / sNew - 1 / sa);
+  } else {
+    sNew = 1 / (1 / sb - remainder / liquidity2);
+    net2 = liquidity2 * (sNew - sb);
+  }
+  if (!Number.isFinite(net2) || net2 <= 0 || !Number.isFinite(sNew)) return null;
+  var in2 = net2 / (1 - f);
+  var amountIn = leg1Full.amountIn + in2;
+  var netIn = leg1Full.netIn + net2;
+  var effectiveRate = amountOut / amountIn;
+  return Object.assign(base, {
+    crossed: true,
+    hitSecondBoundary: Math.abs(remainder - maxOut2) <= maxOut2 * 1e-12,
+    amountIn: amountIn, netIn: netIn, feePaid: amountIn - netIn,
+    leg1In: leg1Full.amountIn, leg1Out: maxOut1, leg2In: in2, leg2Out: remainder,
+    newPrice: sNew * sNew, effectiveRate: effectiveRate,
+    priceImpactPct: (1 - effectiveRate / spotRate) * 100
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -3797,6 +3902,64 @@ if (typeof document !== "undefined") {
         document.getElementById("cxo-ain").value = fmt(res.amountIn, 9);
         document.getElementById("cxo-newprice").value = fmt(res.newPrice, 9);
         document.getElementById("cxo-maxout").value = fmt(res.maxOut, 9);
+      }
+    });
+
+    /* --- CLMM two-range exact-out swap model --- */
+    document.getElementById("xxo-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmCrossSwapExactOut(
+        document.getElementById("xxo-liq").value,
+        document.getElementById("xxo-lower").value,
+        document.getElementById("xxo-upper").value,
+        document.getElementById("xxo-price").value,
+        document.getElementById("xxo-aout").value,
+        document.getElementById("xxo-fee").value,
+        document.getElementById("xxo-dir").value,
+        document.getElementById("xxo-liq2").value,
+        document.getElementById("xxo-outer").value
+      );
+      var out = document.getElementById("xxo-result");
+      var inName = res !== null && res.direction === "ba" ? "B" : "A";
+      var outName = res !== null && res.direction === "ba" ? "A" : "B";
+      var clear = function () {
+        document.getElementById("xxo-ain").value = "";
+        document.getElementById("xxo-newprice").value = "";
+        document.getElementById("xxo-maxout").value = "";
+      };
+      var fill = function () {
+        document.getElementById("xxo-ain").value = fmt(res.amountIn, 9);
+        document.getElementById("xxo-newprice").value = fmt(res.newPrice, 9);
+        document.getElementById("xxo-maxout").value = fmt(res.maxOut, 9);
+      };
+      if (res === null) {
+        out.textContent = "Enter a positive model liquidity L for the active range (tool 8 reports it for a deposit), a range with lower below upper, a current price strictly inside it, an exact amount out above 0 and no more than the two ranges hold of that token together, a fee tier between 0 and 9999 bps, a positive liquidity for the second range, and its outer edge strictly beyond the shared edge on the side your direction walks toward — below the active range's lower edge when paying token A, above its upper edge when paying token B. A target above the two ranges' combined holding is rejected, not priced — two ranges cannot pay out more than they hold together.";
+        clear();
+      } else if (!res.crossed) {
+        out.textContent = "Model output: receiving exactly " + fmt(res.amountOut, 4) + " " + outName + " needs ≈ " + fmt(res.amountIn, 4) + " " + inName +
+          " in (≈ " + fmt(res.feePaid, 6) + " of it is the fee at a " + fmt(res.feeBps, 0) + " bps tier), walking the price from " + fmt(res.price, 4) +
+          " to ≈ " + fmt(res.newPrice, 4) + " B per A — the target fits inside your active range, which holds ≈ " + fmt(res.firstMaxOut, 4) + " " + outName +
+          " at the starting price, so the second range is never entered and this is exactly tool 44's single-range answer. Price impact ≈ " + fmt(res.priceImpactPct, 2) +
+          "% against the starting price, fee included. A CLMM two-range exact-out swap model — not a live quote, not financial advice.";
+        fill();
+      } else if (res.hitSecondBoundary) {
+        out.textContent = "Model output: receiving exactly " + fmt(res.amountOut, 4) + " " + outName + " takes every " + outName +
+          " both ranges hold: the active range pays its ≈ " + fmt(res.leg1Out, 4) + " for ≈ " + fmt(res.leg1In, 4) + " " + inName +
+          " in, walking the price to the shared edge at " + fmt(res.boundaryPrice, 4) + " B per A, and the second range pays the remaining ≈ " + fmt(res.leg2Out, 4) +
+          " for ≈ " + fmt(res.leg2In, 4) + " " + inName + " in, walking the price on to the outer edge at " +
+          fmt(res.direction === "ab" ? res.secondLowerPrice : res.secondUpperPrice, 4) + " — ≈ " + fmt(res.amountIn, 4) + " " + inName +
+          " in total (≈ " + fmt(res.feePaid, 6) + " of it is the fee at a " + fmt(res.feeBps, 0) + " bps tier). One unit more out has no price across these two ranges at all. Price impact ≈ " +
+          fmt(res.priceImpactPct, 2) + "% against the starting price, fee included. A CLMM two-range exact-out swap model — not a live quote, not financial advice.";
+        fill();
+      } else {
+        out.textContent = "Model output: receiving exactly " + fmt(res.amountOut, 4) + " " + outName + " drains your active range first — its ≈ " + fmt(res.leg1Out, 4) + " " + outName +
+          " for ≈ " + fmt(res.leg1In, 4) + " " + inName + " in, walking the price to the shared edge at " + fmt(res.boundaryPrice, 4) +
+          " B per A — then takes the remaining ≈ " + fmt(res.leg2Out, 4) + " " + outName + " from the second range for ≈ " + fmt(res.leg2In, 4) + " " + inName +
+          " in at that range's own liquidity: ≈ " + fmt(res.amountIn, 4) + " " + inName + " in total (≈ " + fmt(res.feePaid, 6) + " of it is the fee at a " +
+          fmt(res.feeBps, 0) + " bps tier), walking the price to ≈ " + fmt(res.newPrice, 4) + " B per A, still inside the second range. The two ranges together hold at most ≈ " +
+          fmt(res.maxOut, 4) + " " + outName + ". Price impact ≈ " + fmt(res.priceImpactPct, 2) +
+          "% against the starting price, fee included. A thinner second range would have charged more for the same remainder — that fall-off is the cliff a single-range model cannot show. A CLMM two-range exact-out swap model — not a live quote, not financial advice.";
+        fill();
       }
     });
 
