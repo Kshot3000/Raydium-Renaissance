@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=34"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=35"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists thirty-five tools", readme.includes("thirty-five pool tools") || readme.includes("all thirty-five"));
+check("README lists thirty-six tools", readme.includes("thirty-six pool tools") || readme.includes("all thirty-six"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1580,6 +1580,76 @@ check("all bdep controls labelled", ["bdep-cur", "bdep-lower", "bdep-upper", "bd
 check("bdep tool present in index.html", html.includes('id="bdep-calc"') && html.includes('id="bdep-result"'));
 check("bdep honesty: mirror and not-live labels", html.includes("Tool 8's mirror") && html.includes("not live pool state") && html.includes("not financial advice"));
 check("guide covers the B-side deposit", guide.includes("from the token you actually hold first"));
+
+/* ---------- Tool 36: CLMM re-centre / rebalance planner (REB) ---------- */
+const L36 = "947.2135954999577";
+/* identity: re-centring the 0.8-1.25 position at price 1 to +-25% is the same range */
+const rbId = app.clmmRebalance(L36, "0.8", "1.25", "1", "25");
+check("REB identity keeps the range", rbId.newLower === 0.8 && rbId.newUpper === 1.25);
+near("REB identity keeps the liquidity", rbId.newLiquidity, 947.2135954999577, 1e-9);
+check("REB identity needs no swap", rbId.swapSide === "none" && rbId.deltaA === 0 && rbId.deltaB === 0 && rbId.swapSellAmount === 0);
+near("REB identity target is Tool 9's position", rbId.targetA, 100, 1e-9);
+near("REB identity target B", rbId.targetB, 100, 1e-9);
+/* price moved to 1.2 inside the old range: drifted mix re-centres to 0.96-1.5 */
+const rb12 = app.clmmRebalance(L36, "0.8", "1.25", "1.2", "25");
+near("REB moved new lower", rb12.newLower, 0.96, 1e-12);
+near("REB moved new upper", rb12.newUpper, 1.5, 1e-12);
+near("REB moved current A is Tool 9's", rb12.curA, app.clmmPositionAtPrice(L36, "0.8", "1.25", "1.2").amountA, 1e-9);
+near("REB moved current B is Tool 9's", rb12.curB, app.clmmPositionAtPrice(L36, "0.8", "1.25", "1.2").amountB, 1e-9);
+near("REB moved new liquidity", rb12.newLiquidity, 913.8457910361178, 1e-9);
+near("REB moved target A", rb12.targetA, 88.07129250987332, 1e-9);
+near("REB moved target B", rb12.targetB, 105.68555101184802, 1e-9);
+near("REB moved target splits value 50/50", rb12.targetBValuePct, 50, 1e-9);
+near("REB moved preserves total value", rb12.targetA * 1.2 + rb12.targetB, rb12.valueInB, 1e-9);
+check("REB moved swap buys A with B", rb12.swapSide === "buyA" && rb12.swapSellToken === "B" && rb12.swapBuyToken === "A");
+near("REB moved swap sells the B delta", rb12.swapSellAmount, -rb12.deltaB, 1e-9);
+near("REB moved swap buys the A delta", rb12.swapBuyAmount, rb12.deltaA, 1e-9);
+near("REB moved swap priced at spot", rb12.swapSellAmount, rb12.deltaA * 1.2, 1e-9);
+near("REB moved up room", rb12.upRoomPct, 25, 1e-9);
+near("REB moved down room", rb12.downRoomPct, 20, 1e-9);
+/* Tool 9 at the new liquidity in the new range returns the target holdings */
+const rb12Pos = app.clmmPositionAtPrice(String(rb12.newLiquidity), String(rb12.newLower), String(rb12.newUpper), "1.2");
+near("REB Tool 9 returns target A", rb12Pos.amountA, rb12.targetA, 1e-9);
+near("REB Tool 9 returns target B", rb12Pos.amountB, rb12.targetB, 1e-9);
+/* price above the old range: entirely B, exactly half its value swaps into A */
+const rbAbove = app.clmmRebalance(L36, "0.8", "1.25", "2", "25");
+check("REB above range is entirely B", rbAbove.curStatus === "above" && rbAbove.curA === 0);
+near("REB above current B", rbAbove.curB, 211.8033988749895, 1e-9);
+near("REB above new liquidity", rbAbove.newLiquidity, 709.3096273622167, 1e-9);
+near("REB above swaps half the value", rbAbove.swapSellAmount, rbAbove.valueInB / 2, 1e-9);
+check("REB above swap buys A", rbAbove.swapSide === "buyA");
+/* price below the old range: the mirror — entirely A, half its value swaps into B */
+const rbBelow = app.clmmRebalance(L36, "0.8", "1.25", "0.5", "25");
+check("REB below range is entirely A", rbBelow.curStatus === "below" && rbBelow.curB === 0);
+near("REB below new liquidity mirrors above", rbBelow.newLiquidity, rbAbove.newLiquidity, 1e-9);
+near("REB below target A mirrors above target B", rbBelow.targetA, rbAbove.targetB, 1e-9);
+check("REB below swap sells A", rbBelow.swapSide === "sellA" && rbBelow.swapSellToken === "A" && rbBelow.swapBuyToken === "B");
+near("REB below swap priced at spot", rbBelow.swapBuyAmount, rbBelow.swapSellAmount * 0.5, 1e-9);
+/* a narrower re-centre at the same centre keeps the holdings, raises L */
+const rbNarrow = app.clmmRebalance(L36, "0.8", "1.25", "1", "10");
+near("REB narrower range raises liquidity", rbNarrow.newLiquidity, 2148.8088481701507, 1e-6);
+check("REB narrower liquidity exceeds the old", rbNarrow.newLiquidity > 947.2135954999577);
+near("REB narrower target A unchanged", rbNarrow.targetA, 100, 1e-6);
+near("REB narrower target B unchanged", rbNarrow.targetB, 100, 1e-6);
+near("REB narrower swap is ~zero", rbNarrow.swapSellAmount, 0, 1e-6);
+/* composition sweep: value preserved, target 50/50, swap identity deltaB = -deltaA * P */
+for (const [l, lo, hi, cur, w] of [[L36, "0.8", "1.25", "1.1", "20"], [L36, "0.8", "1.25", "0.9", "50"], ["500", "0.5", "2", "1.7", "10"], ["250", "2", "4.5", "3", "33"], [L36, "0.8", "1.25", "1.25", "25"]]) {
+  const p = app.clmmRebalance(l, lo, hi, cur, w);
+  check("REB sweep settles at L " + l + " price " + cur + " width " + w, p !== null);
+  near("REB sweep preserves value at price " + cur + " width " + w, p.targetA * Number(cur) + p.targetB, p.valueInB, 1e-6);
+  near("REB sweep target 50/50 at price " + cur + " width " + w, p.targetBValuePct, 50, 1e-9);
+  near("REB sweep swap identity at price " + cur + " width " + w, p.deltaB + p.deltaA * Number(cur), 0, 1e-6);
+  near("REB sweep range centred at price " + cur + " width " + w, Math.sqrt(p.newLower * p.newUpper), Number(cur), 1e-9);
+}
+/* rejections */
+check("REB rejects blank fields", app.clmmRebalance("", "0.8", "1.25", "1", "25") === null && app.clmmRebalance(L36, "", "1.25", "1", "25") === null && app.clmmRebalance(L36, "0.8", "1.25", "1", "") === null);
+check("REB rejects non-positive liquidity, price or width", app.clmmRebalance("0", "0.8", "1.25", "1", "25") === null && app.clmmRebalance(L36, "0.8", "1.25", "0", "25") === null && app.clmmRebalance(L36, "0.8", "1.25", "1", "0") === null && app.clmmRebalance(L36, "0.8", "1.25", "1", "-25") === null);
+check("REB rejects inverted range and non-numeric input", app.clmmRebalance(L36, "1.25", "0.8", "1", "25") === null && app.clmmRebalance(L36, "0.8", "0.8", "1", "25") === null && app.clmmRebalance("abc", "0.8", "1.25", "1", "25") === null);
+check("REB rejects a width whose range leaves the tick range", app.clmmRebalance(L36, "0.8", "1.25", "1", "1e30") === null);
+check("all reb controls labelled", ["reb-l", "reb-lower", "reb-upper", "reb-cur", "reb-width", "reb-out"].every(id => html.includes(`for="${id}"`)));
+check("reb tool present in index.html", html.includes('id="reb-calc"') && html.includes('id="reb-result"'));
+check("reb honesty: spot-priced swap and not-live labels", html.includes("priced at the current spot price") && html.includes("not live pool state") && html.includes("not financial advice"));
+check("guide covers re-centring a drifted position", guide.includes("Re-centre a position the price has drifted"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

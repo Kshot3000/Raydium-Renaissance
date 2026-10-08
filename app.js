@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus thirty-five fully
+/* Raydium Renaissance hub logic: project filtering plus thirty-six fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -16,8 +16,8 @@
    a split-route swap planner, a CLMM net return calculator, a
    CLMM IL tolerance band, a CLMM required-volume planner, a
    constant-product required-volume planner, a CLMM single-sided
-   zap-in planner, a CLMM single-sided zap-out planner, and a CLMM
-   token-B deposit planner.
+   zap-in planner, a CLMM single-sided zap-out planner, a CLMM
+   token-B deposit planner, and a CLMM re-centre / rebalance planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1821,8 +1821,98 @@ function clmmRangePlanB(currentStr, lowerStr, upperStr, amountBStr) {
   };
 }
 
+/* ---------- 36 · CLMM re-centre / rebalance planner ---------- */
+/* Tools 9 and 22 leave the follow-up question unanswered: the price
+   has moved, your position's mix has drifted with it (Tool 9), and
+   you want the position re-centred on the price you have now — what
+   does that actually take? This tool joins the two: it takes the
+   position's model liquidity L, its old range and the current price,
+   reads what the position holds now from Tool 9's own
+   clmmPositionAtPrice, builds the new range multiplicatively
+   symmetric around the current price (Tool 22's rule: upper = P * m,
+   lower = P / m, m = 1 + width/100), then sizes the NEW liquidity so
+   the re-centred position is worth exactly what the old one is worth
+   at the current price — a rebalance adds and removes nothing, it
+   only swaps. Because the new range is centred, its holdings at the
+   current price are always split 50/50 by value, whatever L it
+   carries (tests assert that split and the value preservation
+   exactly). The swap that gets you there is the difference between
+   the target holdings and the current ones, priced at the current
+   spot price: deltaB = -deltaA * P, so buying A costs deltaA * P of
+   B and selling A returns the same rate. That spot pricing is the
+   honest simplification, stated rather than hidden: a real swap pays
+   a fee and moves the price (Tools 1, 33 and 34 model that cost), so
+   treat this swap size as the plan, not the fill. If the old range
+   already IS the symmetric range around the current price, the plan
+   is the identity — same L, no swap (asserted in tests). A position
+   the price has left behind entirely (all A below, all B above) can
+   still be re-centred: exactly half its value swaps into the other
+   token. New ranges whose ticks fall outside the standard CLMM tick
+   range (-443636..443636, Tool 11) are rejected. Model only: no fees
+   earned are added, no tick-spacing snapping, and a real rebalance
+   is quoted live on the pool page. */
+function clmmRebalance(liquidityStr, oldLowerStr, oldUpperStr, currentStr, widthPctStr) {
+  var required = [liquidityStr, oldLowerStr, oldUpperStr, currentStr, widthPctStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var liquidity = Number(liquidityStr), widthPct = Number(widthPctStr);
+  if (!Number.isFinite(liquidity) || liquidity <= 0) return null;
+  if (!Number.isFinite(widthPct) || widthPct <= 0) return null;
+  var cur = clmmPositionAtPrice(liquidityStr, oldLowerStr, oldUpperStr, currentStr);
+  if (cur === null) return null;
+  var current = cur.price;
+  var m = 1 + widthPct / 100;
+  var newLower = current / m, newUpper = current * m;
+  var tickNewLower = priceToTick(newLower), tickNewUpper = priceToTick(newUpper);
+  if (tickNewLower < TICK_MIN || tickNewUpper > TICK_MAX) return null;
+  var unit = clmmPositionAtPrice("1", String(newLower), String(newUpper), String(current));
+  if (unit === null || !(unit.valueInB > 0)) return null;
+  var newLiquidity = cur.valueInB / unit.valueInB;
+  if (!Number.isFinite(newLiquidity) || newLiquidity <= 0) return null;
+  var target = clmmPositionAtPrice(String(newLiquidity), String(newLower), String(newUpper), String(current));
+  if (target === null) return null;
+  var deltaA = target.amountA - cur.amountA;
+  var deltaB = target.amountB - cur.amountB;
+  var swapSide = "none", swapSellToken = null, swapSellAmount = 0, swapBuyToken = null, swapBuyAmount = 0;
+  if (deltaA > 0) {
+    swapSide = "buyA"; swapSellToken = "B"; swapSellAmount = deltaA * current; swapBuyToken = "A"; swapBuyAmount = deltaA;
+  } else if (deltaA < 0) {
+    swapSide = "sellA"; swapSellToken = "A"; swapSellAmount = -deltaA; swapBuyToken = "B"; swapBuyAmount = -deltaA * current;
+  }
+  return {
+    liquidity: liquidity,
+    oldLower: cur.lowerPrice,
+    oldUpper: cur.upperPrice,
+    currentPrice: current,
+    widthPct: widthPct,
+    multiple: m,
+    newLower: newLower,
+    newUpper: newUpper,
+    tickNewLower: tickNewLower,
+    tickNewUpper: tickNewUpper,
+    curA: cur.amountA,
+    curB: cur.amountB,
+    curStatus: cur.status,
+    valueInB: cur.valueInB,
+    newLiquidity: newLiquidity,
+    targetA: target.amountA,
+    targetB: target.amountB,
+    targetBValuePct: target.bValuePct,
+    deltaA: deltaA,
+    deltaB: deltaB,
+    swapSide: swapSide,
+    swapSellToken: swapSellToken,
+    swapSellAmount: swapSellAmount,
+    swapBuyToken: swapBuyToken,
+    swapBuyAmount: swapBuyAmount,
+    upRoomPct: (newUpper / current - 1) * 100,
+    downRoomPct: (1 - newLower / current) * 100
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -2796,6 +2886,33 @@ if (typeof document !== "undefined") {
           " (ticks " + res.tickLower + " to " + res.tickUpper + ", current tick " + res.tickCurrent + "). A CLMM deposit model — not a live quote, not financial advice.";
         document.getElementById("bdep-out").value = fmt(res.requiredA, 4);
       }
+    });
+
+    document.getElementById("reb-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmRebalance(
+        document.getElementById("reb-l").value,
+        document.getElementById("reb-lower").value,
+        document.getElementById("reb-upper").value,
+        document.getElementById("reb-cur").value,
+        document.getElementById("reb-width").value
+      );
+      var out = document.getElementById("reb-result");
+      if (res === null) {
+        out.textContent = "Enter a positive model liquidity, an old range with lower below upper, a positive current price and a new width above 0%. Widths whose re-centred range falls outside the standard CLMM tick range are rejected.";
+        document.getElementById("reb-out").value = "";
+        return;
+      }
+      var state = res.curStatus === "in" ? "inside its old range" : (res.curStatus === "below" ? "below its old range, holding only token A" : "above its old range, holding only token B");
+      var swapText = res.swapSide === "none"
+        ? "No swap is needed — your old range already is that centred range, so the position carries over unchanged"
+        : "Swap ≈ " + fmt(res.swapSellAmount, 4) + " of token " + res.swapSellToken + " for ≈ " + fmt(res.swapBuyAmount, 4) + " of token " + res.swapBuyToken + " at the current spot price (a real swap also pays its fee and price impact — see tools 1, 33 and 34)";
+      out.textContent = "Model output: at " + fmt(res.currentPrice, 4) + " B per A your position is " + state + ", holding ≈ " + fmt(res.curA, 4) + " A and ≈ " + fmt(res.curB, 4) +
+        " B (worth ≈ " + fmt(res.valueInB, 4) + " B). Re-centred ±" + fmt(res.widthPct, 2) + "% it covers " + fmt(res.newLower, 4) + "–" + fmt(res.newUpper, 4) +
+        " (" + fmt(res.upRoomPct, 2) + "% of room up, " + fmt(res.downRoomPct, 2) + "% down) with model liquidity ≈ " + fmt(res.newLiquidity, 4) +
+        ", holding ≈ " + fmt(res.targetA, 4) + " A and ≈ " + fmt(res.targetB, 4) + " B — the same total value, split 50/50 at this price. " + swapText +
+        ". A CLMM re-centre model, priced at spot — not a live quote, not financial advice.";
+      document.getElementById("reb-out").value = fmt(res.newLiquidity, 4);
     });
 
     /* --- copy donation address --- */

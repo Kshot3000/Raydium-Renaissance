@@ -808,6 +808,25 @@
         <button type="submit" class="btn primary">Plan my deposit from B</button>
         <p id="bdep-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="reb-calc">
+        <h3>36 · CLMM re-centre / rebalance planner</h3>
+        <p>The follow-up to tools 9 and 22. The price has moved and your position's token mix has drifted with it; re-centring means closing the old position and opening a new range centred on the price you have now, at a width you choose (built multiplicatively symmetric, tool 22's rule — so the room differs by side: ±25% of width is +25% up but only −20% down). Given your position's model liquidity (tool 8 reports it), its old range, the current price and the new width, this planner reads what the position holds now (tool 9's maths), sizes the new liquidity so the re-centred position is worth exactly the same at the current price — a rebalance adds and removes nothing — and states the one swap that gets you there. Because the new range is centred, its target holdings are always split 50/50 by value at the current price; if the price has left your old range entirely, exactly half the position's value swaps into the other token, and if your old range already is the centred range, no swap is needed at all. The swap is priced at the current spot price, stated plainly: a real swap also pays its fee and price impact (tools 1, 33 and 34 model that cost), so treat the swap size as the plan, not the fill. No fees earned are added and ticks are not snapped to a pool's tick spacing. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="reb-l">Position model liquidity L (from tool 8)</label>
+        <input id="reb-l" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="reb-lower">Old range lower price (B per A)</label>
+        <input id="reb-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="reb-upper">Old range upper price (B per A)</label>
+        <input id="reb-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="reb-cur">Current price (token B per token A)</label>
+        <input id="reb-cur" inputmode="decimal" placeholder="e.g. 1.2" autocomplete="off">
+        <label for="reb-width">New range width ±% around the current price</label>
+        <input id="reb-width" inputmode="decimal" placeholder="e.g. 25" autocomplete="off">
+        <label for="reb-out">New model liquidity after re-centring (model)</label>
+        <input id="reb-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan my re-centre</button>
+        <p id="reb-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -835,6 +854,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=34"></script>
+<script src="app.js?v=35"></script>
 </body>
 </html>
