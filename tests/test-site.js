@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=45"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=46"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1991,6 +1991,9 @@ check("all cswap controls labelled", ["cswap-liq", "cswap-lower", "cswap-upper",
 check("cswap tool present in index.html", html.includes('id="cswap-calc"') && html.includes('id="cswap-result"'));
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
+const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
+check("app.js header counts forty-two tools and names the CLMM single-range swap model",
+  appSrc.includes("plus forty-two fully") && appSrc.includes("a CLMM single-range swap model.\n   These are educational MODELS"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
