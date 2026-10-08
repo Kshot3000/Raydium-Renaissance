@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=44"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=45"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists forty-one tools", readme.includes("forty-one pool tools") || readme.includes("all forty-one"));
+check("README lists forty-two tools", readme.includes("forty-two pool tools") || readme.includes("all forty-two"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1927,6 +1927,70 @@ check("all sxo controls labelled", ["sxo-r1in", "sxo-r1out", "sxo-fee1", "sxo-r2
 check("sxo tool present in index.html", html.includes('id="sxo-calc"') && html.includes('id="sxo-result"'));
 check("sxo honesty: composed tools and not-live labels", html.includes("splits the target across them") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("network and transaction costs are not modelled"));
 check("guide covers split-route exact-out", guide.includes("Split the target, don't just split the payment"));
+
+/* ---------- Tool 42: CLMM single-range swap model (CSWAP) ---------- */
+const CSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
+const cswAb = app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "10", 25, "ab");
+check("CSWAP headline settles", cswAb !== null && cswAb.hitBoundary === false && cswAb.unfilledIn === 0);
+near("CSWAP headline amount out", cswAb.amountOut, 9.87104909056809, 1e-9);
+near("CSWAP headline new price", cswAb.newPrice, 0.9792663126327764, 1e-9);
+near("CSWAP headline impact includes the fee", cswAb.priceImpactPct, 1.2895090943191079, 1e-9);
+near("CSWAP headline fee paid", cswAb.feePaid, 0.025, 1e-12);
+const cswBa = app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "10", 25, "ba");
+check("CSWAP centred range mirrors both directions", cswBa.amountOut === cswAb.amountOut && cswBa.priceImpactPct === cswAb.priceImpactPct);
+near("CSWAP mirror new price", cswBa.newPrice, 1.0211726749912196, 1e-9);
+const csw0 = app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "10", 0, "ab");
+near("CSWAP zero-fee out is the closed form", csw0.amountOut, 947.2135954999577 * (1 - 1 / (1 + 10 / 947.2135954999577)), 1e-9);
+check("CSWAP zero-fee charges no fee", csw0.feePaid === 0);
+const cswRt = app.clmmSwap(CSWAP_L, "0.8", "1.25", String(csw0.newPrice), String(csw0.amountOut), 0, "ba");
+near("CSWAP zero-fee round trip returns the input", cswRt.amountOut, 10, 1e-9);
+near("CSWAP zero-fee round trip restores the price", cswRt.newPrice, 1, 1e-9);
+const cswBigAb = app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "100000", 25, "ab");
+check("CSWAP oversized pay-A hits the lower wall", cswBigAb.hitBoundary === true);
+near("CSWAP wall pays out every B the position holds (Tool 9)", cswBigAb.amountOut, app.clmmPositionAtPrice(CSWAP_L, "0.8", "1.25", "1").amountB, 1e-9);
+near("CSWAP wall new price is the lower edge", cswBigAb.newPrice, 0.8, 1e-9);
+near("CSWAP wall used-in is the grossed-up capacity", cswBigAb.usedIn, 947.2135954999577 * (1 / Math.sqrt(0.8) - 1) / 0.9975, 1e-9);
+near("CSWAP wall leaves the rest unfilled, not absorbed", cswBigAb.unfilledIn, 100000 - cswBigAb.usedIn, 1e-9);
+const cswBigBa = app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "100000", 25, "ba");
+check("CSWAP oversized pay-B hits the upper wall", cswBigBa.hitBoundary === true);
+near("CSWAP upper wall pays out every A the position holds (Tool 9)", cswBigBa.amountOut, app.clmmPositionAtPrice(CSWAP_L, "0.8", "1.25", "1").amountA, 1e-9);
+near("CSWAP upper wall new price is the upper edge", cswBigBa.newPrice, 1.25, 1e-9);
+const cswCap = app.clmmSwap(CSWAP_L, "0.8", "1.25", "1.2", "30", 25, "ba");
+check("CSWAP near the top a modest pay-B still caps", cswCap.hitBoundary === true);
+near("CSWAP capped out is the A the position holds at 1.2 (Tool 9)", cswCap.amountOut, app.clmmPositionAtPrice(CSWAP_L, "0.8", "1.25", "1.2").amountA, 1e-9);
+near("CSWAP capped used-in", cswCap.usedIn, 21.450113597138653, 1e-9);
+const cswTiny = app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "0.01", 25, "ab");
+near("CSWAP tiny swap impact is the fee plus a whisper of curve", cswTiny.priceImpactPct, 0.251050443696, 1e-9);
+check("CSWAP rejects a price at or outside the range", app.clmmSwap(CSWAP_L, "0.8", "1.25", "1.25", "10", 25, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "0.8", "10", 25, "ba") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "1.3", "10", 25, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "0.7", "10", 25, "ba") === null);
+check("CSWAP rejects bad ranges, amounts, fees and directions", app.clmmSwap(CSWAP_L, "1.25", "0.8", "1", "10", 25, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "0", 25, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "-5", 25, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "10", 10000, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "10", -1, "ab") === null && app.clmmSwap(CSWAP_L, "0.8", "1.25", "1", "10", 25, "xx") === null && app.clmmSwap("abc", "0.8", "1.25", "1", "10", 25, "ab") === null && app.clmmSwap("0", "0.8", "1.25", "1", "10", 25, "ab") === null);
+for (const [liq, lo, hi, px, ain, fee, dir] of [
+  [CSWAP_L, "0.8", "1.25", "1", "10", 25, "ab"],
+  [CSWAP_L, "0.8", "1.25", "1", "10", 25, "ba"],
+  ["5000", "0.5", "2", "1.1", "250", 30, "ab"],
+  ["5000", "0.5", "2", "0.9", "250", 5, "ba"],
+  ["123.456", "2.4", "2.6", "2.5", "3.21", 60, "ab"],
+  ["123.456", "2.4", "2.6", "2.5", "3.21", 60, "ba"],
+  ["1000000", "0.99", "1.01", "1", "5000", 1, "ba"]
+]) {
+  const x = app.clmmSwap(liq, lo, hi, px, ain, fee, dir);
+  const tag = "CSWAP sweep " + dir + " " + ain + " @" + px + " in " + lo + "-" + hi;
+  check(tag + " settles inside the range", x !== null && x.newPrice > Number(lo) - 1e-12 && x.newPrice < Number(hi) + 1e-12);
+  near(tag + " used + unfilled is the amount in", x.usedIn + x.unfilledIn, Number(ain), 1e-9);
+  near(tag + " fee is the tier's share of the used input", x.feePaid, x.usedIn * fee / 10000, 1e-9);
+  const posAfter = app.clmmPositionAtPrice(liq, lo, hi, String(x.newPrice));
+  const posBefore = app.clmmPositionAtPrice(liq, lo, hi, px);
+  if (dir === "ab") {
+    near(tag + " out is the B the position sheds by the new price (Tool 9)", x.amountOut, posBefore.amountB - posAfter.amountB, 1e-6);
+    near(tag + " net in is the A the position gains (Tool 9)", x.usedIn - x.feePaid, posAfter.amountA - posBefore.amountA, 1e-6);
+  } else {
+    near(tag + " out is the A the position sheds by the new price (Tool 9)", x.amountOut, posBefore.amountA - posAfter.amountA, 1e-6);
+    near(tag + " net in is the B the position gains (Tool 9)", x.usedIn - x.feePaid, posAfter.amountB - posBefore.amountB, 1e-6);
+  }
+}
+check("all cswap controls labelled", ["cswap-liq", "cswap-lower", "cswap-upper", "cswap-price", "cswap-dir", "cswap-ain", "cswap-fee", "cswap-out", "cswap-newprice", "cswap-used"].every(id => html.includes(`for="${id}"`)));
+check("cswap tool present in index.html", html.includes('id="cswap-calc"') && html.includes('id="cswap-result"'));
+check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
+check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

@@ -2240,8 +2240,100 @@ function twoHopExactOut(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2Ou
   };
 }
 
+/* ---------- 42 · CLMM single-range swap model ---------- */
+/* Every CLMM tool so far plans, checks or closes a POSITION; the swap
+   itself was always borrowed from a separate constant-product pool
+   (tools 33 and 34 swap their legs through tool 1). This prices a swap
+   against concentrated liquidity directly, inside the one active range
+   that holds the current price. A range [lower, upper] with liquidity
+   L (price = token B per token A; s = sqrt(price) and friends) holds
+   amountA = L * (1/s - 1/sqrt(upper)) and amountB = L * (s - sqrt(lower))
+   — tool 9's amounts — and a swap just walks s along those same curves:
+     pay A (price falls):  1/s' = 1/s + netA / L,  out B = L * (s - s')
+     pay B (price rises):  s' = s + netB / L,      out A = L * (1/s - 1/s')
+   with the fee taken off the input first, exactly as tool 1 takes it.
+   The range's edge is a hard wall: paying A can push the price down to
+   lower and no further, because at lower the range holds no B left to
+   pay out — the most B a pay-A swap can ever return here is the B the
+   position holds now, L * (s - sqrt(lower)), and reaching it costs
+   L * (1/sqrt(lower) - 1/s) of net A. An input past that point is NOT
+   silently absorbed: the swap stops at the edge, reports the part of
+   the input it actually used and leaves the rest unfilled (a real
+   CLMM swap would continue into the next tick range with its own
+   liquidity; this single-range model has no next range, so it says
+   so instead of inventing one). A current price at or outside the
+   range is rejected — the range holds no two-sided liquidity there,
+   so there is no swap inside it to price. Price impact is measured
+   tool 1's way: 1 - (out / amount in used) / spot rate, so it includes
+   the fee. Floating point, like every CLMM tool here. Model only: a
+   real CLMM pool's liquidity varies tick by tick and its live quote
+   is on the pool page. */
+function clmmSwap(liquidityStr, lowerStr, upperStr, priceStr, amountInStr, feeBps, direction) {
+  var liquidity = Number(liquidityStr), lower = Number(lowerStr), upper = Number(upperStr);
+  var price = Number(priceStr), amountIn = Number(amountInStr), fee = Number(feeBps);
+  if (![liquidity, lower, upper, price, amountIn].every(Number.isFinite)) return null;
+  if (liquidity <= 0 || lower <= 0 || upper <= 0 || price <= 0 || amountIn <= 0) return null;
+  if (lower >= upper) return null;
+  if (price <= lower || price >= upper) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  if (direction !== "ab" && direction !== "ba") return null;
+  var f = fee / 10000;
+  var sa = Math.sqrt(lower), sb = Math.sqrt(upper), s = Math.sqrt(price);
+  var netMax, sNew, usedIn, netUsed, amountOut, spotRate, hitBoundary = false;
+  if (direction === "ab") {
+    netMax = liquidity * (1 / sa - 1 / s);
+    if (amountIn * (1 - f) <= netMax) {
+      netUsed = amountIn * (1 - f);
+      usedIn = amountIn;
+      sNew = 1 / (1 / s + netUsed / liquidity);
+    } else {
+      netUsed = netMax;
+      usedIn = netMax / (1 - f);
+      sNew = sa;
+      hitBoundary = true;
+    }
+    amountOut = liquidity * (s - sNew);
+    spotRate = price;
+  } else {
+    netMax = liquidity * (sb - s);
+    if (amountIn * (1 - f) <= netMax) {
+      netUsed = amountIn * (1 - f);
+      usedIn = amountIn;
+      sNew = s + netUsed / liquidity;
+    } else {
+      netUsed = netMax;
+      usedIn = netMax / (1 - f);
+      sNew = sb;
+      hitBoundary = true;
+    }
+    amountOut = liquidity * (1 / s - 1 / sNew);
+    spotRate = 1 / price;
+  }
+  if (!Number.isFinite(amountOut) || amountOut <= 0) return null;
+  var effectiveRate = amountOut / usedIn;
+  return {
+    liquidity: liquidity,
+    lowerPrice: lower,
+    upperPrice: upper,
+    price: price,
+    direction: direction,
+    amountIn: amountIn,
+    usedIn: usedIn,
+    unfilledIn: amountIn - usedIn,
+    feePaid: usedIn - netUsed,
+    amountOut: amountOut,
+    newPrice: sNew * sNew,
+    spotRate: spotRate,
+    effectiveRate: effectiveRate,
+    priceImpactPct: (1 - effectiveRate / spotRate) * 100,
+    hitBoundary: hitBoundary,
+    feePct: fee / 100,
+    feeBps: fee
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -3389,6 +3481,47 @@ if (typeof document !== "undefined") {
         document.getElementById("sxo-ain").value = res.totalIn;
         document.getElementById("sxo-o1").value = res.out1;
         document.getElementById("sxo-o2").value = res.out2;
+      }
+    });
+
+    /* --- CLMM single-range swap model --- */
+    document.getElementById("cswap-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmSwap(
+        document.getElementById("cswap-liq").value,
+        document.getElementById("cswap-lower").value,
+        document.getElementById("cswap-upper").value,
+        document.getElementById("cswap-price").value,
+        document.getElementById("cswap-ain").value,
+        document.getElementById("cswap-fee").value,
+        document.getElementById("cswap-dir").value
+      );
+      var out = document.getElementById("cswap-result");
+      var inName = res !== null && res.direction === "ba" ? "B" : "A";
+      var outName = res !== null && res.direction === "ba" ? "A" : "B";
+      if (res === null) {
+        out.textContent = "Enter a positive model liquidity L (tool 8 reports it for a deposit), a range with lower below upper, a current price strictly inside the range, a positive amount in, and a fee tier between 0 and 9999 bps. A price at or outside the range holds no two-sided liquidity there, so there is no swap inside it to price.";
+        document.getElementById("cswap-out").value = "";
+        document.getElementById("cswap-newprice").value = "";
+        document.getElementById("cswap-used").value = "";
+      } else if (res.hitBoundary) {
+        out.textContent = "Model output: paying " + inName + " walks the price to your range's " + (res.direction === "ab" ? "lower" : "upper") + " edge at " + fmt(res.direction === "ab" ? res.lowerPrice : res.upperPrice, 4) +
+          " B per A and stops — the range holds no more " + outName + " to pay out. Only ≈ " + fmt(res.usedIn, 4) + " of your " + fmt(res.amountIn, 4) + " " + inName +
+          " is used (≈ " + fmt(res.feePaid, 6) + " of it is the fee at a " + fmt(res.feeBps, 0) + " bps tier), returning ≈ " + fmt(res.amountOut, 4) + " " + outName +
+          " — every " + outName + " this range holds at the starting price; the remaining ≈ " + fmt(res.unfilledIn, 4) + " " + inName +
+          " is unfilled, not absorbed. A real CLMM swap would continue into the next tick range at its own liquidity; this single-range model has no next range. Price impact ≈ " + fmt(res.priceImpactPct, 2) +
+          "% against the starting price, fee included. A CLMM single-range swap model — not a live quote, not financial advice.";
+        document.getElementById("cswap-out").value = fmt(res.amountOut, 9);
+        document.getElementById("cswap-newprice").value = fmt(res.newPrice, 9);
+        document.getElementById("cswap-used").value = fmt(res.usedIn, 9);
+      } else {
+        out.textContent = "Model output: paying ≈ " + fmt(res.usedIn, 4) + " " + inName + " at a " + fmt(res.feeBps, 0) +
+          " bps tier (≈ " + fmt(res.feePaid, 6) + " of it is the fee) returns ≈ " + fmt(res.amountOut, 4) + " " + outName +
+          " and walks the price from " + fmt(res.price, 4) + " to ≈ " + fmt(res.newPrice, 4) + " B per A — still inside your range. Price impact ≈ " + fmt(res.priceImpactPct, 2) +
+          "% against the starting price, fee included, measured the way tool 1 measures it. A CLMM single-range swap model — not a live quote, not financial advice.";
+        document.getElementById("cswap-out").value = fmt(res.amountOut, 9);
+        document.getElementById("cswap-newprice").value = fmt(res.newPrice, 9);
+        document.getElementById("cswap-used").value = fmt(res.usedIn, 9);
       }
     });
 

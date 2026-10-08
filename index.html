@@ -934,6 +934,36 @@
         <button type="submit" class="btn primary">Price this split exact-out</button>
         <p id="sxo-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="cswap-calc">
+        <h3>42 · CLMM single-range swap model</h3>
+        <p>Every CLMM tool here plans, checks or closes a position, and tools 33 and 34 borrow a separate constant-product pool for their swap legs — this prices a swap against concentrated liquidity itself, inside the one active range that holds the current price. Enter the range's liquidity L (tool 8 reports it for a deposit), the range, the current price and an amount in: paying token A walks the price down the range's own curve, paying token B walks it up, with the fee taken off the input first the way tool 1 takes it. The range's edge is a hard wall: at the lower edge the range holds no token B left to pay out (at the upper, no token A), so a swap big enough to reach the edge stops there — the tool reports the part of your input it actually used and leaves the rest unfilled, not absorbed. A real CLMM swap would continue into the next tick range at that range's own liquidity; this single-range model has no next range, and says so instead of inventing one. A current price at or outside the range is rejected, because the range holds no two-sided liquidity there. One range at one L only — a real pool's liquidity varies tick by tick and is deepest near the current price, which is why the same trade usually walks less far live than a single-range model suggests. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="cswap-liq">Range liquidity L (model — tool 8 reports it)</label>
+        <input id="cswap-liq" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="cswap-lower">Range lower price (token B per token A)</label>
+        <input id="cswap-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="cswap-upper">Range upper price (token B per token A)</label>
+        <input id="cswap-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="cswap-price">Current price (token B per token A)</label>
+        <input id="cswap-price" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="cswap-dir">Direction</label>
+        <select id="cswap-dir">
+          <option value="ab">Pay token A, receive token B (price falls)</option>
+          <option value="ba">Pay token B, receive token A (price rises)</option>
+        </select>
+        <label for="cswap-ain">Amount in</label>
+        <input id="cswap-ain" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="cswap-fee">Fee, basis points (25 = 0.25%)</label>
+        <input id="cswap-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="cswap-out">Amount out (model)</label>
+        <input id="cswap-out" readonly placeholder="—" autocomplete="off">
+        <label for="cswap-newprice">Price after the swap, B per A (model)</label>
+        <input id="cswap-newprice" readonly placeholder="—" autocomplete="off">
+        <label for="cswap-used">Amount in actually used (model)</label>
+        <input id="cswap-used" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Price this CLMM swap</button>
+        <p id="cswap-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -961,6 +991,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=44"></script>
+<script src="app.js?v=45"></script>
 </body>
 </html>
