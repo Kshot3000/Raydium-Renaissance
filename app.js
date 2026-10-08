@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus thirty-four fully
+/* Raydium Renaissance hub logic: project filtering plus thirty-five fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -16,7 +16,8 @@
    a split-route swap planner, a CLMM net return calculator, a
    CLMM IL tolerance band, a CLMM required-volume planner, a
    constant-product required-volume planner, a CLMM single-sided
-   zap-in planner, and a CLMM single-sided zap-out planner.
+   zap-in planner, a CLMM single-sided zap-out planner, and a CLMM
+   token-B deposit planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1762,8 +1763,66 @@ function clmmZapOut(reserveAStr, reserveBStr, liquidityStr, lowerStr, upperStr, 
   });
 }
 
+/* ---------- 35 · CLMM token-B deposit planner ---------- */
+/* Tool 8 plans a CLMM deposit from the token-A side: given an A amount,
+   the matching B. Wallets holding the B side first (a stablecoin, say)
+   need the mirror question: given a token-B deposit, the matching
+   token A. The range maths is Tool 8's, inverted on the B leg
+   (price = token B per token A; s = sqrt(price) and friends):
+     price inside range:  amountB = L * (s - sqrt(lower)), so
+                          L = amountB / (s - sqrt(lower)) and
+                          requiredA = L * (1/s - 1/sqrt(upper))
+     price at/above upper: the position is entirely token B, so
+                          L = amountB / (sqrt(upper) - sqrt(lower))
+                          and requiredA = 0
+     price at/below lower: the position is entirely token A, so a
+                          token-B deposit cannot fund it and that
+                          combination is rejected here — the exact
+                          mirror of Tool 8 rejecting a token-A deposit
+                          at or above the top.
+   The tests assert the mirror is exact: this planner's requiredA fed
+   back into Tool 8 returns the original B amount and the same L, and
+   Tool 9 at the current price returns both deposited amounts for that
+   L. Tick indices are modelled with floating-point logs and are not
+   snapped to a pool's tick spacing; no fees are modelled. */
+function clmmRangePlanB(currentStr, lowerStr, upperStr, amountBStr) {
+  var current = Number(currentStr), lower = Number(lowerStr), upper = Number(upperStr), amountB = Number(amountBStr);
+  if (![current, lower, upper, amountB].every(Number.isFinite)) return null;
+  if (current <= 0 || lower <= 0 || upper <= 0 || amountB <= 0) return null;
+  if (lower >= upper) return null;
+  if (current <= lower) return null;
+  var s = Math.sqrt(current), sa = Math.sqrt(lower), sb = Math.sqrt(upper);
+  var liquidity, requiredA, status;
+  if (current >= upper) {
+    liquidity = amountB / (sb - sa);
+    requiredA = 0;
+    status = "above";
+  } else {
+    liquidity = amountB / (s - sa);
+    requiredA = liquidity * (1 / s - 1 / sb);
+    status = "in";
+  }
+  if (!Number.isFinite(liquidity) || liquidity <= 0 || requiredA < 0) return null;
+  var valueInB = requiredA * current + amountB;
+  return {
+    currentPrice: current,
+    lowerPrice: lower,
+    upperPrice: upper,
+    amountB: amountB,
+    requiredA: requiredA,
+    liquidity: liquidity,
+    status: status,
+    inRange: status === "in",
+    aValuePct: valueInB > 0 ? requiredA * current / valueInB * 100 : 0,
+    bValuePct: valueInB > 0 ? amountB / valueInB * 100 : 0,
+    tickCurrent: priceToTick(current),
+    tickLower: priceToTick(lower),
+    tickUpper: priceToTick(upper)
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -2710,6 +2769,32 @@ if (typeof document !== "undefined") {
           " A in total. Consolidation cost ≈ " + fmt(res.consolidationCostA, 4) + " A — " + fmt(res.consolidationCostPct, 2) +
           "% of the pair's value at the swap pool's spot price. The swap pool and the CLMM position are modelled separately. A CLMM zap-out model — not a live quote, not financial advice.";
         document.getElementById("czout-out").value = fmt(res.totalA, 4);
+      }
+    });
+
+    document.getElementById("bdep-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmRangePlanB(
+        document.getElementById("bdep-cur").value,
+        document.getElementById("bdep-lower").value,
+        document.getElementById("bdep-upper").value,
+        document.getElementById("bdep-ab").value
+      );
+      var out = document.getElementById("bdep-result");
+      if (res === null) {
+        out.textContent = "Enter a positive current price, a range with lower below upper, and a positive token-B deposit. At or below the range's lower edge the position is entirely token A, so a token-B deposit cannot fund it.";
+        document.getElementById("bdep-out").value = "";
+      } else if (res.status === "above") {
+        out.textContent = "Model output: at a current price of " + fmt(res.currentPrice, 4) + " B per A, at or above your range's upper edge of " + fmt(res.upperPrice, 4) +
+          ", the position is entirely token B — depositing ≈ " + fmt(res.amountB, 4) + " B needs no token A and gives model liquidity ≈ " + fmt(res.liquidity, 4) +
+          " (ticks " + res.tickLower + " to " + res.tickUpper + "). It earns no fees until price returns into the range. A CLMM deposit model — not a live quote, not financial advice.";
+        document.getElementById("bdep-out").value = fmt(res.requiredA, 4);
+      } else {
+        out.textContent = "Model output: depositing ≈ " + fmt(res.amountB, 4) + " B at " + fmt(res.currentPrice, 4) +
+          " B per A in the range " + fmt(res.lowerPrice, 4) + "–" + fmt(res.upperPrice, 4) + " requires ≈ " + fmt(res.requiredA, 4) +
+          " A alongside it (≈ " + fmt(res.aValuePct, 2) + "% of the deposit's value in A) and gives model liquidity ≈ " + fmt(res.liquidity, 4) +
+          " (ticks " + res.tickLower + " to " + res.tickUpper + ", current tick " + res.tickCurrent + "). A CLMM deposit model — not a live quote, not financial advice.";
+        document.getElementById("bdep-out").value = fmt(res.requiredA, 4);
       }
     });
 

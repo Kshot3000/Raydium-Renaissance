@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=33"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=34"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists thirty-four tools", readme.includes("thirty-four pool tools") || readme.includes("all thirty-four"));
+check("README lists thirty-five tools", readme.includes("thirty-five pool tools") || readme.includes("all thirty-five"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1522,6 +1522,64 @@ check("CZOUT rejects a B leg too small to swap at 9 dp", app.clmmZapOut("1000", 
 check("all czout controls labelled", ["czout-ra", "czout-rb", "czout-bps", "czout-l", "czout-lower", "czout-upper", "czout-cur", "czout-out"].every(id => html.includes(`for="${id}"`)));
 check("czout tool present in index.html", html.includes('id="czout-calc"') && html.includes('id="czout-result"'));
 check("czout honesty: separate models and not-live labels", html.includes("Tool 33's exit mirror") && html.includes("modelled separately") && html.includes("not live pool state") && html.includes("not financial advice"));
+
+/* ---------- Tool 35: CLMM token-B deposit planner (BDEP) ---------- */
+const bd1 = app.clmmRangePlanB("1", "0.8", "1.25", "100");
+check("BDEP headline in range", bd1.status === "in" && bd1.inRange === true);
+near("BDEP headline required A mirrors Tool 8", bd1.requiredA, 100, 1e-9);
+near("BDEP headline liquidity mirrors Tool 8", bd1.liquidity, 947.2135954999577, 1e-9);
+near("BDEP headline A value share", bd1.aValuePct, 50, 1e-9);
+near("BDEP headline B value share", bd1.bValuePct, 50, 1e-9);
+check("BDEP headline ticks mirror Tool 8", bd1.tickLower === app.clmmRangePlan("1", "0.8", "1.25", "100").tickLower && bd1.tickUpper === app.clmmRangePlan("1", "0.8", "1.25", "100").tickUpper && bd1.tickCurrent === app.clmmRangePlan("1", "0.8", "1.25", "100").tickCurrent);
+/* the mirror is exact: requiredA fed into Tool 8 returns the original B and the same L */
+const bdBack = app.clmmRangePlan("1", "0.8", "1.25", String(bd1.requiredA));
+near("BDEP round-trip Tool 8 returns the B deposited", bdBack.requiredB, 100, 1e-9);
+near("BDEP round-trip Tool 8 returns the same liquidity", bdBack.liquidity, bd1.liquidity, 1e-9);
+/* Tool 9 at the current price returns both deposited amounts for that L */
+const bdPos = app.clmmPositionAtPrice(String(bd1.liquidity), "0.8", "1.25", "1");
+near("BDEP Tool 9 returns the A required", bdPos.amountA, bd1.requiredA, 1e-9);
+near("BDEP Tool 9 returns the B deposited", bdPos.amountB, 100, 1e-9);
+/* off-centre inside the range: scarcer B side near the bottom demands much more A */
+const bdOff = app.clmmRangePlanB("1.1", "0.8", "1.25", "50");
+near("BDEP off-centre required A", bdOff.requiredA, 19.119952242959275, 1e-9);
+near("BDEP off-centre liquidity", bdOff.liquidity, 323.87267319501103, 1e-9);
+near("BDEP off-centre round-trip via Tool 8", app.clmmRangePlan("1.1", "0.8", "1.25", String(bdOff.requiredA)).requiredB, 50, 1e-9);
+const bdLow = app.clmmRangePlanB("0.81", "0.8", "1.25", "10");
+near("BDEP near-lower required A", bdLow.requiredA, 388.8235180999792, 1e-6);
+check("BDEP near the lower edge the A share dominates", bdLow.aValuePct > 90);
+/* geometric scaling: the 1.6-2.5 range at price 2 is the headline range scaled */
+const bdScaled = app.clmmRangePlanB("2", "1.6", "2.5", "200");
+near("BDEP scaled required A", bdScaled.requiredA, 100, 1e-9);
+near("BDEP scaled round-trip via Tool 8", app.clmmRangePlan("2", "1.6", "2.5", String(bdScaled.requiredA)).requiredB, 200, 1e-9);
+/* composition sweep: Tool 8 and Tool 9 agree at every combo */
+for (const [cur, lo, hi, b] of [["1", "0.8", "1.25", "100"], ["2", "1.6", "2.5", "200"], ["0.9", "0.5", "2", "250"], ["3", "2", "4.5", "75"], ["1.05", "0.9", "1.1", "42.5"]]) {
+  const p = app.clmmRangePlanB(cur, lo, hi, b);
+  check("BDEP sweep settles in range at price " + cur + " B " + b, p !== null && p.status === "in");
+  near("BDEP sweep Tool 8 round-trip at price " + cur + " B " + b, app.clmmRangePlan(cur, lo, hi, String(p.requiredA)).requiredB, Number(b), 1e-6);
+  const pos = app.clmmPositionAtPrice(String(p.liquidity), lo, hi, cur);
+  near("BDEP sweep Tool 9 A at price " + cur + " B " + b, pos.amountA, p.requiredA, 1e-6);
+  near("BDEP sweep Tool 9 B at price " + cur + " B " + b, pos.amountB, Number(b), 1e-6);
+  near("BDEP sweep value shares sum to 100 at price " + cur + " B " + b, p.aValuePct + p.bValuePct, 100, 1e-9);
+}
+/* range edges: at/above the top the position is entirely B; at/below the bottom a B deposit is rejected */
+const bdAbove = app.clmmRangePlanB("2", "0.8", "1.25", "211.8033988749895");
+check("BDEP above range is entirely B", bdAbove.status === "above" && bdAbove.inRange === false && bdAbove.requiredA === 0);
+near("BDEP above range liquidity", bdAbove.liquidity, 947.2135954999577, 1e-9);
+near("BDEP above range Tool 9 returns the B", app.clmmPositionAtPrice(String(bdAbove.liquidity), "0.8", "1.25", "2").amountB, 211.8033988749895, 1e-9);
+const bdAtUp = app.clmmRangePlanB("1.25", "0.8", "1.25", "100");
+check("BDEP at the upper edge is the above case", bdAtUp.status === "above" && bdAtUp.requiredA === 0);
+near("BDEP at-upper liquidity", bdAtUp.liquidity, 447.21359549995776, 1e-9);
+check("BDEP at or below the lower edge is rejected", app.clmmRangePlanB("0.8", "0.8", "1.25", "100") === null && app.clmmRangePlanB("0.5", "0.8", "1.25", "100") === null);
+/* Tool 8's mirror rejection holds too: an A deposit at/above the top */
+check("BDEP mirror: Tool 8 rejects an A deposit at the upper edge", app.clmmRangePlan("1.25", "0.8", "1.25", "100") === null);
+/* rejections */
+check("BDEP rejects blank fields", app.clmmRangePlanB("", "0.8", "1.25", "100") === null && app.clmmRangePlanB("1", "", "1.25", "100") === null && app.clmmRangePlanB("1", "0.8", "1.25", "") === null);
+check("BDEP rejects non-positive price, range or deposit", app.clmmRangePlanB("0", "0.8", "1.25", "100") === null && app.clmmRangePlanB("1", "0", "1.25", "100") === null && app.clmmRangePlanB("1", "0.8", "1.25", "0") === null && app.clmmRangePlanB("1", "0.8", "1.25", "-5") === null);
+check("BDEP rejects inverted range and non-numeric input", app.clmmRangePlanB("1", "1.25", "0.8", "100") === null && app.clmmRangePlanB("1", "0.8", "0.8", "100") === null && app.clmmRangePlanB("abc", "0.8", "1.25", "100") === null);
+check("all bdep controls labelled", ["bdep-cur", "bdep-lower", "bdep-upper", "bdep-ab", "bdep-out"].every(id => html.includes(`for="${id}"`)));
+check("bdep tool present in index.html", html.includes('id="bdep-calc"') && html.includes('id="bdep-result"'));
+check("bdep honesty: mirror and not-live labels", html.includes("Tool 8's mirror") && html.includes("not live pool state") && html.includes("not financial advice"));
+check("guide covers the B-side deposit", guide.includes("from the token you actually hold first"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
