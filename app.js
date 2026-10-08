@@ -2453,7 +2453,10 @@ function clmmCrossSwap(liquidityStr, lowerStr, upperStr, priceStr, amountInStr, 
    forwards case); this exact-out model has no next range and does
    not invent one, so an impossible-in-one-range target stays
    impossible here even though a live pool might fill it across
-   ranges. A target exactly equal to the holding is priced: it walks
+   ranges. The boundary flag's tolerance is purely relative (1e-12
+   of the holding): an absolute floor would misreport a tiny
+   range's half-drained target as draining it. A target exactly
+   equal to the holding is priced: it walks
    the price to the edge, and its gross input is exactly tool 42's
    capped used-in for that same walk. Single range only, floating
    point like every CLMM tool here. Model only: a real CLMM pool's
@@ -2502,7 +2505,7 @@ function clmmSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amountOutS
     spotRate: spotRate,
     effectiveRate: effectiveRate,
     priceImpactPct: (1 - effectiveRate / spotRate) * 100,
-    hitBoundary: Math.abs(amountOut - maxOut) <= Math.max(1e-9, maxOut * 1e-12),
+    hitBoundary: Math.abs(amountOut - maxOut) <= maxOut * 1e-12,
     feePct: fee / 100,
     feeBps: fee
   };

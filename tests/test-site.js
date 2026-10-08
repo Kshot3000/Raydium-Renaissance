@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=48"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=49"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -2103,6 +2103,12 @@ near("CXO max target amount in value", cxoMax.amountIn, 112.08360789472633, 1e-9
 const cxoMaxBa = app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "100", 25, "ba");
 check("CXO max pay-B hits the upper boundary", cxoMaxBa !== null && cxoMaxBa.hitBoundary === true);
 near("CXO max pay-B new price is the upper edge", cxoMaxBa.newPrice, 1.25, 1e-9);
+const cxoTiny = app.clmmSwapExactOut("0.00000001", "0.8", "1.25", "1", "0.000000000527864045", 25, "ab");
+check("CXO tiny range half-drained is NOT the boundary", cxoTiny !== null && cxoTiny.hitBoundary === false);
+near("CXO tiny half-drained new price stays inside", cxoTiny.newPrice, 0.8972135954999579, 1e-9);
+const cxoTinyBa = app.clmmSwapExactOut("0.00000001", "0.8", "1.25", "1", "0.000000000527864045", 25, "ba");
+check("CXO tiny range half-drained pay-B is NOT the boundary", cxoTinyBa !== null && cxoTinyBa.hitBoundary === false);
+check("CXO near-max within relative tolerance is the boundary, 1e-9 short is not", app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", String(100 * (1 - 5e-13)), 25, "ab").hitBoundary === true && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", String(100 * (1 - 1e-9)), 25, "ab").hitBoundary === false);
 check("CXO rejects a target above the range's holding", app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "100.000001", 25, "ab") === null && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1", "101", 25, "ba") === null && app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1.2", "17.47016", 25, "ba") === null);
 near("CXO max out at 1.2 is tool 9's A holding there", app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1.2", "10", 25, "ba").maxOut, app.clmmPositionAtPrice(CXO_L, "0.8", "1.25", "1.2").amountA, 1e-9);
 near("CXO at 1.2 target 10 amount in", app.clmmSwapExactOut(CXO_L, "0.8", "1.25", "1.2", "10", 25, "ba").amountIn, 12.170829883690581, 1e-9);
