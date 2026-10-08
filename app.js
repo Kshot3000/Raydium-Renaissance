@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus thirty fully
+/* Raydium Renaissance hub logic: project filtering plus thirty-one fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -13,8 +13,8 @@
    tolerance band, a CLMM symmetric-range planner, a two-hop swap
    model, a net LP return calculator, a CLMM capital-efficiency
    calculator, a pool depth planner, a post-move reserves calculator,
-   a split-route swap planner, a CLMM net return calculator, and a
-   CLMM IL tolerance band.
+   a split-route swap planner, a CLMM net return calculator, a
+   CLMM IL tolerance band, and a CLMM required-volume planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1459,8 +1459,78 @@ function clmmIlBand(liquidityStr, lowerStr, upperStr, entryPriceStr, feesStr) {
   });
 }
 
+/* ---------- 31 · CLMM required-volume planner (Tools 12 + 13 inverted) ---------- */
+/* Tool 15 asks "at this volume, how many days until my fees cover
+   the hurdle holding opens?" An LP planning a position asks the
+   inverse: "to cover that hurdle within N days, how much volume
+   does the pool need per day?" The hurdle is Tool 12's own
+   feesNeededInB; the fee side is Tool 13's own formula run in
+   reverse:
+     your fees per day = volume * (feeBps / 10000)
+                         * (your L / total active L) * (in-range / 100)
+     required volume   = (hurdle / days) / that product
+   Validation rides on Tool 13 itself: a probe estimate at volume 1
+   must succeed, so total active liquidity below your own L, a fee
+   tier outside 0..10000 bps and an in-range share outside 0..100 are
+   rejected exactly as Tool 13 rejects them, and the share/in-range
+   figures reported are Tool 13's own. The tests feed the reported
+   volume straight back into Tools 13 and 15 and assert the hurdle
+   and the day count come back exactly, so the inverse can never
+   drift from the forwards tools. Two honest edges: at the entry
+   price there is no hurdle, so the required volume is honestly 0 —
+   not a small number — even at a zero fee tier; and with a real
+   hurdle but a zero fee tier or 0% time in range, no volume exists
+   that earns a fee, so the answer is reported as not feasible with
+   an infinite required volume rather than a made-up figure. The
+   volume is a pool-wide total in token B per day at the fee rate
+   assumed to hold still — in a live pool volume, active liquidity
+   and time in range all move. Model only — not a live quote, not a
+   volume forecast, not financial advice. */
+function clmmRequiredVolume(liquidityStr, lowerStr, upperStr, entryPriceStr, checkPriceStr, totalActiveLStr, feeBps, daysStr, inRangePctStr) {
+  if (daysStr == null || String(daysStr).trim() === "") return null;
+  var days = Number(daysStr);
+  if (!Number.isFinite(days) || days <= 0) return null;
+  var vh = clmmVsHold(liquidityStr, lowerStr, upperStr, entryPriceStr, checkPriceStr);
+  if (vh === null) return null;
+  /* probe Tool 13 at volume 1 for validation + its own share/in-range */
+  var est = clmmFeeEstimate(liquidityStr, totalActiveLStr, "1", feeBps, "1", inRangePctStr, "");
+  if (est === null) return null;
+  var feesNeeded = vh.feesNeededInB;
+  var requiredFeesPerDay = feesNeeded / days;
+  var shareFrac = est.yourLiquidity / est.totalActiveLiquidity;
+  var inRangeFrac = est.inRangePct / 100;
+  var feeFrac = Number(feeBps) / 10000;
+  var base = {
+    liquidity: vh.liquidity, lowerPrice: vh.lowerPrice, upperPrice: vh.upperPrice,
+    entryPrice: vh.entryPrice, checkPrice: vh.checkPrice,
+    holdValueInB: vh.holdValueInB, positionValueInB: vh.positionValueInB,
+    feesNeededInB: feesNeeded, days: days,
+    totalActiveLiquidity: est.totalActiveLiquidity, feeBps: est.feeBps,
+    sharePct: est.sharePct, inRangePct: est.inRangePct,
+    requiredFeesPerDay: requiredFeesPerDay
+  };
+  if (feesNeeded <= 1e-12) {
+    return Object.assign(base, {
+      feasible: true, requiredPoolFeesPerDay: 0, requiredVolumePerDay: 0
+    });
+  }
+  var capture = feeFrac * shareFrac * inRangeFrac;
+  if (capture <= 0) {
+    return Object.assign(base, {
+      feasible: false,
+      requiredPoolFeesPerDay: shareFrac * inRangeFrac > 0 ? requiredFeesPerDay / (shareFrac * inRangeFrac) : null,
+      requiredVolumePerDay: Infinity
+    });
+  }
+  return Object.assign(base, {
+    feasible: true,
+    requiredPoolFeesPerDay: requiredFeesPerDay / (shareFrac * inRangeFrac),
+    requiredVolumePerDay: requiredFeesPerDay / capture
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -2268,6 +2338,41 @@ if (typeof document !== "undefined") {
           (res.downUnbounded ? "; no fall, however far, can consume the fees — the most a fall can cost vs holding is the ≈ " + fmt(res.downCapInB, 6) + " B of token B the position held at entry." : ".") +
           " A CLMM tolerance-band model — not a live quote, not financial advice.";
         document.getElementById("cband-out").value = res.downUnbounded ? "0 – " + fmt(res.priceHigh, 6) : fmt(res.priceLow, 6) + " – " + fmt(res.priceHigh, 6);
+      }
+    });
+
+    document.getElementById("rvol-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmRequiredVolume(
+        document.getElementById("rvol-l").value,
+        document.getElementById("rvol-lower").value,
+        document.getElementById("rvol-upper").value,
+        document.getElementById("rvol-entry").value,
+        document.getElementById("rvol-check").value,
+        document.getElementById("rvol-total").value,
+        document.getElementById("rvol-bps").value,
+        document.getElementById("rvol-days").value,
+        document.getElementById("rvol-inrange").value
+      );
+      var out = document.getElementById("rvol-result");
+      if (res === null) {
+        out.textContent = "Enter a positive model liquidity L, a range with lower below upper, entry and check prices, total active liquidity of at least your own L, a fee tier between 0 and 10000 bps, a positive number of days, and a time-in-range share between 0 and 100%.";
+        document.getElementById("rvol-out").value = "";
+      } else if (!res.feasible) {
+        out.textContent = "Model output: the position must earn ≈ " + fmt(res.feesNeededInB, 6) + " B of fees to match holding at ≈ " + fmt(res.checkPrice, 6) +
+          " B per A — ≈ " + fmt(res.requiredFeesPerDay, 6) + " B per day over " + fmt(res.days, 2) + " days — but at a " + fmt(res.feeBps, 0) +
+          " bps fee tier and " + fmt(res.inRangePct, 2) + "% time in range, no pool volume earns that fee: the required volume is not finite. Raise the fee tier, stay in range, or allow more days. A CLMM required-volume model — not a live quote, not financial advice.";
+        document.getElementById("rvol-out").value = "not feasible at this fee tier / time in range";
+      } else if (res.requiredVolumePerDay === 0) {
+        out.textContent = "Model output: at the entry price there is no shortfall vs holding to cover, so the required pool volume is 0 B per day — any fees earned are ahead of holding at that price. A CLMM required-volume model — not a live quote, not financial advice.";
+        document.getElementById("rvol-out").value = "0";
+      } else {
+        out.textContent = "Model output: covering the ≈ " + fmt(res.feesNeededInB, 6) + " B shortfall vs holding at ≈ " + fmt(res.checkPrice, 6) +
+          " B per A within " + fmt(res.days, 2) + " days needs ≈ " + fmt(res.requiredFeesPerDay, 6) + " B of fees per day; at a " + fmt(res.feeBps, 0) +
+          " bps tier, a " + fmt(res.sharePct, 4) + "% share of active liquidity and " + fmt(res.inRangePct, 2) +
+          "% time in range, that means ≈ " + fmt(res.requiredVolumePerDay, 2) + " B of pool volume per day (≈ " + fmt(res.requiredPoolFeesPerDay, 6) +
+          " B per day of pool-wide fees). That volume is the whole pool's, not your trades — and no volume is promised. A CLMM required-volume model — not a live quote, not financial advice.";
+        document.getElementById("rvol-out").value = fmt(res.requiredVolumePerDay, 2);
       }
     });
 

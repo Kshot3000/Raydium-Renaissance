@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=29"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=30"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1302,6 +1302,60 @@ check("CBAND rejects bad position inputs", app.clmmIlBand("0", "0.8", "1.25", "1
 check("all cband controls labelled", ["cband-l", "cband-lower", "cband-upper", "cband-entry", "cband-fees", "cband-out"].every(id => html.includes(`for="${id}"`)));
 check("cband tool present in index.html", html.includes('id="cband-calc"') && html.includes('id="cband-result"'));
 check("cband honesty: cap asymmetry and not-live labels", html.includes("most a fall can ever cost vs holding is the token B the position held at entry") && html.includes("no two-sided band") && html.includes("not a live quote, not financial advice"));
+
+/* ---------- Tool 31: CLMM required-volume planner (RVOL) ---------- */
+const L31 = "947.2135955", T31 = "9472.135955";
+const rv1 = app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", T31, 25, "1", "100");
+near("RVOL headline hurdle = Tool 12 hurdle", rv1.feesNeededInB, 13.196601125011057, 1e-9);
+near("RVOL headline required fees per day", rv1.requiredFeesPerDay, 13.196601125011057, 1e-9);
+near("RVOL headline required volume", rv1.requiredVolumePerDay, 52786.40450004423, 1e-4);
+near("RVOL headline required pool fees per day", rv1.requiredPoolFeesPerDay, 131.96601125011057, 1e-7);
+check("RVOL headline feasible + share reported", rv1.feasible === true && rv1.sharePct === 10 && rv1.inRangePct === 100);
+const rv10 = app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", T31, 25, "10", "100");
+near("RVOL ten days needs a tenth of the volume", rv10.requiredVolumePerDay, 5278.640450004422, 1e-5);
+const rvLow = app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "0.8", T31, 100, "2", "50");
+near("RVOL lower-edge hurdle", rvLow.feesNeededInB, 10.557280900008863, 1e-9);
+near("RVOL lower-edge required volume", rvLow.requiredVolumePerDay, 10557.280900008862, 1e-4);
+/* the inverse must round-trip through Tools 13 and 15 exactly */
+for (const [nm, rv, days] of [["headline", rv1, "1"], ["ten-day", rv10, "10"], ["lower-edge", rvLow, "2"]]) {
+  const fwd = app.clmmFeeEstimate(rv.liquidity, rv.totalActiveLiquidity, String(rv.requiredVolumePerDay), rv.feeBps, days, String(rv.inRangePct), "");
+  near("RVOL Tool 13 at required volume earns the hurdle (" + nm + ")", fwd.feesForPeriod, rv.feesNeededInB, 1e-6);
+  const bed = app.clmmBreakEven(rv.liquidity, rv.lowerPrice, rv.upperPrice, rv.entryPrice, rv.checkPrice, rv.totalActiveLiquidity, String(rv.requiredVolumePerDay), rv.feeBps, String(rv.inRangePct));
+  near("RVOL Tool 15 at required volume breaks even in the days allowed (" + nm + ")", bed.daysToBreakEven, Number(days), 1e-6);
+}
+/* composition: hurdle and share are the source tools' own numbers */
+for (const chk of ["0.9", "1", "1.1", "1.25", "0.8", "1.6"]) {
+  const r = app.clmmRequiredVolume(L31, "0.8", "1.25", "1", chk, T31, 25, "7", "80");
+  near("RVOL hurdle = Tool 12 at check " + chk, r.feesNeededInB, app.clmmVsHold(L31, "0.8", "1.25", "1", chk).feesNeededInB, 1e-12);
+  check("RVOL share/in-range = Tool 13 at check " + chk, r.sharePct === 10 && r.inRangePct === 80);
+}
+/* scaling: double the fee tier or double the share, half the volume */
+const rvFee2 = app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", T31, 50, "1", "100");
+near("RVOL double fee tier halves volume", rvFee2.requiredVolumePerDay, rv1.requiredVolumePerDay / 2, 1e-4);
+const rvShare2 = app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", "4736.0679775", 25, "1", "100");
+near("RVOL double share halves volume", rvShare2.requiredVolumePerDay, rv1.requiredVolumePerDay / 2, 1e-4);
+const rvRange2 = app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", T31, 25, "1", "50");
+near("RVOL half the time in range doubles volume", rvRange2.requiredVolumePerDay, rv1.requiredVolumePerDay * 2, 1e-4);
+/* honest edges */
+const rv0 = app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1", T31, 25, "5", "100");
+check("RVOL entry price needs zero volume", rv0.feasible === true && rv0.requiredVolumePerDay === 0 && rv0.feesNeededInB <= 1e-12);
+const rv0Fee = app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1", T31, 0, "5", "100");
+check("RVOL entry price needs zero volume even at a zero fee tier", rv0Fee.feasible === true && rv0Fee.requiredVolumePerDay === 0);
+const rvNoFee = app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", T31, 0, "5", "100");
+check("RVOL zero fee tier with a real hurdle is not feasible", rvNoFee.feasible === false && rvNoFee.requiredVolumePerDay === Infinity && rvNoFee.requiredFeesPerDay > 0);
+const rvOut = app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", T31, 25, "5", "0");
+check("RVOL 0% time in range with a real hurdle is not feasible", rvOut.feasible === false && rvOut.requiredVolumePerDay === Infinity);
+const rvBlank = app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", T31, 25, "1", "");
+near("RVOL blank time-in-range defaults to 100 like Tool 13", rvBlank.requiredVolumePerDay, rv1.requiredVolumePerDay, 1e-9);
+/* rejections */
+check("RVOL rejects blank or non-positive days", app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", T31, 25, "", "100") === null && app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", T31, 25, "0", "100") === null && app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", T31, 25, "-3", "100") === null);
+check("RVOL rejects total active liquidity below own L (Tool 13 rule)", app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", "900", 25, "1", "100") === null);
+check("RVOL rejects fee tier above 10000 bps and in-range above 100", app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", T31, 10001, "1", "100") === null && app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "1.25", T31, 25, "1", "101") === null);
+check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.25", "1", "1.25", T31, 25, "1", "100") === null && app.clmmRequiredVolume(L31, "1.25", "0.8", "1", "1.25", T31, 25, "1", "100") === null && app.clmmRequiredVolume(L31, "0.8", "1.25", "1", "0", T31, 25, "1", "100") === null);
+check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
+check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
+check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
+check("README lists thirty-one tools", readme.includes("thirty-one pool tools") || readme.includes("all thirty-one"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

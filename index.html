@@ -697,6 +697,33 @@
         <button type="submit" class="btn primary">Find my band</button>
         <p id="cband-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="rvol-calc">
+        <h3>31 · CLMM required-volume planner</h3>
+        <p>Tool 15 asks how many days a given volume needs to cover the shortfall vs holding; this asks the planning question in reverse — how much volume the pool needs per day for your fees to cover that shortfall within a number of days you choose. Enter the position (the model liquidity Tool 8 reported, your range, entry and check prices) and the fee side (total active liquidity, fee tier, days allowed, time in range): the calculator takes Tool 12's own fee hurdle and runs Tool 13's fee formula backwards, so the volume it reports is exactly the volume Tools 13 and 15 would work forwards from. At the entry price there is no shortfall, so the required volume is honestly zero; with a real shortfall but a zero fee tier or 0% time in range, no volume earns a fee at all, so the answer is reported as not feasible rather than as a huge number. The volume is the whole pool's trading in token B per day, not your trades, and the fee rate is assumed to hold still — in a live pool it will not. Educational model only — your inputs, not live pool state; not a live quote, not a volume forecast, not financial advice.</p>
+        <label for="rvol-l">Position liquidity L (model, from Tool 8)</label>
+        <input id="rvol-l" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="rvol-lower">Range lower price (B per A)</label>
+        <input id="rvol-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="rvol-upper">Range upper price (B per A)</label>
+        <input id="rvol-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="rvol-entry">Entry price (token B per token A)</label>
+        <input id="rvol-entry" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="rvol-check">Price to check (token B per token A)</label>
+        <input id="rvol-check" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="rvol-total">Total active liquidity at the current tick (your estimate)</label>
+        <input id="rvol-total" inputmode="decimal" placeholder="e.g. 9472.14" autocomplete="off">
+        <label for="rvol-bps">Fee tier (bps — 25 = 0.25%)</label>
+        <input id="rvol-bps" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="rvol-days">Days allowed to cover the shortfall</label>
+        <input id="rvol-days" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="rvol-inrange">Time in range % (optional, default 100)</label>
+        <input id="rvol-inrange" inputmode="decimal" placeholder="e.g. 80" autocomplete="off">
+        <label for="rvol-out">Required pool volume per day — token B (model)</label>
+        <input id="rvol-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Find the volume I need</button>
+        <p id="rvol-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -724,6 +751,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=29"></script>
+<script src="app.js?v=30"></script>
 </body>
 </html>
