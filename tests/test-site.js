@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=40"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=41"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists thirty-nine tools", readme.includes("thirty-nine pool tools") || readme.includes("all thirty-nine"));
+check("README lists forty tools", readme.includes("forty pool tools") || readme.includes("all forty"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1815,6 +1815,43 @@ check("all hxo controls labelled", ["hxo-r1in", "hxo-r1out", "hxo-r2in", "hxo-r2
 check("hxo tool present in index.html", html.includes('id="hxo-calc"') && html.includes('id="hxo-result"'));
 check("hxo honesty: backwards legs and not-live labels", html.includes("works backwards with tool 6's own maths") && html.includes("not live pool state") && html.includes("not financial advice"));
 check("guide covers two-hop exact-out", guide.includes("Price a routed trade backwards from the amount you need"));
+
+/* ---------- Tool 40: Constant-product break-even days calculator (CPBED) ---------- */
+const cpbed1 = app.cpBreakEvenDays(2, "1000", "1000000", 25, "10000", "1000000");
+check("CPBED headline settles", cpbed1 !== null);
+near("CPBED headline hurdle", cpbed1.feesNeeded, 85.7864376269049, 1e-9);
+near("CPBED headline daily fees", cpbed1.dailyFees, 25, 1e-12);
+check("CPBED headline share pct", cpbed1.sharePct === 1);
+near("CPBED headline days", cpbed1.daysToBreakEven, 3.431457505076196, 1e-12);
+check("CPBED hurdle equals Tool 4 exactly", cpbed1.feesNeeded === app.breakEvenFees(2, "1000").feesNeeded);
+check("CPBED rate equals Tool 3 exactly", cpbed1.dailyFees === app.lpFees("1000000", 25, "10000", "1000000").dailyFees);
+check("CPBED days equal Tool 4 fed Tool 3's daily exactly", cpbed1.daysToBreakEven === app.breakEvenFees(2, "1000", String(app.lpFees("1000000", 25, "10000", "1000000").dailyFees)).daysToBreakEven);
+near("CPBED Tool 32 backwards from headline days returns headline volume", app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, String(cpbed1.daysToBreakEven)).requiredVolumePerDay, 1000000, 1e-6);
+const cpbed4 = app.cpBreakEvenDays(4, "1000", "800000", 25, "10000", "1000000");
+near("CPBED 4x hurdle", cpbed4.feesNeeded, 500, 1e-9);
+near("CPBED 4x days", cpbed4.daysToBreakEven, 25, 1e-12);
+near("CPBED halving days", app.cpBreakEvenDays(0.5, "1000", "1000000", 25, "10000", "1000000").daysToBreakEven, 1.715728752538098, 1e-12);
+for (const r of [0.25, 0.5, 1.5, 2, 4]) {
+  const x = app.cpBreakEvenDays(r, "2500", "777777", 30, "12345", "987654");
+  near("CPBED sweep hurdle = Tool 4 at ratio " + r, x.feesNeeded, app.breakEvenFees(r, "2500").feesNeeded, 1e-9);
+  check("CPBED sweep daily = Tool 3 at ratio " + r, x.dailyFees === app.lpFees("777777", 30, "12345", "987654").dailyFees);
+  check("CPBED sweep days = hurdle / daily at ratio " + r, x.daysToBreakEven === x.feesNeeded / x.dailyFees);
+}
+near("CPBED doubling volume halves days", app.cpBreakEvenDays(2, "1000", "2000000", 25, "10000", "1000000").daysToBreakEven, cpbed1.daysToBreakEven / 2, 1e-12);
+near("CPBED doubling share halves days", app.cpBreakEvenDays(2, "1000", "1000000", 25, "20000", "1000000").daysToBreakEven, cpbed1.daysToBreakEven / 2, 1e-12);
+check("CPBED no price move is 0 days", app.cpBreakEvenDays(1, "1000", "1000000", 25, "10000", "1000000").daysToBreakEven === 0);
+check("CPBED no price move is 0 days even at zero volume and zero fee tier",
+  app.cpBreakEvenDays(1, "1000", "0", 0, "10000", "1000000").daysToBreakEven === 0);
+check("CPBED real hurdle with zero volume never breaks even", app.cpBreakEvenDays(2, "1000", "0", 25, "10000", "1000000").daysToBreakEven === Infinity);
+check("CPBED real hurdle with zero fee tier never breaks even", app.cpBreakEvenDays(2, "1000", "1000000", 0, "10000", "1000000").daysToBreakEven === Infinity);
+check("CPBED rejects blank fields", app.cpBreakEvenDays(2, "", "1000000", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", " ", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "1000000", "", "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "1000000", 25, "", "1000000") === null && app.cpBreakEvenDays(2, "1000", "1000000", 25, "10000", "") === null);
+check("CPBED rejects your liquidity above TVL", app.cpBreakEvenDays(2, "1000", "1000000", 25, "1000001", "1000000") === null);
+check("CPBED rejects zero or negative deposit and volume", app.cpBreakEvenDays(2, "0", "1000000", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "-5", "1000000", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "-1", 25, "10000", "1000000") === null);
+check("CPBED rejects bad ratio, junk and bad fee tier", app.cpBreakEvenDays(0, "1000", "1000000", 25, "10000", "1000000") === null && app.cpBreakEvenDays(-2, "1000", "1000000", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "abc", "1000000", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "1000000", 10001, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "1000000", -1, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "1000000", 25.5, "10000", "1000000") === null);
+check("all cpbed controls labelled", ["cpbed-ratio", "cpbed-deposit", "cpbed-volume", "cpbed-bps", "cpbed-your", "cpbed-tvl", "cpbed-out"].every(id => html.includes(`for="${id}"`)));
+check("cpbed tool present in index.html", html.includes('id="cpbed-calc"') && html.includes('id="cpbed-result"'));
+check("cpbed honesty: joined tools and not-live labels", html.includes("This joins them") && html.includes("not live pool state") && html.includes("not a forecast") && html.includes("never breaks even"));
+check("guide covers CP break-even days", guide.includes("Ask how long break-even takes, in days"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

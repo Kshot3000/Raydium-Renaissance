@@ -886,6 +886,27 @@
         <button type="submit" class="btn primary">Price this exact-out route</button>
         <p id="hxo-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="cpbed-calc">
+        <h3>40 · Constant-product break-even days calculator</h3>
+        <p>Tool 15 answers "how long until fees cover the shortfall?" for a CLMM position; this is the same question for a constant-product (AMM v4 / CPMM / CP-Swap) position. Tool 4 gives the shortfall a price move opens against holding, and tool 3 gives the fees a day of pool volume pays you at your share — until now you had to run the second and type its answer into the first by hand. This joins them: enter the price move you fear (as a multiple), your deposit, the pool's volume per day, the fee tier, and your liquidity against the pool's TVL, and it divides tool 4's own hurdle by tool 3's own daily fees. At no price move there is no shortfall, so the answer is honestly 0 days even at zero volume; with a real shortfall but no volume, or a zero fee tier, the position never breaks even and that is what it says — not a huge number. The day count assumes volume, tier, share and price all hold still, which in a live pool they will not. Educational model only — your inputs, not live pool state; not a live quote, not a forecast, not financial advice.</p>
+        <label for="cpbed-ratio">Price move (multiple — 2 = price doubles, 0.5 = halves)</label>
+        <input id="cpbed-ratio" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="cpbed-deposit">Your deposit value (in $ or token-B terms)</label>
+        <input id="cpbed-deposit" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="cpbed-volume">Pool volume per day (same terms as deposit)</label>
+        <input id="cpbed-volume" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="cpbed-bps">Fee tier (bps — 25 = 0.25%)</label>
+        <input id="cpbed-bps" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="cpbed-your">Your liquidity in the pool (same terms as TVL)</label>
+        <input id="cpbed-your" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="cpbed-tvl">Pool TVL (same terms as your liquidity)</label>
+        <input id="cpbed-tvl" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="cpbed-out">Days to break even (model)</label>
+        <input id="cpbed-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">How long to break even?</button>
+        <p id="cpbed-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -913,6 +934,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=40"></script>
+<script src="app.js?v=41"></script>
 </body>
 </html>

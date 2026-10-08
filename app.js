@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus thirty-nine fully
+/* Raydium Renaissance hub logic: project filtering plus forty fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -19,7 +19,8 @@
    zap-in planner, a CLMM single-sided zap-out planner, a CLMM
    token-B deposit planner, a CLMM re-centre / rebalance planner,
    a CLMM withdrawal planner, a constant-product wallet-balance
-   deposit planner, and a two-hop exact-out swap model.
+   deposit planner, a two-hop exact-out swap model, and a
+   constant-product break-even days calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1600,6 +1601,60 @@ function cpRequiredVolume(priceRatio, depositStr, yourStr, tvlStr, feeBps, daysS
   });
 }
 
+/* ---------- 40 · Constant-product break-even days calculator (Tools 4 + 3 joined) ---------- */
+/* Tool 15 asks "how long until fees cover the shortfall?" for a CLMM
+   position; a constant-product LP asks the same, and until now had to
+   run Tool 3 for a daily fee figure and type it into Tool 4 by hand.
+   This joins the two directly: the hurdle is Tool 4's own feesNeeded
+   (hold value minus LP value after the move), and the rate is
+   Tool 3's own dailyFees at the pool volume, fee tier and share the
+   user supplies — days = hurdle / dailyFees, computed from those
+   tools' own returns so it can never drift from either (the tests
+   assert Tool 4 fed Tool 3's daily figure returns exactly this day
+   count, and that Tool 32 run backwards from this day count returns
+   exactly this volume). Two honest edges, mirroring Tool 15: at no
+   price move there is no hurdle, so the answer is 0 days even at a
+   zero fee rate or zero volume; and with a real hurdle but a zero
+   rate — no volume, a zero fee tier, or a zero share — the position
+   never breaks even, reported as Infinity, not a large number. The
+   blank-field guard matters here: Number("") is 0, so without it an
+   empty volume would slip through Tool 3 as a zero rate and be
+   reported as "never" instead of rejected as missing input. The
+   day count assumes the volume, tier, share and price all hold
+   still, which in a live pool they will not. Model only — your
+   inputs, not live pool state; not a live quote, not a forecast,
+   not financial advice. */
+function cpBreakEvenDays(priceRatio, depositStr, volumeStr, feeBps, yourStr, tvlStr) {
+  var required = [depositStr, volumeStr, yourStr, tvlStr, feeBps];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var be = breakEvenFees(priceRatio, depositStr);
+  if (be === null) return null;
+  var est = lpFees(volumeStr, feeBps, yourStr, tvlStr);
+  if (est === null) return null;
+  var days;
+  if (be.feesNeeded <= 1e-12) days = 0;
+  else if (est.dailyFees > 0) days = be.feesNeeded / est.dailyFees;
+  else days = Infinity;
+  return {
+    priceRatio: be.priceRatio,
+    deposit: be.deposit,
+    holdValue: be.holdValue,
+    lpValue: be.lpValue,
+    ilPct: be.ilPct,
+    feesNeeded: be.feesNeeded,
+    feesNeededPctOfDeposit: be.feesNeededPctOfDeposit,
+    sharePct: est.sharePct,
+    dailyFees: est.dailyFees,
+    monthlyFees: est.monthlyFees,
+    aprPct: est.aprPct,
+    feeBps: Number(feeBps),
+    feePct: est.feePct,
+    daysToBreakEven: days
+  };
+}
+
 /* ---------- 33 · CLMM single-sided zap-in planner (Tools 1 + 14 joined) ---------- */
 /* Tool 19 zaps into a constant-product pool from one token; Tool 20's
    note and Tool 8's keep saying CLMM entries are range-based and
@@ -2084,7 +2139,7 @@ function twoHopExactOut(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2Ou
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -3165,6 +3220,38 @@ if (typeof document !== "undefined") {
         " C per A — a combined price impact of ≈ " + fmt(res.priceImpactPct, 4) +
         "%. Each hop rounds its required input up, so paying the reported amount forward returns at least the target in this model. A two-hop exact-out model over two pools you typed — not a live quote, not financial advice.";
       document.getElementById("hxo-ain").value = res.amountIn;
+    });
+
+    document.getElementById("cpbed-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = cpBreakEvenDays(
+        document.getElementById("cpbed-ratio").value,
+        document.getElementById("cpbed-deposit").value,
+        document.getElementById("cpbed-volume").value,
+        document.getElementById("cpbed-bps").value,
+        document.getElementById("cpbed-your").value,
+        document.getElementById("cpbed-tvl").value
+      );
+      var out = document.getElementById("cpbed-result");
+      if (res === null) {
+        out.textContent = "Enter a positive price multiple, a positive deposit, a pool volume per day of zero or more, your liquidity no larger than the pool's TVL, and a fee tier between 0 and 10000 bps.";
+        document.getElementById("cpbed-out").value = "";
+      } else if (res.daysToBreakEven === 0) {
+        out.textContent = "Model output: with no price move there is no shortfall vs holding to cover, so the break-even time is 0 days — any fees earned are ahead of holding at that price. A constant-product break-even days model — not a live quote, not financial advice.";
+        document.getElementById("cpbed-out").value = "0";
+      } else if (!isFinite(res.daysToBreakEven)) {
+        out.textContent = "Model output: the position must earn ≈ " + fmt(res.feesNeeded, 2) + " of fees to match holding after a " + fmt(res.priceRatio, 4) +
+          "× price move on a " + fmt(res.deposit, 2) + " deposit, but at this volume and a " + fmt(res.feeBps, 0) +
+          " bps fee tier it earns nothing per day, so it never breaks even. Add volume, raise the fee tier, or increase your share. A constant-product break-even days model — not a live quote, not financial advice.";
+        document.getElementById("cpbed-out").value = "never";
+      } else {
+        out.textContent = "Model output: after a " + fmt(res.priceRatio, 4) + "× price move, a " + fmt(res.deposit, 2) +
+          " deposit holds ≈ " + fmt(res.lpValue, 2) + " in the pool vs ≈ " + fmt(res.holdValue, 2) + " held — a shortfall of ≈ " + fmt(res.feesNeeded, 2) +
+          " (" + fmt(Math.abs(res.ilPct), 4) + "% vs holding). At ≈ " + fmt(res.dailyFees, 2) + " of fees per day (pool volume × a " + fmt(res.feeBps, 0) +
+          " bps tier × your " + fmt(res.sharePct, 4) + "% share), covering that shortfall takes ≈ " + fmt(res.daysToBreakEven, 2) +
+          " days — assuming volume, tier, share and price all hold still, which they will not. A constant-product break-even days model — not a live quote, not financial advice.";
+        document.getElementById("cpbed-out").value = fmt(res.daysToBreakEven, 2);
+      }
     });
 
     /* --- copy donation address --- */
