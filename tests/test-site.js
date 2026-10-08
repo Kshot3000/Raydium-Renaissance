@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=27"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=28"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1251,6 +1251,55 @@ check("CNET rejects bad position inputs", app.clmmNetReturn("0", "0.8", "1.25", 
 check("all cnet controls labelled", ["cnet-l", "cnet-lower", "cnet-upper", "cnet-entry", "cnet-check", "cnet-fees", "cnet-out"].every(id => html.includes(`for="${id}"`)));
 check("cnet tool present in index.html", html.includes('id="cnet-calc"') && html.includes('id="cnet-result"'));
 check("cnet honesty: both bottom lines and not-live labels", html.includes("different bottom line, reported alongside rather than instead") && html.includes("nothing-to-cover rather than a percentage") && html.includes("not a live quote, not financial advice"));
+
+/* ---------- Tool 30: CLMM IL tolerance band (CBAND) ---------- */
+/* headline: fees equal to Tool 12's hurdle at a range edge put the band
+   edge exactly on that range edge */
+const cbUp = app.clmmIlBand("947.2135955", "0.8", "1.25", "1", "13.19660113");
+near("CBAND upper-edge fees put high edge on range top", cbUp.priceHigh, 1.25, 1e-6);
+near("CBAND upper-edge fees move up pct", cbUp.moveUpPct, 25, 1e-4);
+const cbDn = app.clmmIlBand("947.2135955", "0.8", "1.25", "1", "10.5572809");
+near("CBAND lower-edge fees put low edge on range bottom", cbDn.priceLow, 0.8, 1e-6);
+check("CBAND lower edge flagged on range boundary", cbDn.lowInRange === true && cbDn.downUnbounded === false);
+near("CBAND lower-edge fees move down pct", cbDn.moveDownPct, 20, 1e-4);
+/* clean mid vector (pre-verified against Tool 12 in a foreground prototype) */
+const cb50 = app.clmmIlBand("947.2135955", "0.8", "1.25", "1", "50");
+near("CBAND fees 50 high edge", cb50.priceHigh, 1.618033986, 1e-6);
+near("CBAND fees 50 low edge", cb50.priceLow, 0.447213598, 1e-6);
+check("CBAND fees 50 edges both outside range", cb50.highInRange === false && cb50.lowInRange === false);
+near("CBAND entry value", cb50.entryValueInB, 200, 1e-6);
+near("CBAND down cap is entry B amount", cb50.downCapInB, 100, 1e-6);
+/* the defining property: Tool 12's own hurdle at each edge equals the fees */
+for (const fees of ["0.5", "5", "13.19660113", "50", "88.19660113", "200"]) {
+  const b = app.clmmIlBand("947.2135955", "0.8", "1.25", "1", fees);
+  near("CBAND hurdle at high edge = fees " + fees, app.clmmVsHold("947.2135955", "0.8", "1.25", "1", String(b.priceHigh)).feesNeededInB, Number(fees), 1e-6);
+  check("CBAND band straddles entry " + fees, b.priceHigh > 1 && (b.downUnbounded || (b.priceLow !== null && b.priceLow < 1)));
+  if (!b.downUnbounded) near("CBAND hurdle at low edge = fees " + fees, app.clmmVsHold("947.2135955", "0.8", "1.25", "1", String(b.priceLow)).feesNeededInB, Number(fees), 1e-6);
+}
+/* composition holds at another entry inside the range too */
+const cbOff = app.clmmIlBand("947.2135955", "0.8", "1.25", "1.1", "5");
+near("CBAND off-centre hurdle at high edge", app.clmmVsHold("947.2135955", "0.8", "1.25", "1.1", String(cbOff.priceHigh)).feesNeededInB, 5, 1e-6);
+near("CBAND off-centre hurdle at low edge", app.clmmVsHold("947.2135955", "0.8", "1.25", "1.1", String(cbOff.priceLow)).feesNeededInB, 5, 1e-6);
+/* bigger fees defend a strictly wider band on both sides */
+const cb5 = app.clmmIlBand("947.2135955", "0.8", "1.25", "1", "5");
+const cb20 = app.clmmIlBand("947.2135955", "0.8", "1.25", "1", "20");
+check("CBAND wider fees, wider band", cb20.priceHigh > cb5.priceHigh && cb20.priceLow < cb5.priceLow);
+check("CBAND small-fees edges flagged inside the range", cb5.highInRange === true && cb5.lowInRange === true);
+/* downside cap: fees at/above the entry B amount can never be consumed by a fall */
+const cbCap = app.clmmIlBand("947.2135955", "0.8", "1.25", "1", "100");
+check("CBAND fees = cap is down-unbounded", cbCap.downUnbounded === true && cbCap.priceLow === null && cbCap.moveDownPct === null && cbCap.lowInRange === null);
+check("CBAND fees above cap still has a finite high edge", cbCap.priceHigh > 1 && app.clmmVsHold("947.2135955", "0.8", "1.25", "1", String(cbCap.priceHigh)).feesNeededInB > 99.999999);
+const cbNearCap = app.clmmIlBand("947.2135955", "0.8", "1.25", "1", "99.9");
+check("CBAND just below cap has a near-zero low edge", cbNearCap.downUnbounded === false && cbNearCap.priceLow > 0 && cbNearCap.priceLow < 0.01);
+/* zero fees collapse the band to the entry price */
+const cb0 = app.clmmIlBand("947.2135955", "0.8", "1.25", "1", "0");
+check("CBAND zero fees collapse to entry", cb0.priceHigh === 1 && cb0.priceLow === 1 && cb0.moveUpPct === 0 && cb0.moveDownPct === 0 && cb0.downUnbounded === false);
+check("CBAND rejects negative or blank fees", app.clmmIlBand("947.2135955", "0.8", "1.25", "1", "-1") === null && app.clmmIlBand("947.2135955", "0.8", "1.25", "1", "") === null);
+check("CBAND rejects entry outside the range", app.clmmIlBand("947.2135955", "0.8", "1.25", "2", "5") === null && app.clmmIlBand("947.2135955", "0.8", "1.25", "0.5", "5") === null);
+check("CBAND rejects bad position inputs", app.clmmIlBand("0", "0.8", "1.25", "1", "5") === null && app.clmmIlBand("947.2135955", "1.25", "0.8", "1", "5") === null && app.clmmIlBand("947.2135955", "0.8", "1.25", "0", "5") === null);
+check("all cband controls labelled", ["cband-l", "cband-lower", "cband-upper", "cband-entry", "cband-fees", "cband-out"].every(id => html.includes(`for="${id}"`)));
+check("cband tool present in index.html", html.includes('id="cband-calc"') && html.includes('id="cband-result"'));
+check("cband honesty: cap asymmetry and not-live labels", html.includes("most a fall can ever cost vs holding is the token B the position held at entry") && html.includes("no two-sided band") && html.includes("not a live quote, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

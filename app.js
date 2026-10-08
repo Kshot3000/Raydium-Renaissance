@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus twenty-nine fully
+/* Raydium Renaissance hub logic: project filtering plus thirty fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -13,7 +13,8 @@
    tolerance band, a CLMM symmetric-range planner, a two-hop swap
    model, a net LP return calculator, a CLMM capital-efficiency
    calculator, a pool depth planner, a post-move reserves calculator,
-   a split-route swap planner, and a CLMM net return calculator.
+   a split-route swap planner, a CLMM net return calculator, and a
+   CLMM IL tolerance band.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1365,8 +1366,97 @@ function clmmNetReturn(liquidityStr, lowerStr, upperStr, entryPriceStr, checkPri
   };
 }
 
+/* ---------- 30 · CLMM IL tolerance band ---------- */
+/* Tool 21 answers "how far can the price move before the fees I have
+   earned stop covering the shortfall vs holding?" for a constant-
+   product position, in closed form. A CLMM position's shortfall
+   (Tool 12's hurdle) has no closed form — it is piecewise, changing
+   character at the range edges — so this tool finds the band by
+   searching Tool 12's own clmmVsHold: the hurdle is zero at the entry
+   price and rises monotonically as price moves away on either side
+   (verified on grids inside and outside the range), so each edge is
+   the price where the hurdle exactly equals the fees earned, found
+   by geometric bisection directly on clmmVsHold. The band can
+   therefore never drift from Tool 12's numbers. The entry price must
+   be inside the range: a position entered outside it holds a single
+   token and has no two-sided band to speak of, so that is rejected
+   rather than papered over.
+   One honest asymmetry, sharper than Tool 21's: as price falls to
+   zero the position ends up holding only token A (worthless at zero)
+   while holding kept the entry amount of token B, so the downside
+   hurdle caps at exactly that entry B amount — fees at or above the
+   cap can never be consumed by a fall, however far, and are reported
+   as downUnbounded. A rise has no cap: holding keeps all of the token
+   that rose, so the hurdle grows without bound. Whether each edge
+   sits inside the position's own range is reported too — a band edge
+   beyond a range edge means the fees survive the position going fully
+   single-sided on that side. Zero fees collapse the band to the entry
+   price. Model only — fees counted in token B outside the position,
+   no fee growth or re-centring modelled. Not financial advice. */
+function clmmIlBand(liquidityStr, lowerStr, upperStr, entryPriceStr, feesStr) {
+  if (feesStr == null || String(feesStr).trim() === "") return null;
+  var fees = Number(feesStr);
+  if (!Number.isFinite(fees) || fees < 0) return null;
+  var atEntry = clmmVsHold(liquidityStr, lowerStr, upperStr, entryPriceStr, entryPriceStr);
+  if (atEntry === null) return null;
+  var entry = atEntry.entryPrice, lower = atEntry.lowerPrice, upper = atEntry.upperPrice;
+  if (entry < lower || entry > upper) return null;
+  var entryValueInB = atEntry.entryAmountA * entry + atEntry.entryAmountB;
+  var base = {
+    liquidity: atEntry.liquidity, lowerPrice: lower, upperPrice: upper,
+    entryPrice: entry, feesInB: fees,
+    entryAmountA: atEntry.entryAmountA, entryAmountB: atEntry.entryAmountB,
+    entryValueInB: entryValueInB, downCapInB: atEntry.entryAmountB
+  };
+  if (fees === 0) {
+    return Object.assign(base, {
+      priceHigh: entry, priceLow: entry, moveUpPct: 0, moveDownPct: 0,
+      downUnbounded: false, highInRange: true, lowInRange: true
+    });
+  }
+  function hurdle(p) {
+    var vh = clmmVsHold(liquidityStr, lowerStr, upperStr, entryPriceStr, String(p));
+    return vh === null ? null : vh.feesNeededInB;
+  }
+  /* upper edge: hurdle grows without bound as price rises, so a
+     doubling bracket always finds it; bisect geometrically */
+  var lo = entry, hi = entry * 2;
+  while (hurdle(hi) < fees && hi < entry * 1e15) hi *= 2;
+  if (hurdle(hi) < fees) return null;
+  for (var i = 0; i < 200; i++) {
+    var mid = Math.sqrt(lo * hi);
+    if (hurdle(mid) < fees) lo = mid; else hi = mid;
+  }
+  var priceHigh = Math.sqrt(lo * hi);
+  var result = Object.assign(base, {
+    priceHigh: priceHigh, moveUpPct: (priceHigh / entry - 1) * 100,
+    highInRange: priceHigh <= upper
+  });
+  /* lower edge: the hurdle caps at the entry amount of token B. The
+     cap is a limit as price -> 0, so fees at or above the hurdle
+     already reached at a trillionth of the entry price are reported
+     unbounded — no representable fall consumes them. */
+  var capHurdle = hurdle(entry * 1e-12);
+  if (capHurdle === null) return null;
+  if (fees >= capHurdle) {
+    return Object.assign(result, { downUnbounded: true, priceLow: null, moveDownPct: null, lowInRange: null });
+  }
+  var hiD = entry, loD = entry / 2;
+  while (hurdle(loD) < fees && loD > entry * 1e-12) loD /= 2;
+  if (hurdle(loD) < fees) return null;
+  for (var j = 0; j < 200; j++) {
+    var midD = Math.sqrt(loD * hiD);
+    if (hurdle(midD) < fees) hiD = midD; else loD = midD;
+  }
+  var priceLow = Math.sqrt(loD * hiD);
+  return Object.assign(result, {
+    downUnbounded: false, priceLow: priceLow,
+    moveDownPct: (1 - priceLow / entry) * 100, lowInRange: priceLow >= lower
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -2149,6 +2239,31 @@ if (typeof document !== "undefined") {
           (res.coveragePct === null ? "; at the entry price there is no hurdle to cover." : "; fees cover ≈ " + fmt(res.coveragePct, 2) + "% of the hurdle.") +
           " A CLMM net-return model — not a live quote, not financial advice.";
         document.getElementById("cnet-out").value = fmt(res.netVsHoldInB, 6);
+      }
+    });
+
+    /* --- CLMM IL tolerance band --- */
+    document.getElementById("cband-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmIlBand(
+        document.getElementById("cband-l").value,
+        document.getElementById("cband-lower").value,
+        document.getElementById("cband-upper").value,
+        document.getElementById("cband-entry").value,
+        document.getElementById("cband-fees").value
+      );
+      var out = document.getElementById("cband-result");
+      if (res === null) {
+        out.textContent = "Enter a positive model liquidity L, a range with lower below upper, an entry price inside the range, and fees earned of zero or more in token B.";
+        document.getElementById("cband-out").value = "";
+      } else {
+        out.textContent = "Model output: with ≈ " + fmt(res.feesInB, 6) + " B of fees earned, the position stays at or ahead of holding from ≈ " +
+          (res.downUnbounded ? "any price down to zero" : fmt(res.priceLow, 6) + " B per A (−" + fmt(res.moveDownPct, 2) + "%" + (res.lowInRange ? ", inside the range" : ", beyond the range's lower edge") + ")") +
+          " up to ≈ " + fmt(res.priceHigh, 6) + " B per A (+" + fmt(res.moveUpPct, 2) + "%" + (res.highInRange ? ", inside the range" : ", beyond the range's upper edge") + ")" +
+          " around the ≈ " + fmt(res.entryPrice, 6) + " entry price" +
+          (res.downUnbounded ? "; no fall, however far, can consume the fees — the most a fall can cost vs holding is the ≈ " + fmt(res.downCapInB, 6) + " B of token B the position held at entry." : ".") +
+          " A CLMM tolerance-band model — not a live quote, not financial advice.";
+        document.getElementById("cband-out").value = res.downUnbounded ? "0 – " + fmt(res.priceHigh, 6) : fmt(res.priceLow, 6) + " – " + fmt(res.priceHigh, 6);
       }
     });
 
