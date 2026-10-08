@@ -2538,7 +2538,11 @@ function clmmSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amountOutS
    that sum is rejected, not priced, because the third range a live
    fill would need is not invented here either. A target exactly
    equal to the combined holding is priced and walks the price to the
-   outer edge. The second range's depth is the price of crossing:
+   outer edge. The boundary flag measures the target's distance to
+   that combined ceiling, relative to the second holding: forming it
+   from the remainder instead would lose it to cancellation when the
+   second range's holding is tiny next to the first range's, and the
+   exact-ceiling target would be misreported as merely crossed. The second range's depth is the price of crossing:
    the same remainder out of a tenth-depth second range costs more
    input and walks the price far further than out of a deep one.
    Two ranges at two constant L values only, floating point like
@@ -2608,7 +2612,7 @@ function clmmCrossSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amoun
   var effectiveRate = amountOut / amountIn;
   return Object.assign(base, {
     crossed: true,
-    hitSecondBoundary: Math.abs(remainder - maxOut2) <= maxOut2 * 1e-12,
+    hitSecondBoundary: (maxOut1 + maxOut2) - amountOut <= maxOut2 * 1e-12,
     amountIn: amountIn, netIn: netIn, feePaid: amountIn - netIn,
     leg1In: leg1Full.amountIn, leg1Out: maxOut1, leg2In: in2, leg2Out: remainder,
     newPrice: sNew * sNew, effectiveRate: effectiveRate,

@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=50"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=51"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -2182,6 +2182,12 @@ const xxoMax = app.clmmCrossSwapExactOut(XXO_L, "0.8", "1.25", "1", String(xxo.m
 check("XXO combined-max target hits the second boundary", xxoMax !== null && xxoMax.crossed === true && xxoMax.hitSecondBoundary === true);
 near("XXO combined-max walks the price to the outer edge", xxoMax.newPrice, 0.64, 1e-9);
 near("XXO combined-max amount in", xxoMax.amountIn, 237.39689110274628, 1e-9);
+const xxoTiny2 = app.clmmCrossSwapExactOut(XXO_L, "0.8", "1.25", "1", "1", 25, "ab", "0.00000001", "0.64");
+const xxoTinyMax = app.clmmCrossSwapExactOut(XXO_L, "0.8", "1.25", "1", String(xxoTiny2.maxOut), 25, "ab", "0.00000001", "0.64");
+check("XXO tiny second range: exact combined max IS the second boundary", xxoTinyMax !== null && xxoTinyMax.crossed === true && xxoTinyMax.hitSecondBoundary === true);
+const xxoTinyHalf = app.clmmCrossSwapExactOut(XXO_L, "0.8", "1.25", "1", String(xxoTiny2.firstMaxOut + xxoTiny2.secondMaxOut / 2), 25, "ab", "0.00000001", "0.64");
+check("XXO tiny second range half-drained is NOT the second boundary", xxoTinyHalf !== null && xxoTinyHalf.crossed === true && xxoTinyHalf.hitSecondBoundary === false && xxoTinyHalf.newPrice > 0.64 && xxoTinyHalf.newPrice < 0.8);
+check("XXO near-combined-max within relative tolerance is the boundary, 1e-9 short is not", app.clmmCrossSwapExactOut(XXO_L, "0.8", "1.25", "1", String(xxoFit.firstMaxOut + xxoFit.secondMaxOut * (1 - 5e-13)), 25, "ab", XXO_L, "0.64").hitSecondBoundary === true && app.clmmCrossSwapExactOut(XXO_L, "0.8", "1.25", "1", String(xxoFit.firstMaxOut + xxoFit.secondMaxOut * (1 - 1e-9)), 25, "ab", XXO_L, "0.64").hitSecondBoundary === false);
 check("XXO rejects a target above the combined holding", app.clmmCrossSwapExactOut(XXO_L, "0.8", "1.25", "1", String(xxo.maxOut + 0.001), 25, "ab", XXO_L, "0.64") === null && app.clmmCrossSwapExactOut(XXO_L, "0.8", "1.25", "1", "190", 25, "ba", XXO_L, "1.5625") === null);
 check("XXO prices a target tool 44 must reject", app.clmmCrossSwapExactOut(XXO_L, "0.8", "1.25", "1", "100.000001", 25, "ab", XXO_L, "0.64") !== null && app.clmmSwapExactOut(XXO_L, "0.8", "1.25", "1", "100.000001", 25, "ab") === null);
 const xxoThin = app.clmmCrossSwapExactOut(XXO_L, "0.8", "1.25", "1", "105", 25, "ab", "94.72135954999577", "0.64");
