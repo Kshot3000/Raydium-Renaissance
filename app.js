@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus thirty-six fully
+/* Raydium Renaissance hub logic: project filtering plus thirty-seven fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -17,7 +17,8 @@
    CLMM IL tolerance band, a CLMM required-volume planner, a
    constant-product required-volume planner, a CLMM single-sided
    zap-in planner, a CLMM single-sided zap-out planner, a CLMM
-   token-B deposit planner, and a CLMM re-centre / rebalance planner.
+   token-B deposit planner, a CLMM re-centre / rebalance planner,
+   and a CLMM withdrawal planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1918,8 +1919,69 @@ function clmmRebalance(liquidityStr, oldLowerStr, oldUpperStr, currentStr, width
   };
 }
 
+/* ---------- 37 · CLMM withdrawal planner (partial or full exit) ---------- */
+/* Tool 7 plans a withdrawal from a constant-product pool and keeps
+   noting CLMM exits work differently; tool 34 closes a CLMM position
+   only in full and only into one token. This is the missing middle:
+   withdraw a chosen percentage of a CLMM position's liquidity and
+   receive BOTH tokens, in the mix the position holds at the exit
+   price. A CLMM position's holdings are linear in its liquidity L
+   (tool 9's formulas are all L times a range/price factor), so
+   withdrawing p% of L pays exactly p% of what tool 9 says the
+   position holds at that price, and what stays behind is a position
+   with (100 - p)% of the liquidity over the SAME range — its
+   holdings are tool 9's own amounts at the reduced L (tests assert
+   both halves against tool 9 verbatim, so this tool can never drift
+   from it). At 100% the withdrawal is the full close: you receive
+   tool 9's amounts exactly and nothing remains. Outside the range
+   the position is a single token (tool 9's below/above cases), so
+   the withdrawal is that token alone — withdrawing from an
+   out-of-range position does not conjure the other token back.
+   Model only: no fees earned are added to the payout (real CLMM
+   withdrawals also collect accrued fees separately), no withdrawal
+   fee is modelled, and a real exit is quoted live on the pool page. */
+function clmmWithdrawPlan(liquidityStr, lowerStr, upperStr, priceStr, withdrawPctStr) {
+  var required = [liquidityStr, lowerStr, upperStr, priceStr, withdrawPctStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var liquidity = Number(liquidityStr), pct = Number(withdrawPctStr);
+  if (!Number.isFinite(liquidity) || liquidity <= 0) return null;
+  if (!Number.isFinite(pct) || pct <= 0 || pct > 100) return null;
+  var cur = clmmPositionAtPrice(liquidityStr, lowerStr, upperStr, priceStr);
+  if (cur === null) return null;
+  var frac = pct / 100;
+  var outA = cur.amountA * frac, outB = cur.amountB * frac;
+  if (!(outA + outB > 0)) return null;
+  var remL = liquidity * (1 - frac);
+  var rem = remL > 0
+    ? clmmPositionAtPrice(String(remL), lowerStr, upperStr, priceStr)
+    : { amountA: 0, amountB: 0, valueInB: 0 };
+  if (rem === null) return null;
+  return {
+    liquidity: liquidity,
+    lowerPrice: cur.lowerPrice,
+    upperPrice: cur.upperPrice,
+    price: cur.price,
+    status: cur.status,
+    inRange: cur.inRange,
+    withdrawPct: pct,
+    curA: cur.amountA,
+    curB: cur.amountB,
+    outA: outA,
+    outB: outB,
+    outValueInB: outA * cur.price + outB,
+    remainingLiquidity: remL,
+    remainingA: rem.amountA,
+    remainingB: rem.amountB,
+    remainingValueInB: rem.valueInB,
+    valueInB: cur.valueInB,
+    fullClose: pct === 100
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -2920,6 +2982,32 @@ if (typeof document !== "undefined") {
         ", holding ≈ " + fmt(res.targetA, 4) + " A and ≈ " + fmt(res.targetB, 4) + " B — the same total value, split 50/50 at this price. " + swapText +
         ". A CLMM re-centre model, priced at spot — not a live quote, not financial advice.";
       document.getElementById("reb-out").value = fmt(res.newLiquidity, 4);
+    });
+
+    document.getElementById("cwd-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmWithdrawPlan(
+        document.getElementById("cwd-l").value,
+        document.getElementById("cwd-lower").value,
+        document.getElementById("cwd-upper").value,
+        document.getElementById("cwd-price").value,
+        document.getElementById("cwd-pct").value
+      );
+      var out = document.getElementById("cwd-result");
+      if (res === null) {
+        out.textContent = "Enter a positive model liquidity, a range with lower below upper, a positive price at withdrawal, and a percentage above 0 and at most 100.";
+        document.getElementById("cwd-outb").value = "";
+        return;
+      }
+      var state = res.status === "in" ? "inside its range" : (res.status === "below" ? "below its range, holding only token A" : "above its range, holding only token B");
+      var left = res.fullClose
+        ? "That is a full close — nothing remains in the position"
+        : "Left behind: model liquidity ≈ " + fmt(res.remainingLiquidity, 4) + " over the same range, holding ≈ " + fmt(res.remainingA, 4) + " A and ≈ " + fmt(res.remainingB, 4) + " B (worth ≈ " + fmt(res.remainingValueInB, 4) + " B at this price)";
+      out.textContent = "Model output: at " + fmt(res.price, 4) + " B per A your position is " + state + ", holding ≈ " + fmt(res.curA, 4) + " A and ≈ " + fmt(res.curB, 4) +
+        " B. Withdrawing " + fmt(res.withdrawPct, 2) + "% of its liquidity pays ≈ " + fmt(res.outA, 4) + " A and ≈ " + fmt(res.outB, 4) +
+        " B (worth ≈ " + fmt(res.outValueInB, 4) + " B at this price, before any fees the position has earned — a real withdrawal collects those separately). " + left +
+        ". A CLMM withdrawal model — not a live quote, not financial advice.";
+      document.getElementById("cwd-outb").value = fmt(res.outB, 4);
     });
 
     /* --- copy donation address --- */

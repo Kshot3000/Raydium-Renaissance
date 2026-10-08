@@ -827,6 +827,25 @@
         <button type="submit" class="btn primary">Plan my re-centre</button>
         <p id="reb-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="cwd-calc">
+        <h3>37 · CLMM withdrawal planner</h3>
+        <p>Tool 7's exit for a concentrated position. Tool 7 plans a withdrawal from a constant-product pool, and tool 34 closes a CLMM position only in full and only into one token; this plans the middle case — withdraw a percentage of a CLMM position's liquidity and receive both tokens, in the mix the position holds at the price you withdraw at. A position's holdings are proportional to its liquidity, so withdrawing p% of the liquidity pays exactly p% of what the position holds at that price (tool 9's amounts), and what stays behind is the same range at (100 − p)% of the liquidity — its mix does not change, only its size. At 100% this is the full close: you receive everything the position holds and nothing remains. If the price has left the range, the position is a single token, so the withdrawal is that token alone — exiting an out-of-range position does not bring the other token back. No fees earned are added to the payout (a real CLMM withdrawal collects accrued fees separately) and no withdrawal fee is modelled. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="cwd-l">Position model liquidity L (from tool 8)</label>
+        <input id="cwd-l" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="cwd-lower">Range lower price (B per A)</label>
+        <input id="cwd-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="cwd-upper">Range upper price (B per A)</label>
+        <input id="cwd-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="cwd-price">Price at withdrawal (token B per token A)</label>
+        <input id="cwd-price" inputmode="decimal" placeholder="e.g. 1.2" autocomplete="off">
+        <label for="cwd-pct">Withdraw this % of the position's liquidity</label>
+        <input id="cwd-pct" inputmode="decimal" placeholder="e.g. 50" autocomplete="off">
+        <label for="cwd-outb">Token B you receive (model)</label>
+        <input id="cwd-outb" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan my withdrawal</button>
+        <p id="cwd-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -854,6 +873,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=36"></script>
+<script src="app.js?v=37"></script>
 </body>
 </html>

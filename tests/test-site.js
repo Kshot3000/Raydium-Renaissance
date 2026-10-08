@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=36"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=37"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists thirty-six tools", readme.includes("thirty-six pool tools") || readme.includes("all thirty-six"));
+check("README lists thirty-seven tools", readme.includes("thirty-seven pool tools") || readme.includes("all thirty-seven"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1655,6 +1655,72 @@ check("all reb controls labelled", ["reb-l", "reb-lower", "reb-upper", "reb-cur"
 check("reb tool present in index.html", html.includes('id="reb-calc"') && html.includes('id="reb-result"'));
 check("reb honesty: spot-priced swap and not-live labels", html.includes("priced at the current spot price") && html.includes("not live pool state") && html.includes("not financial advice"));
 check("guide covers re-centring a drifted position", guide.includes("Re-centre a position the price has drifted"));
+
+/* ---------- Tool 37: CLMM withdrawal planner (CWD) ---------- */
+const L37 = "947.2135954999577";
+/* headline: withdrawing half the 0.8-1.25 position at price 1 pays half its holdings */
+const cw50 = app.clmmWithdrawPlan(L37, "0.8", "1.25", "1", "50");
+near("CWD headline pays half the A", cw50.outA, 50, 1e-9);
+near("CWD headline pays half the B", cw50.outB, 50, 1e-9);
+near("CWD headline halves the liquidity", cw50.remainingLiquidity, 473.60679774997885, 1e-9);
+near("CWD headline leaves half the A", cw50.remainingA, 50, 1e-9);
+near("CWD headline leaves half the B", cw50.remainingB, 50, 1e-9);
+near("CWD headline payout value", cw50.outValueInB, 100, 1e-9);
+check("CWD headline is not a full close", cw50.fullClose === false && cw50.status === "in" && cw50.inRange === true);
+/* the payout and the remainder are tool 9's own amounts, split by the percentage */
+const cwT9 = app.clmmPositionAtPrice(L37, "0.8", "1.25", "1");
+near("CWD payout + remainder = tool 9 A", cw50.outA + cw50.remainingA, cwT9.amountA, 1e-9);
+near("CWD payout + remainder = tool 9 B", cw50.outB + cw50.remainingB, cwT9.amountB, 1e-9);
+near("CWD values sum to tool 9 value", cw50.outValueInB + cw50.remainingValueInB, cwT9.valueInB, 1e-9);
+/* 100% is the full close: tool 9's amounts verbatim, nothing left */
+const cw100 = app.clmmWithdrawPlan(L37, "0.8", "1.25", "1", "100");
+near("CWD full close pays tool 9 A", cw100.outA, cwT9.amountA, 1e-9);
+near("CWD full close pays tool 9 B", cw100.outB, cwT9.amountB, 1e-9);
+check("CWD full close leaves nothing", cw100.fullClose === true && cw100.remainingLiquidity === 0 && cw100.remainingA === 0 && cw100.remainingB === 0 && cw100.remainingValueInB === 0);
+/* price moved to 1.2: the drifted mix (tool 9) is what gets split */
+const cw12 = app.clmmWithdrawPlan(L37, "0.8", "1.25", "1.2", "25");
+const cw12T9 = app.clmmPositionAtPrice(L37, "0.8", "1.25", "1.2");
+near("CWD moved position A is tool 9's", cw12.curA, cw12T9.amountA, 1e-9);
+near("CWD moved position B is tool 9's", cw12.curB, cw12T9.amountB, 1e-9);
+near("CWD moved pays a quarter of A", cw12.outA, 4.367539887885892, 1e-9);
+near("CWD moved pays a quarter of B", cw12.outB, 47.60172764046092, 1e-9);
+near("CWD moved remaining liquidity", cw12.remainingLiquidity, 710.4101966249683, 1e-9);
+near("CWD moved payout value", cw12.outValueInB, 52.842775505923996, 1e-9);
+/* the remainder is tool 9 at the reduced liquidity, same range and price */
+const cw12Rem9 = app.clmmPositionAtPrice(String(cw12.remainingLiquidity), "0.8", "1.25", "1.2");
+near("CWD remainder is tool 9 at reduced L (A)", cw12.remainingA, cw12Rem9.amountA, 1e-9);
+near("CWD remainder is tool 9 at reduced L (B)", cw12.remainingB, cw12Rem9.amountB, 1e-9);
+/* below the range the withdrawal is token A alone; above it, token B alone — and they mirror */
+const cwBelow = app.clmmWithdrawPlan(L37, "0.8", "1.25", "0.5", "40");
+check("CWD below range is entirely A", cwBelow.status === "below" && cwBelow.outB === 0 && cwBelow.remainingB === 0);
+near("CWD below pays 40% of the A held", cwBelow.outA, 84.72135954999581, 1e-9);
+near("CWD below leaves 60% of the A", cwBelow.remainingA, 127.08203932499369, 1e-9);
+const cwAbove = app.clmmWithdrawPlan(L37, "0.8", "1.25", "2", "40");
+check("CWD above range is entirely B", cwAbove.status === "above" && cwAbove.outA === 0 && cwAbove.remainingA === 0);
+near("CWD above payout mirrors below", cwAbove.outB, cwBelow.outA, 1e-9);
+near("CWD above remainder mirrors below", cwAbove.remainingB, cwBelow.remainingA, 1e-9);
+/* composition sweep: payout is the percentage of tool 9, halves conserve, remainder is tool 9 reduced */
+for (const [l, lo, hi, p, w] of [[L37, "0.8", "1.25", "1.1", "33.333"], ["500", "0.5", "2", "1.7", "75"], ["250", "2", "4.5", "3", "10"], [L37, "0.8", "1.25", "0.7", "99.9"], [L37, "0.8", "1.25", "1.25", "60"]]) {
+  const r = app.clmmWithdrawPlan(l, lo, hi, p, w);
+  const t9 = app.clmmPositionAtPrice(l, lo, hi, p);
+  check("CWD sweep settles at L " + l + " price " + p + " pct " + w, r !== null);
+  near("CWD sweep payout is pct of tool 9 A at price " + p + " pct " + w, r.outA, t9.amountA * Number(w) / 100, 1e-6);
+  near("CWD sweep payout is pct of tool 9 B at price " + p + " pct " + w, r.outB, t9.amountB * Number(w) / 100, 1e-6);
+  near("CWD sweep halves conserve A at price " + p + " pct " + w, r.outA + r.remainingA, t9.amountA, 1e-6);
+  near("CWD sweep halves conserve B at price " + p + " pct " + w, r.outB + r.remainingB, t9.amountB, 1e-6);
+  near("CWD sweep values conserve at price " + p + " pct " + w, r.outValueInB + r.remainingValueInB, t9.valueInB, 1e-6);
+  const rem9 = app.clmmPositionAtPrice(String(r.remainingLiquidity), lo, hi, p);
+  near("CWD sweep remainder is tool 9 reduced at price " + p + " pct " + w, r.remainingA + r.remainingB, rem9.amountA + rem9.amountB, 1e-6);
+}
+/* rejections */
+check("CWD rejects blank fields", app.clmmWithdrawPlan("", "0.8", "1.25", "1", "50") === null && app.clmmWithdrawPlan(L37, "", "1.25", "1", "50") === null && app.clmmWithdrawPlan(L37, "0.8", "1.25", "1", "") === null && app.clmmWithdrawPlan(L37, "0.8", "1.25", " ", "50") === null);
+check("CWD rejects a percentage outside (0, 100]", app.clmmWithdrawPlan(L37, "0.8", "1.25", "1", "0") === null && app.clmmWithdrawPlan(L37, "0.8", "1.25", "1", "-10") === null && app.clmmWithdrawPlan(L37, "0.8", "1.25", "1", "100.5") === null && app.clmmWithdrawPlan(L37, "0.8", "1.25", "1", "101") === null);
+check("CWD rejects non-positive liquidity or price", app.clmmWithdrawPlan("0", "0.8", "1.25", "1", "50") === null && app.clmmWithdrawPlan(L37, "0.8", "1.25", "0", "50") === null);
+check("CWD rejects inverted range and non-numeric input", app.clmmWithdrawPlan(L37, "1.25", "0.8", "1", "50") === null && app.clmmWithdrawPlan(L37, "0.8", "0.8", "1", "50") === null && app.clmmWithdrawPlan("abc", "0.8", "1.25", "1", "50") === null && app.clmmWithdrawPlan(L37, "0.8", "1.25", "1", "abc") === null);
+check("all cwd controls labelled", ["cwd-l", "cwd-lower", "cwd-upper", "cwd-price", "cwd-pct", "cwd-outb"].every(id => html.includes(`for="${id}"`)));
+check("cwd tool present in index.html", html.includes('id="cwd-calc"') && html.includes('id="cwd-result"'));
+check("cwd honesty: fees-separate and not-live labels", html.includes("collects accrued fees separately") && html.includes("not live pool state") && html.includes("not financial advice"));
+check("guide covers sizing a CLMM withdrawal", guide.includes("Size a CLMM exit before you make it"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
