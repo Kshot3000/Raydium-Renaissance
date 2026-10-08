@@ -863,6 +863,29 @@
         <button type="submit" class="btn primary">Plan from my balances</button>
         <p id="cpw-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="hxo-calc">
+        <h3>39 · Two-hop exact-out swap model</h3>
+        <p>Tool 23 routes a fixed amount <em>in</em> through two pools, and tool 6 prices a fixed amount <em>out</em> of one pool — this composes the two: you need an exact amount of token C, so how much token A must you pay through an A → M pool and then an M → C pool? The model works backwards with tool 6's own maths on each leg: hop 2's exact-out on your target gives the intermediate token M hop 2 must receive, and hop 1's exact-out on that amount gives the token A to pay. Each hop rounds its required input up the way tool 6 does, so paying the reported amount forward returns at least the target in this model. A target a pool cannot pay — at or above pool 2's token-C reserve, or needing at least pool 1's whole token-M reserve — is rejected, not priced. Educational model only — both pools are constant-product here, no routing search is done, and these are the two pools you typed, with your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="hxo-r1in">Pool 1 reserve in — token A</label>
+        <input id="hxo-r1in" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hxo-r1out">Pool 1 reserve out — intermediate token M</label>
+        <input id="hxo-r1out" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hxo-r2in">Pool 2 reserve in — intermediate token M</label>
+        <input id="hxo-r2in" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hxo-r2out">Pool 2 reserve out — token C</label>
+        <input id="hxo-r2out" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hxo-aout">Exact amount out wanted — token C</label>
+        <input id="hxo-aout" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="hxo-fee1">Pool 1 fee (basis points, 25 = 0.25%)</label>
+        <input id="hxo-fee1" inputmode="numeric" value="25" autocomplete="off">
+        <label for="hxo-fee2">Pool 2 fee (basis points, 25 = 0.25%)</label>
+        <input id="hxo-fee2" inputmode="numeric" value="25" autocomplete="off">
+        <label for="hxo-ain">Amount in needed — token A (model)</label>
+        <input id="hxo-ain" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Price this exact-out route</button>
+        <p id="hxo-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -890,6 +913,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=38"></script>
+<script src="app.js?v=39"></script>
 </body>
 </html>

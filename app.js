@@ -2037,8 +2037,54 @@ function cpWalletPlan(reserveAStr, reserveBStr, balanceAStr, balanceBStr) {
   };
 }
 
+/* ---------- 39 · Two-hop exact-out swap model ---------- */
+/* Tool 23 routes a fixed amount IN through two pools; Tool 6 prices a
+   fixed amount OUT of one pool. This is the two questions composed:
+   "I need exactly this much of token C — how much token A must I pay?"
+   Work backwards, and every leg is Tool 6's own cpSwapExactOut, so the
+   legs can never drift from it: hop 2's exact-out on the target gives
+   the intermediate token M that hop 2 must receive, and hop 1's
+   exact-out on THAT amount (its string exactly as Tool 6 reports it,
+   ceiling-rounded at 9 dp) gives the token A to pay. Each hop rounds
+   its required input UP the way Tool 6 does, so feeding the reported
+   input forward through Tool 23 returns at least the target (the
+   tests assert this; the excess is a few smallest units at most).
+   The combined spot price is the product of the hops' spots (M per
+   A x C per M = C per A) and the combined impact follows Tool 6's
+   definition against it. Feasibility is inherited from Tool 6: the
+   target must be less than pool 2's out reserve, and the M required
+   must be less than pool 1's out reserve — a route that would have
+   to drain either pool is rejected, not priced. Both pools are
+   constant-product here; no routing search is done. Model only. */
+function twoHopExactOut(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2OutStr, amountOutStr, fee1Bps, fee2Bps) {
+  var required = [reserve1InStr, reserve1OutStr, reserve2InStr, reserve2OutStr, amountOutStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var hop2 = cpSwapExactOut(reserve2InStr, reserve2OutStr, amountOutStr, fee2Bps);
+  if (hop2 === null) return null;
+  var hop1 = cpSwapExactOut(reserve1InStr, reserve1OutStr, hop2.amountIn, fee1Bps);
+  if (hop1 === null) return null;
+  var amountOut = Number(amountOutStr);
+  if (!Number.isFinite(amountOut) || amountOut <= 0) return null;
+  var spotPrice = hop1.spotPrice * hop2.spotPrice;
+  var effectivePrice = amountOut / Number(hop1.amountIn);
+  return {
+    amountIn: hop1.amountIn,
+    midIn: hop2.amountIn,
+    out: amountOutStr,
+    hop1ImpactPct: hop1.priceImpactPct,
+    hop2ImpactPct: hop2.priceImpactPct,
+    spotPrice: spotPrice,
+    effectivePrice: effectivePrice,
+    priceImpactPct: (1 - effectivePrice / spotPrice) * 100,
+    fee1Pct: hop1.feePct,
+    fee2Pct: hop2.feePct
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -3093,6 +3139,32 @@ if (typeof document !== "undefined") {
         "%, with model reserves of " + res.newReserveA + " A / " + res.newReserveB +
         " B. A constant-product wallet-balance deposit model, not a live Raydium quote — not financial advice.";
       document.getElementById("cpw-outb").value = res.usedB;
+    });
+
+    document.getElementById("hxo-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = twoHopExactOut(
+        document.getElementById("hxo-r1in").value,
+        document.getElementById("hxo-r1out").value,
+        document.getElementById("hxo-r2in").value,
+        document.getElementById("hxo-r2out").value,
+        document.getElementById("hxo-aout").value,
+        document.getElementById("hxo-fee1").value,
+        document.getElementById("hxo-fee2").value
+      );
+      var out = document.getElementById("hxo-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both pools, a positive target amount of token C that is smaller than pool 2's token-C reserve (and whose intermediate amount is smaller than pool 1's token-M reserve), and a fee of 0–9,999 bps for each pool.";
+        document.getElementById("hxo-ain").value = "";
+        return;
+      }
+      out.textContent = "Model output: receiving exactly ≈ " + res.out + " of token C through this route takes ≈ " + res.amountIn +
+        " of token A. Hop 2 must first receive ≈ " + res.midIn + " of intermediate token M (hop 2 impact ≈ " + fmt(res.hop2ImpactPct, 4) +
+        "% at a " + fmt(res.fee2Pct, 2) + "% fee), and hop 1 must receive the token A above to pay that M out (hop 1 impact ≈ " + fmt(res.hop1ImpactPct, 4) +
+        "% at a " + fmt(res.fee1Pct, 2) + "% fee). Combined spot ≈ " + fmt(res.spotPrice, 6) + " C per A, effective ≈ " + fmt(res.effectivePrice, 6) +
+        " C per A — a combined price impact of ≈ " + fmt(res.priceImpactPct, 4) +
+        "%. Each hop rounds its required input up, so paying the reported amount forward returns at least the target in this model. A two-hop exact-out model over two pools you typed — not a live quote, not financial advice.";
+      document.getElementById("hxo-ain").value = res.amountIn;
     });
 
     /* --- copy donation address --- */

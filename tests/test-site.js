@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=38"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=39"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists thirty-eight tools", readme.includes("thirty-eight pool tools") || readme.includes("all thirty-eight"));
+check("README lists thirty-nine tools", readme.includes("thirty-nine pool tools") || readme.includes("all thirty-nine"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1772,6 +1772,48 @@ check("all cpw controls labelled", ["cpw-ra", "cpw-rb", "cpw-bal-a", "cpw-bal-b"
 check("cpw tool present in index.html", html.includes('id="cpw-calc"') && html.includes('id="cpw-result"'));
 check("cpw honesty: dust and not-live labels", html.includes("smallest units of token B behind as dust") && html.includes("not live pool state") && html.includes("not financial advice"));
 check("guide covers planning a CP deposit from a wallet", guide.includes("Plan a constant-product deposit from your wallet"));
+
+/* ---------- 39 · two-hop exact-out swap model ---------- */
+/* headline: balanced 1000/1000 pools, 25 bps both, exactly 100 C wanted */
+const hxo1 = app.twoHopExactOut("1000", "1000", "1000", "1000", "100", 25, 25);
+check("HXO headline settles", hxo1 !== null);
+check("HXO headline amounts", hxo1.amountIn === "125.666720863" && hxo1.midIn === "111.389585075" && hxo1.out === "100");
+near("HXO headline combined impact", hxo1.priceImpactPct, 20.42443750162103, 1e-9);
+near("HXO headline spot is product of hops", hxo1.spotPrice, 1, 1e-12);
+check("HXO combined impact worse than either hop", hxo1.priceImpactPct > hxo1.hop1ImpactPct && hxo1.priceImpactPct > hxo1.hop2ImpactPct);
+/* zero fee: closed form — hop 2 needs 1000/9 M, hop 1 needs 125 A (plus ceiling dust) */
+const hxo0 = app.twoHopExactOut("1000", "1000", "1000", "1000", "100", 0, 0);
+check("HXO zero-fee amounts", hxo0 !== null && hxo0.amountIn === "125.000000002" && hxo0.midIn === "111.111111112");
+near("HXO zero-fee impact is exactly the two 10% legs compounded", hxo0.priceImpactPct, 20, 1e-6);
+/* asymmetric pools and fees */
+const hxo2 = app.twoHopExactOut("2000", "500", "3000", "9000", "450", 25, 100);
+check("HXO asym amounts", hxo2 !== null && hxo2.amountIn === "939.115939743" && hxo2.midIn === "159.489633175");
+near("HXO asym spot", hxo2.spotPrice, 0.75, 1e-12);
+near("HXO asym combined impact", hxo2.priceImpactPct, 36.110125000732396, 1e-9);
+/* composition sweep: legs are tool 6 verbatim, round-trip through tool 23 returns at least the target */
+for (const [r1i, r1o, r2i, r2o, t, f1, f2] of [["1000", "1000", "1000", "1000", "100", 25, 25], ["2000", "500", "3000", "9000", "450", 25, 100], ["500", "5000", "800", "200", "50", 0, 50], ["10000", "2000", "400", "4000", "300", 100, 25], ["1000", "1000", "1000", "1000", "0.5", 25, 25]]) {
+  const r = app.twoHopExactOut(r1i, r1o, r2i, r2o, t, f1, f2);
+  check("HXO sweep settles at target " + t, r !== null);
+  check("HXO sweep mid is tool 6 hop-2 verbatim at target " + t, r.midIn === app.cpSwapExactOut(r2i, r2o, t, f2).amountIn);
+  check("HXO sweep in is tool 6 hop-1 verbatim at target " + t, r.amountIn === app.cpSwapExactOut(r1i, r1o, r.midIn, f1).amountIn);
+  const fwd = app.twoHopSwap(r1i, r1o, r2i, r2o, r.amountIn, f1, f2);
+  check("HXO sweep round-trip returns at least the target at " + t, fwd !== null && Number(fwd.out) >= Number(t) && Number(fwd.out) - Number(t) <= 0.000001);
+  near("HXO sweep spot is product of hop spots at target " + t, r.spotPrice, app.cpSwapExactOut(r1i, r1o, r.midIn, f1).spotPrice * app.cpSwapExactOut(r2i, r2o, t, f2).spotPrice, 1e-12);
+}
+/* a bigger target costs more in; hop 1's fee never changes the M hop 2 needs */
+const hxoSmall = app.twoHopExactOut("1000", "1000", "1000", "1000", "10", 25, 25);
+check("HXO larger target needs larger input", Number(hxoSmall.amountIn) < Number(hxo1.amountIn));
+check("HXO hop-1 fee leaves mid unchanged", app.twoHopExactOut("1000", "1000", "1000", "1000", "100", 100, 25).midIn === hxo1.midIn);
+/* rejections */
+check("HXO rejects blank fields", app.twoHopExactOut("", "1000", "1000", "1000", "100", 25, 25) === null && app.twoHopExactOut("1000", "1000", "1000", "1000", " ", 25, 25) === null);
+check("HXO rejects target at or above pool 2 out reserve", app.twoHopExactOut("1000", "1000", "1000", "1000", "1000", 25, 25) === null && app.twoHopExactOut("1000", "1000", "1000", "1000", "1001", 25, 25) === null);
+check("HXO rejects a route whose mid need drains pool 1", app.twoHopExactOut("1000", "50", "1000", "1000", "100", 25, 25) === null);
+check("HXO rejects zero target, junk and negatives", app.twoHopExactOut("1000", "1000", "1000", "1000", "0", 25, 25) === null && app.twoHopExactOut("1000", "1000", "abc", "1000", "100", 25, 25) === null && app.twoHopExactOut("1000", "1000", "1000", "1000", "-5", 25, 25) === null);
+check("HXO rejects bad fees on either hop", app.twoHopExactOut("1000", "1000", "1000", "1000", "100", 10000, 25) === null && app.twoHopExactOut("1000", "1000", "1000", "1000", "100", 25, -1) === null);
+check("all hxo controls labelled", ["hxo-r1in", "hxo-r1out", "hxo-r2in", "hxo-r2out", "hxo-aout", "hxo-fee1", "hxo-fee2", "hxo-ain"].every(id => html.includes(`for="${id}"`)));
+check("hxo tool present in index.html", html.includes('id="hxo-calc"') && html.includes('id="hxo-result"'));
+check("hxo honesty: backwards legs and not-live labels", html.includes("works backwards with tool 6's own maths") && html.includes("not live pool state") && html.includes("not financial advice"));
+check("guide covers two-hop exact-out", guide.includes("Price a routed trade backwards from the amount you need"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
