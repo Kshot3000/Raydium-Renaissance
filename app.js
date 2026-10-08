@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus twenty-seven fully
+/* Raydium Renaissance hub logic: project filtering plus twenty-eight fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -12,7 +12,8 @@
    single-sided zap-in planner, a single-sided zap-out planner, an IL
    tolerance band, a CLMM symmetric-range planner, a two-hop swap
    model, a net LP return calculator, a CLMM capital-efficiency
-   calculator, a pool depth planner, and a post-move reserves calculator.
+   calculator, a pool depth planner, a post-move reserves calculator,
+   and a split-route swap planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1256,8 +1257,75 @@ function cpReservesAfterMove(reserveAStr, reserveBStr, priceRatio) {
   };
 }
 
+/* ---------- 28 · Split-route swap planner (two parallel pools) ---------- */
+/* Tool 23 routes a trade THROUGH two pools in series; aggregators also
+   split one trade ACROSS two pools for the same pair in parallel: each
+   leg is smaller, so each moves its pool's price less, and the combined
+   output beats sending the whole trade through either pool alone. The
+   optimum balances the legs' marginal rates — deep pools and low-fee
+   pools earn the larger share. This searches the split fraction with a
+   ternary search (the combined output is concave in the fraction),
+   evaluating every candidate with Tool 1's own cpSwap, so each leg is
+   exactly what Tool 1 would quote for that leg, floored at 9dp like a
+   real fill. Endpoints are candidates too: if one pool cannot take a
+   trade at all (empty/dust reserves), everything routes through the
+   other. Only two pools, same pair and direction; a real aggregator
+   searches many venues and also pays network/transaction costs, which
+   are not modelled here. */
+function splitSwap(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2OutStr, amountInStr, fee1Bps, fee2Bps) {
+  var total = parseScaled(amountInStr);
+  if (total === null || total <= 0n) return null;
+  var single1 = cpSwap(reserve1InStr, reserve1OutStr, amountInStr, fee1Bps);
+  var single2 = cpSwap(reserve2InStr, reserve2OutStr, amountInStr, fee2Bps);
+  if (single1 === null && single2 === null) return null;
+  function legOut(which, s) {
+    if (s === 0n) return 0n;
+    var r = which === 1
+      ? cpSwap(reserve1InStr, reserve1OutStr, formatScaled(s), fee1Bps)
+      : cpSwap(reserve2InStr, reserve2OutStr, formatScaled(s), fee2Bps);
+    return r === null ? null : parseScaled(r.out);
+  }
+  function combinedOut(s) {
+    var a = legOut(1, s), b = legOut(2, total - s);
+    return (a === null || b === null) ? null : a + b;
+  }
+  var lo = 0, hi = 1, i, midFrac;
+  for (i = 0; i < 200; i++) {
+    var m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
+    var v1 = combinedOut(BigInt(Math.round(m1 * Number(total))));
+    var v2 = combinedOut(BigInt(Math.round(m2 * Number(total))));
+    if (v1 === null && v2 === null) break;
+    if (v2 === null || (v1 !== null && v1 >= v2)) hi = m2; else lo = m1;
+  }
+  var mid = BigInt(Math.round(((lo + hi) / 2) * Number(total)));
+  var cands = [0n, total, mid, mid - 1n, mid + 1n];
+  var bestS = null, bestOut = null;
+  for (i = 0; i < cands.length; i++) {
+    var s = cands[i];
+    if (s < 0n || s > total) continue;
+    var v = combinedOut(s);
+    if (v !== null && (bestOut === null || v > bestOut)) { bestOut = v; bestS = s; }
+  }
+  if (bestS === null) return null;
+  var out1 = legOut(1, bestS), out2 = legOut(2, total - bestS);
+  var single1Scaled = single1 === null ? null : parseScaled(single1.out);
+  var single2Scaled = single2 === null ? null : parseScaled(single2.out);
+  var bestSingle = single1Scaled === null ? single2Scaled
+    : (single2Scaled === null ? single1Scaled : (single1Scaled > single2Scaled ? single1Scaled : single2Scaled));
+  return {
+    amount1: formatScaled(bestS), amount2: formatScaled(total - bestS),
+    out1: formatScaled(out1), out2: formatScaled(out2),
+    totalOut: formatScaled(bestOut),
+    single1Out: single1 === null ? null : single1.out,
+    single2Out: single2 === null ? null : single2.out,
+    bestSingleOut: formatScaled(bestSingle),
+    gainVsBestSingle: scaledToNumber(bestOut - bestSingle),
+    splitPct1: scaledToNumber(bestS) / scaledToNumber(total) * 100
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -1986,6 +2054,33 @@ if (typeof document !== "undefined") {
           fmt(res.ilPct, 2) + "% (Tool 2's figure for the same move). The rebalanced reserves are not what you deposited. A post-move reserves model, not a live Raydium quote.";
         document.getElementById("move-na").value = fmt(res.newReserveA, 4);
         document.getElementById("move-nb").value = fmt(res.newReserveB, 4);
+      }
+    });
+
+    /* --- split-route swap planner --- */
+    document.getElementById("split-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = splitSwap(
+        document.getElementById("split-r1in").value,
+        document.getElementById("split-r1out").value,
+        document.getElementById("split-r2in").value,
+        document.getElementById("split-r2out").value,
+        document.getElementById("split-ain").value,
+        document.getElementById("split-fee1").value,
+        document.getElementById("split-fee2").value
+      );
+      var out = document.getElementById("split-result");
+      if (res === null) {
+        out.textContent = "Enter a positive amount in (up to 9 decimal places) and two pools with positive reserves — at least one pool must be able to take the trade — plus each pool's fee in basis points (25 = 0.25%).";
+        document.getElementById("split-a1").value = "";
+        document.getElementById("split-a2").value = "";
+      } else {
+        out.textContent = "Model output: split the trade — ≈ " + res.amount1 + " through pool 1 (" + fmt(res.splitPct1, 2) +
+          "%) returns ≈ " + res.out1 + ", and ≈ " + res.amount2 + " through pool 2 returns ≈ " + res.out2 +
+          ", for ≈ " + res.totalOut + " total. The best single-pool route returns ≈ " + res.bestSingleOut +
+          ", so splitting gains ≈ " + fmt(res.gainVsBestSingle, 6) + " in this model. Each leg is Tool 1's own model for that pool. A split-route model over two pools you typed — not a live aggregator quote, not financial advice.";
+        document.getElementById("split-a1").value = res.amount1;
+        document.getElementById("split-a2").value = res.amount2;
       }
     });
 

@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=25"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=26"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1174,6 +1174,45 @@ check("MOVE rejects junk", app.cpReservesAfterMove("x", "1000", 2) === null && a
 check("all move controls labelled", ["move-ra", "move-rb", "move-ratio", "move-na", "move-nb"].every(id => html.includes(`for="${id}"`)));
 check("move tool present in index.html", html.includes('id="move-calc"') && html.includes('id="move-result"'));
 check("move honesty: not-what-you-deposited and not-live labels", html.includes("are not what you deposited") && html.includes("not a live quote, not financial advice"));
+
+/* ---------- Tool 28: split-route swap planner (SPLIT) ---------- */
+/* vectors verified in a clean foreground run BEFORE these tests were
+   written; every leg must equal Tool 1's own cpSwap for that leg */
+const sp1 = app.splitSwap("1000", "1000", "1000", "1000", "100", 0, 0);
+check("SPLIT identical pools split near evenly", sp1 !== null && sp1.splitPct1 > 45 && sp1.splitPct1 < 55);
+near("SPLIT identical pools total out", Number(sp1.totalOut), 95.238095238, 1e-6);
+near("SPLIT identical pools best single", Number(sp1.bestSingleOut), 90.909090909, 1e-9);
+check("SPLIT identical pools gain positive", sp1.gainVsBestSingle > 4.3 && sp1.gainVsBestSingle < 4.33);
+check("SPLIT amounts sum to the trade", app.parseScaled(sp1.amount1) + app.parseScaled(sp1.amount2) === app.parseScaled("100"));
+check("SPLIT leg outs sum to total out", app.parseScaled(sp1.out1) + app.parseScaled(sp1.out2) === app.parseScaled(sp1.totalOut));
+check("SPLIT legs are Tool 1 verbatim", app.cpSwap("1000", "1000", sp1.amount1, 0).out === sp1.out1 && app.cpSwap("1000", "1000", sp1.amount2, 0).out === sp1.out2);
+const spA = app.splitSwap("1000", "1000", "10000", "10000", "100", 0, 0);
+check("SPLIT deeper pool takes the larger share", spA !== null && spA.splitPct1 < 20 && Number(spA.amount2) > 80);
+check("SPLIT asym beats best single", Number(spA.totalOut) > Number(spA.bestSingleOut) && Number(spA.bestSingleOut) === 99.00990099);
+const spF = app.splitSwap("1000", "1000", "1000", "1000", "100", 25, 100);
+check("SPLIT cheaper-fee twin takes larger share", spF !== null && spF.splitPct1 > 50 && spF.splitPct1 < 60);
+const spP = app.splitSwap("1000", "2000", "1000", "2000", "100", 25, 25);
+near("SPLIT priced pools total out", Number(spP.totalOut), 190.022621738, 1e-6);
+/* the split never does worse than the best single route */
+for (const [r1i, r1o, r2i, r2o, amt, f1, f2] of [
+  ["500", "800", "5000", "3000", "250", 25, 25],
+  ["100000", "50000", "2000", "9000", "1000", 30, 5],
+  ["1000", "1000", "1000", "1000", "1", 25, 25],
+  ["42", "17", "900", "3600", "13.5", 100, 0]
+]) {
+  const s = app.splitSwap(r1i, r1o, r2i, r2o, amt, f1, f2);
+  check("SPLIT never worse than best single " + amt, s !== null && app.parseScaled(s.totalOut) >= app.parseScaled(s.bestSingleOut));
+  check("SPLIT amounts conserve " + amt, s !== null && app.parseScaled(s.amount1) + app.parseScaled(s.amount2) === app.parseScaled(amt));
+}
+/* one unusable pool: everything routes through the other */
+const spD = app.splitSwap("1000", "1000", "0.000000001", "0.000000001", "100", 0, 0);
+check("SPLIT dust pool falls back to single route", spD !== null && spD.amount2 === "0" && spD.totalOut === spD.single1Out && spD.gainVsBestSingle === 0);
+check("SPLIT rejects bad amount", app.splitSwap("1000", "1000", "1000", "1000", "0", 0, 0) === null && app.splitSwap("1000", "1000", "1000", "1000", "", 0, 0) === null && app.splitSwap("1000", "1000", "1000", "1000", "1.0000000001", 0, 0) === null);
+check("SPLIT rejects both pools unusable", app.splitSwap("0", "1000", "0", "1000", "100", 0, 0) === null && app.splitSwap("x", "1000", "y", "1000", "100", 0, 0) === null && app.splitSwap("1000", "1000", "1000", "1000", "100", -1, 10000) === null);
+check("SPLIT one bad-fee pool falls back to the other", (() => { const s = app.splitSwap("1000", "1000", "1000", "1000", "100", -1, 0); return s !== null && s.amount1 === "0" && s.totalOut === s.single2Out; })());
+check("all split controls labelled", ["split-r1in", "split-r1out", "split-fee1", "split-r2in", "split-r2out", "split-fee2", "split-ain", "split-a1", "split-a2"].every(id => html.includes(`for="${id}"`)));
+check("split tool present in index.html", html.includes('id="split-calc"') && html.includes('id="split-result"'));
+check("split honesty: parallel-not-series and not-live labels", html.includes("parallel move aggregators also make") && html.includes("an extra leg are not modelled") && html.includes("not a live quote, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

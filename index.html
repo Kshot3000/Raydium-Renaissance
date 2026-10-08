@@ -632,6 +632,31 @@
         <button type="submit" class="btn primary">Show the rebalanced pool</button>
         <p id="move-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="split-calc">
+        <h3>28 · Split-route swap planner</h3>
+        <p>Tool 23 routes a trade through two pools in series; this is the parallel move aggregators also make — splitting one trade across two pools for the same pair. Each leg is smaller, so each moves its pool's price less, and the combined output beats sending the whole trade through either pool alone: two identical 1,000/1,000 pools split a 100-in trade evenly and return ≈95.24 against ≈90.91 from one pool. The planner searches the split using Tool 1's own model for every candidate leg, so each leg is exactly what Tool 1 quotes for it; deeper pools and lower-fee pools earn the larger share, and if one pool cannot take a trade at all, everything honestly routes through the other. Only two pools, same pair and direction — a real aggregator searches many venues, and network and transaction costs of an extra leg are not modelled. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="split-r1in">Pool 1 — reserve in (token you pay)</label>
+        <input id="split-r1in" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="split-r1out">Pool 1 — reserve out (token you receive)</label>
+        <input id="split-r1out" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="split-fee1">Pool 1 — fee, basis points (25 = 0.25%)</label>
+        <input id="split-fee1" inputmode="decimal" placeholder="e.g. 25" autocomplete="off">
+        <label for="split-r2in">Pool 2 — reserve in (token you pay)</label>
+        <input id="split-r2in" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="split-r2out">Pool 2 — reserve out (token you receive)</label>
+        <input id="split-r2out" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="split-fee2">Pool 2 — fee, basis points (25 = 0.25%)</label>
+        <input id="split-fee2" inputmode="decimal" placeholder="e.g. 25" autocomplete="off">
+        <label for="split-ain">Amount in (token you pay)</label>
+        <input id="split-ain" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="split-a1">Send through pool 1 (model)</label>
+        <input id="split-a1" readonly placeholder="—" autocomplete="off">
+        <label for="split-a2">Send through pool 2 (model)</label>
+        <input id="split-a2" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan the split</button>
+        <p id="split-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -659,6 +684,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=25"></script>
+<script src="app.js?v=26"></script>
 </body>
 </html>
