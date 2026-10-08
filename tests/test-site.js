@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=46"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=47"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists forty-two tools", readme.includes("forty-two pool tools") || readme.includes("all forty-two"));
+check("README lists forty-three tools", readme.includes("forty-three pool tools") || readme.includes("all forty-three"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1992,8 +1992,86 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts forty-two tools and names the CLMM single-range swap model",
-  appSrc.includes("plus forty-two fully") && appSrc.includes("a CLMM single-range swap model.\n   These are educational MODELS"));
+check("app.js header counts forty-three tools and names the CLMM two-range swap model",
+  appSrc.includes("plus forty-three fully") && appSrc.includes("CLMM two-range swap model.\n   These are educational MODELS"));
+
+/* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
+const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
+const xsNo = app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "10", 25, "ab", XSWAP_L, "0.64");
+const single42 = app.clmmSwap(XSWAP_L, "0.8", "1.25", "1", "10", 25, "ab");
+check("XSWAP no-cross never enters the second range", xsNo !== null && xsNo.crossed === false && xsNo.hitSecondBoundary === false && xsNo.leg2UsedIn === 0 && xsNo.leg2Out === 0);
+check("XSWAP no-cross is tool 42's answer verbatim", xsNo.amountOut === single42.amountOut && xsNo.newPrice === single42.newPrice && xsNo.priceImpactPct === single42.priceImpactPct && xsNo.usedIn === single42.usedIn);
+const xsAb = app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", XSWAP_L, "0.64");
+const cap42 = app.clmmSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab");
+check("XSWAP headline crosses", xsAb !== null && xsAb.crossed === true && xsAb.hitSecondBoundary === false && xsAb.unfilledIn === 0);
+check("XSWAP leg 1 is tool 42's capped swap verbatim", xsAb.leg1UsedIn === cap42.usedIn && xsAb.leg1Out === cap42.amountOut && xsAb.boundaryPrice === 0.8);
+near("XSWAP headline leg 1 used-in", xsAb.leg1UsedIn, 112.08360789472633, 1e-9);
+near("XSWAP headline leg 2 used-in", xsAb.leg2UsedIn, 87.91639210527367, 1e-9);
+near("XSWAP headline leg 2 out", xsAb.leg2Out, 64.79190012555198, 1e-9);
+near("XSWAP headline amount out", xsAb.amountOut, 164.791900125552, 1e-9);
+near("XSWAP headline new price lands inside the second range", xsAb.newPrice, 0.6823165770815478, 1e-9);
+near("XSWAP headline impact includes both legs' fee", xsAb.priceImpactPct, 17.60404993722401, 1e-9);
+near("XSWAP headline fee is the tier's share of the whole used input", xsAb.feePaid, 0.5, 1e-12);
+const xsBa = app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ba", XSWAP_L, "1.5625");
+check("XSWAP mirrored ranges mirror the crossing exactly", xsBa.crossed === true && xsBa.amountOut === xsAb.amountOut && xsBa.usedIn === xsAb.usedIn && xsBa.leg2Out === xsAb.leg2Out && xsBa.priceImpactPct === xsAb.priceImpactPct);
+near("XSWAP mirror new price", xsBa.newPrice, 1.4655953461914555, 1e-9);
+const xs0 = app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 0, "ab", XSWAP_L, "0.64");
+check("XSWAP zero-fee charges no fee on either leg", xs0.feePaid === 0 && xs0.crossed === true);
+near("XSWAP zero-fee leg 1 used-in is the net capacity", xs0.leg1UsedIn, 111.80339887498951, 1e-9);
+const xsRt = app.clmmCrossSwap(XSWAP_L, "0.64", "0.8", String(xs0.newPrice), String(xs0.amountOut), 0, "ba", XSWAP_L, "1.25");
+check("XSWAP zero-fee round trip crosses back", xsRt !== null && xsRt.crossed === true);
+near("XSWAP zero-fee round trip returns the input", xsRt.amountOut, 200, 1e-9);
+near("XSWAP zero-fee round trip restores the price", xsRt.newPrice, 1, 1e-9);
+const xsBig = app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "100000", 25, "ab", XSWAP_L, "0.64");
+check("XSWAP oversized fills both ranges and stops", xsBig.crossed === true && xsBig.hitSecondBoundary === true);
+near("XSWAP double-cap new price is the outer edge", xsBig.newPrice, 0.64, 1e-12);
+near("XSWAP double-cap pays every out-token both ranges hold", xsBig.amountOut, 100 + 947.2135954999577 * (Math.sqrt(0.8) - Math.sqrt(0.64)), 1e-9);
+near("XSWAP double-cap used-in", xsBig.usedIn, 237.39689110274628, 1e-9);
+near("XSWAP double-cap leaves the rest unfilled, not absorbed", xsBig.unfilledIn, 100000 - 237.39689110274628, 1e-9);
+const xsThin = app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", "94.72135954999577", "0.64");
+check("XSWAP a tenth-depth second range caps under the same input", xsThin.crossed === true && xsThin.hitSecondBoundary === true);
+near("XSWAP thin second range pays its whole holding of B", xsThin.leg2Out, 94.72135954999577 * (Math.sqrt(0.8) - Math.sqrt(0.64)), 1e-9);
+near("XSWAP thin second range used-in", xsThin.usedIn, 124.61493621552832, 1e-9);
+const xsDeep = app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", "9472.135954999577", "0.64");
+check("XSWAP a ten-times second range absorbs the crossing", xsDeep.crossed === true && xsDeep.hitSecondBoundary === false && xsDeep.unfilledIn === 0);
+near("XSWAP deep second range amount out", xsDeep.amountOut, 169.58108386165284, 1e-9);
+near("XSWAP deep second range walks barely past the edge", xsDeep.newPrice, 0.7869132692214872, 1e-9);
+check("XSWAP deeper second range pays more for the same crossing trade", xsDeep.amountOut > xsAb.amountOut && xsAb.amountOut > xsThin.amountOut);
+const xsJust = app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "113", 25, "ab", XSWAP_L, "0.64");
+check("XSWAP just past the first wall crosses with a small second leg", xsJust.crossed === true && xsJust.hitSecondBoundary === false);
+near("XSWAP just-past leg 2 used-in", xsJust.leg2UsedIn, 0.9163921052736725, 1e-9);
+near("XSWAP just-past leg 2 out", xsJust.leg2Out, 0.7306502319430709, 1e-9);
+check("XSWAP rejects an outer edge on the wrong side or at the shared edge", app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", XSWAP_L, "0.9") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", XSWAP_L, "0.8") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ba", XSWAP_L, "1.1") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ba", XSWAP_L, "1.25") === null);
+check("XSWAP rejects a second range with no liquidity or bad inputs", app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", "0", "0.64") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", "abc", "0.64") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", XSWAP_L, "abc") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "200", 25, "xx", XSWAP_L, "0.64") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1", "0", 25, "ab", XSWAP_L, "0.64") === null);
+check("XSWAP inherits tool 42's rejection of a price outside the active range", app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "1.3", "200", 25, "ab", XSWAP_L, "0.64") === null && app.clmmCrossSwap(XSWAP_L, "0.8", "1.25", "0.8", "200", 25, "ba", XSWAP_L, "1.5625") === null);
+for (const [liq, lo, hi, px, ain, fee, dir, liq2, outer] of [
+  [XSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", XSWAP_L, "0.64"],
+  [XSWAP_L, "0.8", "1.25", "1", "200", 25, "ba", XSWAP_L, "1.5625"],
+  ["5000", "0.5", "2", "1.1", "3000", 30, "ab", "2500", "0.25"],
+  ["5000", "0.5", "2", "0.9", "3000", 30, "ba", "2500", "4"],
+  ["123.456", "2.4", "2.6", "2.5", "3.21", 60, "ab", "50", "2"],
+  ["1000000", "0.99", "1.01", "1", "5000", 1, "ba", "10", "1.05"],
+  [XSWAP_L, "0.8", "1.25", "1.2", "30", 25, "ba", "2000", "3"]
+]) {
+  const x = app.clmmCrossSwap(liq, lo, hi, px, ain, fee, dir, liq2, outer);
+  const tag = "XSWAP sweep " + dir + " " + ain + " @" + px + " in " + lo + "-" + hi + " L2 " + liq2;
+  check(tag + " settles", x !== null);
+  near(tag + " used + unfilled is the amount in", x.usedIn + x.unfilledIn, Number(ain), 1e-9);
+  near(tag + " legs sum to the totals", x.leg1UsedIn + x.leg2UsedIn, x.usedIn, 1e-9);
+  near(tag + " leg outs sum to the amount out", x.leg1Out + x.leg2Out, x.amountOut, 1e-9);
+  near(tag + " fee is the tier's share of the used input", x.feePaid, x.usedIn * fee / 10000, 1e-9);
+  if (x.crossed) {
+    check(tag + " crossed only through the shared edge", x.boundaryPrice === (dir === "ab" ? Number(lo) : Number(hi)) && x.newPrice >= x.secondLowerPrice - 1e-12 && x.newPrice <= x.secondUpperPrice + 1e-12);
+    const leg1Only = app.clmmSwap(liq, lo, hi, px, ain, fee, dir);
+    check(tag + " leg 1 is tool 42 verbatim", leg1Only !== null && leg1Only.hitBoundary === true && x.leg1UsedIn === leg1Only.usedIn && x.leg1Out === leg1Only.amountOut);
+  } else {
+    check(tag + " uncrossed stays inside the active range", x.newPrice > Number(lo) && x.newPrice < Number(hi));
+  }
+}
+check("all xswap controls labelled", ["xswap-liq", "xswap-lower", "xswap-upper", "xswap-price", "xswap-dir", "xswap-ain", "xswap-fee", "xswap-liq2", "xswap-outer", "xswap-out", "xswap-newprice", "xswap-used"].every(id => html.includes(`for="${id}"`)));
+check("xswap tool present in index.html", html.includes('id="xswap-calc"') && html.includes('id="xswap-result"'));
+check("xswap honesty: second wall and not-live labels", html.includes("The second range is a wall too") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("unfilled, not absorbed"));
+check("guide covers CLMM two-range swap", guide.includes("The second range sets the cliff"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

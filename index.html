@@ -964,6 +964,40 @@
         <button type="submit" class="btn primary">Price this CLMM swap</button>
         <p id="cswap-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="xswap-calc">
+        <h3>43 · CLMM two-range swap model</h3>
+        <p>Tool 42 stops a CLMM swap at the active range's edge and leaves the rest unfilled, because what happens next depends on the next range's liquidity, which it refused to invent. This model lets you supply that next range: enter the active range (its liquidity L, its bounds, the current price), your amount in and direction, then the second range's own liquidity L and its outer edge — the two ranges share the active range's edge by construction, so paying token A the second range runs from your outer edge up to the active range's lower edge, and paying token B from its upper edge up to your outer edge. If the swap never reaches the edge, the second range is never entered and the answer is exactly tool 42's. If it crosses, the remainder walks the second range's own curve from the shared edge, under the same maths and the same fee tier — so the total fee is still exactly the tier's share of the input actually used. The second range is a wall too: fill it as well and the rest is again unfilled, not absorbed — a real pool would continue into a third range, a fourth, at liquidity that usually thins the further price walks from where it started. That thinning is the cliff: the same crossing trade returns noticeably less, and walks the price noticeably further, against a thin second range than against a deep one, and no single-range picture shows it. Two ranges at two constant L values only — a real pool's liquidity varies tick by tick. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="xswap-liq">Active range liquidity L (model — tool 8 reports it)</label>
+        <input id="xswap-liq" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="xswap-lower">Active range lower price (token B per token A)</label>
+        <input id="xswap-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="xswap-upper">Active range upper price (token B per token A)</label>
+        <input id="xswap-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="xswap-price">Current price (token B per token A)</label>
+        <input id="xswap-price" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="xswap-dir">Direction</label>
+        <select id="xswap-dir">
+          <option value="ab">Pay token A, receive token B (price falls)</option>
+          <option value="ba">Pay token B, receive token A (price rises)</option>
+        </select>
+        <label for="xswap-ain">Amount in</label>
+        <input id="xswap-ain" inputmode="decimal" placeholder="e.g. 200" autocomplete="off">
+        <label for="xswap-fee">Fee, basis points (25 = 0.25%)</label>
+        <input id="xswap-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="xswap-liq2">Second range liquidity L (model)</label>
+        <input id="xswap-liq2" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="xswap-outer">Second range outer edge price (beyond the shared edge, on the side the price walks toward)</label>
+        <input id="xswap-outer" inputmode="decimal" placeholder="e.g. 0.64 paying A, 1.5625 paying B" autocomplete="off">
+        <label for="xswap-out">Amount out (model)</label>
+        <input id="xswap-out" readonly placeholder="—" autocomplete="off">
+        <label for="xswap-newprice">Price after the swap, B per A (model)</label>
+        <input id="xswap-newprice" readonly placeholder="—" autocomplete="off">
+        <label for="xswap-used">Amount in actually used (model)</label>
+        <input id="xswap-used" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Price this two-range CLMM swap</button>
+        <p id="xswap-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -991,6 +1025,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=46"></script>
+<script src="app.js?v=47"></script>
 </body>
 </html>
