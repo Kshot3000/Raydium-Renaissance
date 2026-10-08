@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=30"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=31"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,53 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists thirty-one tools", readme.includes("thirty-one pool tools") || readme.includes("all thirty-one"));
+check("README lists thirty-two tools", readme.includes("thirty-two pool tools") || readme.includes("all thirty-two"));
+
+/* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
+const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
+near("CPVOL headline hurdle = Tool 4 hurdle", cpv1.feesNeeded, 85.7864376269049, 1e-9);
+near("CPVOL headline required fees per day", cpv1.requiredFeesPerDay, 8.57864376269049, 1e-9);
+near("CPVOL headline required volume", cpv1.requiredVolumePerDay, 343145.7505076196, 1e-4);
+near("CPVOL headline required pool fees per day", cpv1.requiredPoolFeesPerDay, 857.864376269049, 1e-7);
+check("CPVOL headline feasible + share reported", cpv1.feasible === true && cpv1.sharePct === 1 && cpv1.feePct === 0.25);
+const cpv4 = app.cpRequiredVolume(4, "1000", "50000", "1000000", 25, "5");
+near("CPVOL 4x hurdle", cpv4.feesNeeded, 500, 1e-9);
+near("CPVOL 4x required volume", cpv4.requiredVolumePerDay, 800000, 1e-6);
+const cpvHalf = app.cpRequiredVolume(0.5, "1000", "10000", "1000000", 25, "10");
+near("CPVOL halving hurdle", cpvHalf.feesNeeded, 42.89321881345245, 1e-9);
+near("CPVOL halving required volume", cpvHalf.requiredVolumePerDay, 171572.8752538098, 1e-4);
+/* the inverse must round-trip through Tools 3 and 4 exactly */
+for (const [nm, cpv, ratio, dep, your, tvl, bps, days] of [["headline", cpv1, 2, "1000", "10000", "1000000", 25, "10"], ["4x", cpv4, 4, "1000", "50000", "1000000", 25, "5"], ["halving", cpvHalf, 0.5, "1000", "10000", "1000000", 25, "10"]]) {
+  const fwd = app.lpFees(String(cpv.requiredVolumePerDay), bps, your, tvl);
+  near("CPVOL Tool 3 at required volume earns the hurdle in the days allowed (" + nm + ")", fwd.dailyFees * Number(days), cpv.feesNeeded, 1e-6);
+  const be = app.breakEvenFees(ratio, dep, String(fwd.dailyFees));
+  near("CPVOL Tool 4 at that daily rate breaks even in the days allowed (" + nm + ")", be.daysToBreakEven, Number(days), 1e-6);
+}
+/* composition: hurdle and share are the source tools' own numbers */
+for (const r of [0.25, 0.5, 0.8, 1.25, 2, 4]) {
+  const x = app.cpRequiredVolume(r, "2500", "12345", "987654", 30, "30");
+  near("CPVOL hurdle = Tool 4 at ratio " + r, x.feesNeeded, app.breakEvenFees(r, "2500").feesNeeded, 1e-9);
+  check("CPVOL share = Tool 3 at ratio " + r, x.sharePct === app.lpFees("1", 30, "12345", "987654").sharePct);
+}
+/* scaling: double the fee tier, the share or the days, half the volume */
+near("CPVOL double fee tier halves volume", app.cpRequiredVolume(2, "1000", "10000", "1000000", 50, "10").requiredVolumePerDay, cpv1.requiredVolumePerDay / 2, 1e-4);
+near("CPVOL double share halves volume", app.cpRequiredVolume(2, "1000", "20000", "1000000", 25, "10").requiredVolumePerDay, cpv1.requiredVolumePerDay / 2, 1e-4);
+near("CPVOL double days halves volume", app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "20").requiredVolumePerDay, cpv1.requiredVolumePerDay / 2, 1e-4);
+/* honest edges */
+const cpv0 = app.cpRequiredVolume(1, "1000", "10000", "1000000", 25, "10");
+check("CPVOL no price move needs zero volume", cpv0.feasible === true && cpv0.requiredVolumePerDay === 0 && cpv0.feesNeeded === 0);
+const cpv0Fee = app.cpRequiredVolume(1, "1000", "10000", "1000000", 0, "10");
+check("CPVOL no price move needs zero volume even at a zero fee tier", cpv0Fee.feasible === true && cpv0Fee.requiredVolumePerDay === 0);
+const cpvNoFee = app.cpRequiredVolume(2, "1000", "10000", "1000000", 0, "10");
+check("CPVOL zero fee tier with a real hurdle is not feasible", cpvNoFee.feasible === false && cpvNoFee.requiredVolumePerDay === Infinity && cpvNoFee.requiredFeesPerDay > 0 && cpvNoFee.requiredPoolFeesPerDay > 0);
+/* rejections */
+check("CPVOL rejects blank or non-positive days", app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "") === null && app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "0") === null && app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "-3") === null);
+check("CPVOL rejects your liquidity above TVL (Tool 3 rule)", app.cpRequiredVolume(2, "1000", "2000000", "1000000", 25, "10") === null);
+check("CPVOL rejects fee tier above 10000 bps and non-integer tiers", app.cpRequiredVolume(2, "1000", "10000", "1000000", 10001, "10") === null && app.cpRequiredVolume(2, "1000", "10000", "1000000", "25.5", "10") === null);
+check("CPVOL rejects bad move or deposit inputs", app.cpRequiredVolume(0, "1000", "10000", "1000000", 25, "10") === null && app.cpRequiredVolume(2, "", "10000", "1000000", 25, "10") === null && app.cpRequiredVolume(2, "0", "10000", "1000000", 25, "10") === null);
+check("all cpvol controls labelled", ["cpvol-ratio", "cpvol-deposit", "cpvol-your", "cpvol-tvl", "cpvol-bps", "cpvol-days", "cpvol-out"].every(id => html.includes(`for="${id}"`)));
+check("cpvol tool present in index.html", html.includes('id="cpvol-calc"') && html.includes('id="cpvol-result"'));
+check("cpvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

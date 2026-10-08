@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus thirty-one fully
+/* Raydium Renaissance hub logic: project filtering plus thirty-two fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -14,7 +14,8 @@
    model, a net LP return calculator, a CLMM capital-efficiency
    calculator, a pool depth planner, a post-move reserves calculator,
    a split-route swap planner, a CLMM net return calculator, a
-   CLMM IL tolerance band, and a CLMM required-volume planner.
+   CLMM IL tolerance band, a CLMM required-volume planner, and a
+   constant-product required-volume planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1529,8 +1530,74 @@ function clmmRequiredVolume(liquidityStr, lowerStr, upperStr, entryPriceStr, che
   });
 }
 
+/* ---------- 32 · Constant-product required-volume planner (Tools 4 + 3 inverted) ---------- */
+/* Tool 31 asks this planning question for a CLMM position; a
+   constant-product LP asks the same: "to cover the break-even hurdle
+   a price move opens within N days, how much volume does the pool
+   need per day?" The hurdle is Tool 4's own feesNeeded; the fee side
+   is Tool 3's own formula run in reverse:
+     your fees per day = volume * (feeBps / 10000) * (your / TVL)
+     required volume   = (hurdle / days) / that product
+   Validation rides on the source tools themselves: the hurdle comes
+   from breakEvenFees and a probe lpFees estimate at volume 1 must
+   succeed, so a missing/zero deposit, your liquidity above the pool
+   TVL and a fee tier outside integer 0..10000 bps are rejected
+   exactly as Tools 4 and 3 reject them, and the share reported is
+   Tool 3's own. The tests feed the reported volume straight back
+   into Tool 3 and assert it earns the hurdle in exactly the days
+   allowed, and into Tool 4 and assert the day count comes back, so
+   the inverse can never drift from the forwards tools. Two honest
+   edges: at no price move there is no hurdle, so the required
+   volume is honestly 0 — not a small number — even at a zero fee
+   tier; and with a real hurdle but a zero fee tier, no volume exists
+   that earns a fee, so the answer is reported as not feasible with
+   an infinite required volume rather than a made-up figure. The
+   volume is a pool-wide total per day in the deposit's terms at a
+   fee rate assumed to hold still — in a live pool volume, TVL and
+   price all move. Model only — not a live quote, not a volume
+   forecast, not financial advice. */
+function cpRequiredVolume(priceRatio, depositStr, yourStr, tvlStr, feeBps, daysStr) {
+  if (daysStr == null || String(daysStr).trim() === "") return null;
+  var days = Number(daysStr);
+  if (!Number.isFinite(days) || days <= 0) return null;
+  var be = breakEvenFees(priceRatio, depositStr);
+  if (be === null) return null;
+  /* probe Tool 3 at volume 1 for validation + its own share */
+  var est = lpFees("1", feeBps, yourStr, tvlStr);
+  if (est === null) return null;
+  var feesNeeded = be.feesNeeded;
+  var requiredFeesPerDay = feesNeeded / days;
+  var shareFrac = est.sharePct / 100;
+  var feeFrac = Number(feeBps) / 10000;
+  var base = {
+    priceRatio: be.priceRatio, deposit: be.deposit,
+    holdValue: be.holdValue, lpValue: be.lpValue, ilPct: be.ilPct,
+    feesNeeded: feesNeeded, feesNeededPctOfDeposit: be.feesNeededPctOfDeposit,
+    days: days, feeBps: Number(feeBps), feePct: est.feePct,
+    sharePct: est.sharePct, requiredFeesPerDay: requiredFeesPerDay
+  };
+  if (feesNeeded <= 1e-12) {
+    return Object.assign(base, {
+      feasible: true, requiredPoolFeesPerDay: 0, requiredVolumePerDay: 0
+    });
+  }
+  var capture = feeFrac * shareFrac;
+  if (capture <= 0) {
+    return Object.assign(base, {
+      feasible: false,
+      requiredPoolFeesPerDay: shareFrac > 0 ? requiredFeesPerDay / shareFrac : null,
+      requiredVolumePerDay: Infinity
+    });
+  }
+  return Object.assign(base, {
+    feasible: true,
+    requiredPoolFeesPerDay: requiredFeesPerDay / shareFrac,
+    requiredVolumePerDay: requiredFeesPerDay / capture
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -2373,6 +2440,38 @@ if (typeof document !== "undefined") {
           "% time in range, that means ≈ " + fmt(res.requiredVolumePerDay, 2) + " B of pool volume per day (≈ " + fmt(res.requiredPoolFeesPerDay, 6) +
           " B per day of pool-wide fees). That volume is the whole pool's, not your trades — and no volume is promised. A CLMM required-volume model — not a live quote, not financial advice.";
         document.getElementById("rvol-out").value = fmt(res.requiredVolumePerDay, 2);
+      }
+    });
+
+    document.getElementById("cpvol-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = cpRequiredVolume(
+        document.getElementById("cpvol-ratio").value,
+        document.getElementById("cpvol-deposit").value,
+        document.getElementById("cpvol-your").value,
+        document.getElementById("cpvol-tvl").value,
+        document.getElementById("cpvol-bps").value,
+        document.getElementById("cpvol-days").value
+      );
+      var out = document.getElementById("cpvol-result");
+      if (res === null) {
+        out.textContent = "Enter a positive price multiple, a positive deposit, your liquidity no larger than the pool's TVL, a fee tier between 0 and 10000 bps, and a positive number of days.";
+        document.getElementById("cpvol-out").value = "";
+      } else if (!res.feasible) {
+        out.textContent = "Model output: the position must earn ≈ " + fmt(res.feesNeeded, 2) + " of fees to match holding after a " + fmt(res.priceRatio, 4) +
+          "× price move — ≈ " + fmt(res.requiredFeesPerDay, 2) + " per day over " + fmt(res.days, 2) + " days — but at a " + fmt(res.feeBps, 0) +
+          " bps fee tier, no pool volume earns that fee: the required volume is not finite. Raise the fee tier or allow more days. A constant-product required-volume model — not a live quote, not financial advice.";
+        document.getElementById("cpvol-out").value = "not feasible at this fee tier";
+      } else if (res.requiredVolumePerDay === 0) {
+        out.textContent = "Model output: with no price move there is no shortfall vs holding to cover, so the required pool volume is 0 per day — any fees earned are ahead of holding at that price. A constant-product required-volume model — not a live quote, not financial advice.";
+        document.getElementById("cpvol-out").value = "0";
+      } else {
+        out.textContent = "Model output: covering the ≈ " + fmt(res.feesNeeded, 2) + " shortfall vs holding after a " + fmt(res.priceRatio, 4) +
+          "× price move on a " + fmt(res.deposit, 2) + " deposit within " + fmt(res.days, 2) + " days needs ≈ " + fmt(res.requiredFeesPerDay, 2) +
+          " of fees per day; at a " + fmt(res.feeBps, 0) + " bps tier and a " + fmt(res.sharePct, 4) +
+          "% share of the pool, that means ≈ " + fmt(res.requiredVolumePerDay, 2) + " of pool volume per day (≈ " + fmt(res.requiredPoolFeesPerDay, 2) +
+          " per day of pool-wide fees). That volume is the whole pool's, not your trades — and no volume is promised. A constant-product required-volume model — not a live quote, not financial advice.";
+        document.getElementById("cpvol-out").value = fmt(res.requiredVolumePerDay, 2);
       }
     });
 

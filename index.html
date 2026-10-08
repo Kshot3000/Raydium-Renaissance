@@ -724,6 +724,27 @@
         <button type="submit" class="btn primary">Find the volume I need</button>
         <p id="rvol-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="cpvol-calc">
+        <h3>32 · Constant-product required-volume planner</h3>
+        <p>Tool 31 asks this planning question for a CLMM position; this is the same question for a constant-product (AMM v4 / CPMM / CP-Swap) position. Enter the price move you fear (as a multiple), your deposit, your liquidity and the pool's TVL — your share is the two divided — the fee tier, and the days you'd accept to recover: the calculator takes Tool 4's own break-even hurdle and runs Tool 3's fee formula backwards, so the volume it reports is exactly the volume Tools 3 and 4 would work forwards from. At no price move there is no shortfall, so the required volume is honestly zero; with a real shortfall but a zero fee tier, no volume earns a fee at all, so the answer is reported as not feasible rather than as a huge number. The volume is the whole pool's trading per day, in the deposit's terms, not your trades, and the fee rate is assumed to hold still — in a live pool it will not. Educational model only — your inputs, not live pool state; not a live quote, not a volume forecast, not financial advice.</p>
+        <label for="cpvol-ratio">Price move (multiple — 2 = price doubles, 0.5 = halves)</label>
+        <input id="cpvol-ratio" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="cpvol-deposit">Your deposit value (in $ or token-B terms)</label>
+        <input id="cpvol-deposit" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="cpvol-your">Your liquidity in the pool (same terms as TVL)</label>
+        <input id="cpvol-your" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="cpvol-tvl">Pool TVL (same terms as your liquidity)</label>
+        <input id="cpvol-tvl" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="cpvol-bps">Fee tier (bps — 25 = 0.25%)</label>
+        <input id="cpvol-bps" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="cpvol-days">Days allowed to cover the shortfall</label>
+        <input id="cpvol-days" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="cpvol-out">Required pool volume per day (model, deposit terms)</label>
+        <input id="cpvol-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Find the volume I need</button>
+        <p id="cpvol-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -751,6 +772,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=30"></script>
+<script src="app.js?v=31"></script>
 </body>
 </html>
