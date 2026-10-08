@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=32"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=33"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists thirty-three tools", readme.includes("thirty-three pool tools") || readme.includes("all thirty-three"));
+check("README lists thirty-four tools", readme.includes("thirty-four pool tools") || readme.includes("all thirty-four"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1463,6 +1463,65 @@ check("CZAP rejects a holding too small for the swap to return anything", app.cl
 check("all czap controls labelled", ["czap-ra", "czap-rb", "czap-bps", "czap-cur", "czap-lower", "czap-upper", "czap-amt", "czap-out"].every(id => html.includes(`for="${id}"`)));
 check("czap tool present in index.html", html.includes('id="czap-calc"') && html.includes('id="czap-result"'));
 check("czap honesty: separate models and not-live labels", html.includes("modelled separately") && html.includes("not live pool state") && html.includes("not financial advice"));
+
+/* ---------- Tool 34: CLMM single-sided zap-out planner (CZOUT) ---------- */
+const L34 = String(app.clmmRangePlan("1", "0.8", "1.25", "100").liquidity);
+const czo1 = app.clmmZapOut("1000", "1000", L34, "0.8", "1.25", "1", 25);
+check("CZOUT headline in range", czo1.status === "in" && czo1.inRange === true);
+near("CZOUT headline withdraw A = Tool 9 amount", czo1.withdrawA, 100, 1e-9);
+near("CZOUT headline withdraw B = Tool 9 amount", czo1.withdrawB, 100, 1e-9);
+near("CZOUT headline swap in is the whole B leg", czo1.swapIn, 100, 1e-12);
+near("CZOUT headline swap return", czo1.swapOut, 90.70243237, 1e-9);
+near("CZOUT headline total A", czo1.totalA, 190.70243237, 1e-9);
+near("CZOUT headline value at spot", czo1.valueAtSpotA, 200, 1e-9);
+near("CZOUT headline consolidation cost", czo1.consolidationCostA, 9.29756763, 1e-6);
+near("CZOUT headline consolidation cost %", czo1.consolidationCostPct, 4.648783815, 1e-6);
+/* both legs are the source tools verbatim */
+const czoPos = app.clmmPositionAtPrice(L34, "0.8", "1.25", "1");
+check("CZOUT withdrawal = Tool 9 verbatim", czo1.withdrawA === czoPos.amountA && czo1.withdrawB === czoPos.amountB);
+check("CZOUT swap leg = Tool 1 on the floored B leg", Number(app.cpSwap("1000", "1000", czo1.swapIn.toFixed(9), 25).out) === czo1.swapOut);
+near("CZOUT accounting: total = kept A + swap return", czo1.withdrawA + czo1.swapOut, czo1.totalA, 1e-12);
+near("CZOUT accounting: cost = value at spot - total", czo1.valueAtSpotA - czo1.totalA, czo1.consolidationCostA, 1e-12);
+/* zero fee: swap returns 1000*100/1100, cost is impact only */
+const czo0 = app.clmmZapOut("1000", "1000", L34, "0.8", "1.25", "1", 0);
+near("CZOUT zero-fee swap return", czo0.swapOut, 90.909090909, 1e-9);
+near("CZOUT zero-fee total A", czo0.totalA, 190.909090909, 1e-9);
+near("CZOUT zero-fee cost %", czo0.consolidationCostPct, 4.5454545455, 1e-6);
+/* a higher swap fee costs more; a deeper swap pool costs less */
+const czo100 = app.clmmZapOut("1000", "1000", L34, "0.8", "1.25", "1", 100);
+check("CZOUT higher fee costs more", czo100.consolidationCostPct > czo1.consolidationCostPct && czo100.totalA < czo1.totalA);
+const czoDeep = app.clmmZapOut("10000", "10000", L34, "0.8", "1.25", "1", 25);
+check("CZOUT deeper swap pool costs less", czoDeep.consolidationCostPct < czo1.consolidationCostPct && czoDeep.consolidationCostPct > 0);
+/* composition sweep: withdrawal is Tool 9, swap is Tool 1, total never beats spot value */
+for (const [liq, lo, hi, cur, ra, rb, bps] of [[L34, "0.8", "1.25", "1.2", "1000", "1000", 25], ["500", "0.5", "2", "1.5", "2000", "500", 25], ["2000", "2", "8", "3", "100", "4000", 100], ["100", "0.9", "1.1", "1.05", "5000", "5000", 5]]) {
+  const z = app.clmmZapOut(ra, rb, liq, lo, hi, cur, bps);
+  const p = app.clmmPositionAtPrice(liq, lo, hi, cur);
+  check("CZOUT sweep settles at price " + cur + " in " + ra + "/" + rb, z !== null && z.withdrawA === p.amountA && z.withdrawB === p.amountB && z.totalA <= z.valueAtSpotA + 1e-9 && z.consolidationCostA >= -1e-12);
+  check("CZOUT sweep swap = Tool 1 at price " + cur + " in " + ra + "/" + rb, z.swapOut === Number(app.cpSwap(rb, ra, z.swapIn.toFixed(9), bps).out));
+  near("CZOUT sweep total = kept A + swap return at price " + cur + " in " + ra + "/" + rb, z.withdrawA + z.swapOut, z.totalA, 1e-9);
+}
+/* range edges: below needs no swap; above swaps everything and cost % = impact */
+const czoBelow = app.clmmZapOut("1000", "1000", L34, "0.8", "1.25", "0.5", 25);
+check("CZOUT below range swaps nothing", czoBelow.status === "below" && czoBelow.swapIn === 0 && czoBelow.swapOut === 0 && czoBelow.consolidationCostA === 0 && czoBelow.consolidationCostPct === 0);
+near("CZOUT below range total is the whole A holding", czoBelow.totalA, 211.80339887, 1e-6);
+near("CZOUT below range total = Tool 9 amount", czoBelow.totalA, app.clmmPositionAtPrice(L34, "0.8", "1.25", "0.5").amountA, 1e-12);
+const czoAtLow = app.clmmZapOut("1000", "1000", L34, "0.8", "1.25", "0.8", 25);
+check("CZOUT at the lower edge is the below case", czoAtLow.status === "below" && czoAtLow.swapIn === 0);
+const czoAbove = app.clmmZapOut("1000", "1000", L34, "0.8", "1.25", "2", 25);
+check("CZOUT above range is entirely B", czoAbove.status === "above" && czoAbove.withdrawA === 0 && czoAbove.swapIn > 0);
+near("CZOUT above range withdraw B", czoAbove.withdrawB, 211.80339887, 1e-6);
+near("CZOUT above range swap return", czoAbove.swapOut, 174.422888212, 1e-6);
+near("CZOUT above range cost % = swap price impact", czoAbove.consolidationCostPct, czoAbove.swapPriceImpactPct, 1e-6);
+const czoAtUp = app.clmmZapOut("1000", "1000", L34, "0.8", "1.25", "1.25", 25);
+check("CZOUT at the upper edge is the above case", czoAtUp.status === "above" && czoAtUp.withdrawA === 0);
+/* rejections */
+check("CZOUT rejects blank fields", app.clmmZapOut("", "1000", L34, "0.8", "1.25", "1", 25) === null && app.clmmZapOut("1000", "1000", "", "0.8", "1.25", "1", 25) === null && app.clmmZapOut("1000", "1000", L34, "0.8", "1.25", "1", "") === null);
+check("CZOUT rejects non-positive reserves, liquidity or price", app.clmmZapOut("0", "1000", L34, "0.8", "1.25", "1", 25) === null && app.clmmZapOut("1000", "1000", "0", "0.8", "1.25", "1", 25) === null && app.clmmZapOut("1000", "1000", L34, "0.8", "1.25", "0", 25) === null);
+check("CZOUT rejects inverted range and bad fee tiers", app.clmmZapOut("1000", "1000", L34, "1.25", "0.8", "1", 25) === null && app.clmmZapOut("1000", "1000", L34, "0.8", "1.25", "1", 10000) === null && app.clmmZapOut("1000", "1000", L34, "0.8", "1.25", "1", "25.5") === null);
+check("CZOUT rejects a B leg too small to swap at 9 dp", app.clmmZapOut("1000", "1000", "0.000000001", "0.8", "1.25", "1", 25) === null);
+check("all czout controls labelled", ["czout-ra", "czout-rb", "czout-bps", "czout-l", "czout-lower", "czout-upper", "czout-cur", "czout-out"].every(id => html.includes(`for="${id}"`)));
+check("czout tool present in index.html", html.includes('id="czout-calc"') && html.includes('id="czout-result"'));
+check("czout honesty: separate models and not-live labels", html.includes("Tool 33's exit mirror") && html.includes("modelled separately") && html.includes("not live pool state") && html.includes("not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
