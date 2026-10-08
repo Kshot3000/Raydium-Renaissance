@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=31"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=32"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists thirty-two tools", readme.includes("thirty-two pool tools") || readme.includes("all thirty-two"));
+check("README lists thirty-three tools", readme.includes("thirty-three pool tools") || readme.includes("all thirty-three"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1402,6 +1402,67 @@ check("CPVOL rejects bad move or deposit inputs", app.cpRequiredVolume(0, "1000"
 check("all cpvol controls labelled", ["cpvol-ratio", "cpvol-deposit", "cpvol-your", "cpvol-tvl", "cpvol-bps", "cpvol-days", "cpvol-out"].every(id => html.includes(`for="${id}"`)));
 check("cpvol tool present in index.html", html.includes('id="cpvol-calc"') && html.includes('id="cpvol-result"'));
 check("cpvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
+
+/* ---------- Tool 33: CLMM single-sided zap-in planner (CZAP) ---------- */
+const cz1 = app.clmmZapIn("1000", "1000", "1", "0.8", "1.25", "100", 25);
+check("CZAP headline in range", cz1.status === "in" && cz1.inRange === true);
+near("CZAP headline ratio is 1 at the centred price", cz1.ratioBperA, 1, 1e-12);
+near("CZAP headline swap split", cz1.swapIn, 51.310156586, 1e-9);
+near("CZAP headline swap return", cz1.swapOut, 48.689843413, 1e-9);
+near("CZAP headline deposit A", cz1.depositA, 48.689843413, 1e-9);
+near("CZAP headline deposit B", cz1.depositB, 48.689843413, 1e-9);
+check("CZAP headline B fully used, A leftover is dust", cz1.leftoverB === 0 && cz1.leftoverA >= 0 && cz1.leftoverA < 1e-6 && cz1.limiting === "B");
+near("CZAP headline liquidity", cz1.liquidity, 461.19681643557664, 1e-9);
+near("CZAP accounting: swap + deposit + leftover = holding", cz1.swapIn + cz1.depositA + cz1.leftoverA, 100, 1e-9);
+/* both legs are the source tools verbatim */
+check("CZAP swap leg = Tool 1 on the reported split", Number(app.cpSwap("1000", "1000", cz1.swapIn.toFixed(9), 25).out) === cz1.swapOut);
+const czRp = app.clmmRangePlan("1", "0.8", "1.25", String(cz1.depositA));
+near("CZAP deposit = Tool 8 plan for the deposited A (required B)", czRp.requiredB, cz1.depositB, 1e-9);
+near("CZAP liquidity = Tool 8 liquidity for the deposited A", czRp.liquidity, cz1.liquidity, 1e-9);
+const czWp = app.clmmWalletPlan("1", "0.8", "1.25", String(100 - cz1.swapIn), String(cz1.swapOut));
+near("CZAP deposit = Tool 14 settlement (liquidity)", czWp.liquidity, cz1.liquidity, 1e-12);
+check("CZAP deposit = Tool 14 settlement (used amounts)", czWp.usedA === cz1.depositA && czWp.usedB === cz1.depositB);
+/* zero fee: the split is the closed-form root of s^2 + 1900 s - 100000 = 0 */
+const cz0 = app.clmmZapIn("1000", "1000", "1", "0.8", "1.25", "100", 0);
+near("CZAP zero-fee split = closed form", cz0.swapIn, (-1900 + Math.sqrt(4010000)) / 2, 1e-9);
+/* a higher swap fee leaks more, so the split swaps more */
+const cz100 = app.clmmZapIn("1000", "1000", "1", "0.8", "1.25", "100", 100);
+check("CZAP higher fee swaps more", cz100.swapIn > cz1.swapIn && cz100.swapIn < 100);
+/* geometric centre of any range: ratio = price, deposit value-balanced */
+const czC = app.clmmZapIn("2000", "1000", "2", "1.6", "2.5", "50", 25);
+near("CZAP centred ratio = price", czC.ratioBperA, 2, 1e-9);
+near("CZAP centred deposit ratio", czC.depositB / czC.depositA, 2, 1e-9);
+const czA = app.clmmZapIn("500", "2000", "4", "3.2", "5", "40", 25);
+near("CZAP asymmetric pool centred ratio = price", czA.ratioBperA, 4, 1e-9);
+near("CZAP asymmetric deposit ratio", czA.depositB / czA.depositA, 4, 1e-9);
+/* near the top edge almost everything must be swapped */
+const czTop = app.clmmZapIn("1000", "1000", "1.24", "0.8", "1.25", "100", 25);
+check("CZAP near-upper split swaps over 98% of the holding", czTop.swapIn > 98 && czTop.swapIn < 100 && czTop.depositB / czTop.depositA > 60);
+/* composition sweep: Tool 8 must require exactly the B deposited, B never left over */
+for (const [cur, lo, hi, x, bps] of [["1", "0.8", "1.25", "100", 25], ["2", "1.6", "2.5", "50", 25], ["0.9", "0.5", "2", "250", 30], ["3", "2", "4.5", "75", 5], ["1", "0.8", "1.25", "1000", 100]]) {
+  const z = app.clmmZapIn("1000", "1000", cur, lo, hi, x, bps);
+  check("CZAP sweep settles in range at price " + cur + " x " + x, z !== null && z.status === "in" && z.leftoverB === 0 && z.leftoverA >= 0 && z.leftoverA < Math.max(1e-6, Number(x) * 1e-7));
+  near("CZAP sweep Tool 8 requires the deposited B at price " + cur + " x " + x, app.clmmRangePlan(cur, lo, hi, String(z.depositA)).requiredB, z.depositB, 1e-6);
+  near("CZAP sweep deposit ratio = range ratio at price " + cur + " x " + x, z.depositB / z.depositA, z.ratioBperA, 1e-9);
+}
+/* range edges: no swap maths, Tool 14's one-token cases */
+const czBelow = app.clmmZapIn("1000", "1000", "0.7", "0.8", "1.25", "100", 25);
+check("CZAP below range swaps nothing", czBelow.status === "below" && czBelow.swapIn === 0 && czBelow.swapOut === 0 && czBelow.depositA === 100 && czBelow.depositB === 0 && czBelow.ratioBperA === null);
+check("CZAP below range = Tool 14 below case", czBelow.liquidity === app.clmmWalletPlan("0.7", "0.8", "1.25", "100", "0").liquidity);
+const czAtLow = app.clmmZapIn("1000", "1000", "0.8", "0.8", "1.25", "100", 25);
+check("CZAP at the lower edge is the below case", czAtLow.status === "below" && czAtLow.swapIn === 0);
+const czAbove = app.clmmZapIn("1000", "1000", "1.3", "0.8", "1.25", "100", 25);
+check("CZAP above range swaps everything", czAbove.status === "above" && czAbove.swapIn === 100 && czAbove.depositA === 0 && czAbove.ratioBperA === null);
+check("CZAP above swap = Tool 1 all-in", czAbove.swapOut === Number(app.cpSwap("1000", "1000", "100", 25).out) && czAbove.depositB === czAbove.swapOut);
+check("CZAP above range = Tool 14 above case", czAbove.liquidity === app.clmmWalletPlan("1.3", "0.8", "1.25", "0", String(czAbove.swapOut)).liquidity);
+/* rejections */
+check("CZAP rejects blank fields", app.clmmZapIn("", "1000", "1", "0.8", "1.25", "100", 25) === null && app.clmmZapIn("1000", "1000", "1", "0.8", "1.25", "", 25) === null && app.clmmZapIn("1000", "1000", "1", "0.8", "1.25", "100", "") === null);
+check("CZAP rejects non-positive reserves, price or holding", app.clmmZapIn("0", "1000", "1", "0.8", "1.25", "100", 25) === null && app.clmmZapIn("1000", "1000", "0", "0.8", "1.25", "100", 25) === null && app.clmmZapIn("1000", "1000", "1", "0.8", "1.25", "0", 25) === null);
+check("CZAP rejects inverted range and bad fee tiers", app.clmmZapIn("1000", "1000", "1", "1.25", "0.8", "100", 25) === null && app.clmmZapIn("1000", "1000", "1", "0.8", "1.25", "100", 10000) === null && app.clmmZapIn("1000", "1000", "1", "0.8", "1.25", "100", "25.5") === null);
+check("CZAP rejects a holding too small for the swap to return anything", app.clmmZapIn("1000", "1000", "1", "0.8", "1.25", "0.000000001", 25) === null);
+check("all czap controls labelled", ["czap-ra", "czap-rb", "czap-bps", "czap-cur", "czap-lower", "czap-upper", "czap-amt", "czap-out"].every(id => html.includes(`for="${id}"`)));
+check("czap tool present in index.html", html.includes('id="czap-calc"') && html.includes('id="czap-result"'));
+check("czap honesty: separate models and not-live labels", html.includes("modelled separately") && html.includes("not live pool state") && html.includes("not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
