@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=24"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=25"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1111,6 +1111,69 @@ check("DEPTH rejects junk", app.poolDepthPlan("x", "10", "2", 25) === null && ap
 check("all depth controls labelled", ["depth-ain", "depth-cap", "depth-spot", "depth-fee", "depth-rin", "depth-rout"].every(id => html.includes(`for="${id}"`)));
 check("depth tool present in index.html", html.includes('id="depth-calc"') && html.includes('id="depth-result"'));
 check("depth honesty: not-a-safe-pool and not-live labels", html.includes("a deeper pool is not a safe pool") && html.includes("not a live quote, not financial advice"));
+
+/* ---------- 27 · Post-move reserves calculator ---------- */
+/* known values: reserves 1000/1000, price x4 => A 1000/2=500, B 1000*2=2000,
+   new price 4, pool value 500*4+2000=4000 B vs hold 1000*4+1000=5000 B */
+const mv1 = app.cpReservesAfterMove("1000", "1000", 4);
+near("MOVE headline new reserve A", mv1.newReserveA, 500, 1e-12);
+near("MOVE headline new reserve B", mv1.newReserveB, 2000, 1e-12);
+near("MOVE headline delta A", mv1.deltaA, -500, 1e-12);
+near("MOVE headline delta B", mv1.deltaB, 1000, 1e-12);
+near("MOVE headline start price", mv1.startPrice, 1, 1e-12);
+near("MOVE headline new price", mv1.newPrice, 4, 1e-12);
+near("MOVE headline LP value in B", mv1.lpValueInB, 4000, 1e-9);
+near("MOVE headline hold value in B", mv1.holdValueInB, 5000, 1e-9);
+near("MOVE headline IL matches Tool 2 at 4x", mv1.ilPct, -20, 1e-9);
+near("MOVE k preserved at 4x", mv1.newK, mv1.k, 1e-6);
+/* no move: reserves untouched */
+const mv0 = app.cpReservesAfterMove("1000", "1000", 1);
+near("MOVE no move keeps reserve A", mv0.newReserveA, 1000, 1e-12);
+near("MOVE no move keeps reserve B", mv0.newReserveB, 1000, 1e-12);
+near("MOVE no move IL is 0", mv0.ilPct, 0, 1e-12);
+/* halving mirrors quadrupling: 1000/1000 @0.25 => 2000 A / 500 B, same -20% */
+const mvH = app.cpReservesAfterMove("1000", "1000", 0.25);
+near("MOVE quarter new reserve A", mvH.newReserveA, 2000, 1e-12);
+near("MOVE quarter new reserve B", mvH.newReserveB, 500, 1e-12);
+near("MOVE quarter IL equals 4x IL", mvH.ilPct, mv1.ilPct, 1e-9);
+/* doubling: 1000/1000 @2 => 707.106... A / 1414.213... B */
+const mv2 = app.cpReservesAfterMove("1000", "1000", 2);
+near("MOVE double new reserve A", mv2.newReserveA, 707.1067811865474, 1e-9);
+near("MOVE double new reserve B", mv2.newReserveB, 1414.213562373095, 1e-9);
+/* asymmetric reserves 2,000,000 / 500,000 (spot 0.25) @2 => spot 0.5 */
+const mvA = app.cpReservesAfterMove("2000000", "500000", 2);
+near("MOVE asymmetric start price", mvA.startPrice, 0.25, 1e-12);
+near("MOVE asymmetric new price", mvA.newPrice, 0.5, 1e-12);
+near("MOVE asymmetric new reserve A", mvA.newReserveA, 1414213.562373095, 1e-6);
+near("MOVE asymmetric new reserve B", mvA.newReserveB, 707106.7811865476, 1e-6);
+near("MOVE asymmetric LP value in B", mvA.lpValueInB, 1414213.5623730952, 1e-6);
+near("MOVE asymmetric hold value in B", mvA.holdValueInB, 1500000, 1e-9);
+/* clean small vector: reserves 3/1 @9 => exactly 1 A / 3 B, IL -40% */
+const mv9 = app.cpReservesAfterMove("3", "1", 9);
+near("MOVE 9x new reserve A exact", mv9.newReserveA, 1, 1e-12);
+near("MOVE 9x new reserve B exact", mv9.newReserveB, 3, 1e-12);
+near("MOVE 9x IL", mv9.ilPct, -40, 1e-9);
+/* composition: lpVsHold and ilPct are Tool 2's own figures at every move,
+   and the new reserves sit exactly on x*y=k at the new price */
+for (const r of [0.1, 0.25, 0.5, 1.5, 2, 3.7, 4, 10]) {
+  const m = app.cpReservesAfterMove("12345", "6789", r);
+  const t2 = app.impermanentLoss(r);
+  check("MOVE composes Tool 2 @" + r, m !== null && Math.abs(m.lpVsHold - t2.lpVsHold) < 1e-12 && Math.abs(m.ilPct - t2.ilPct) < 1e-12);
+  check("MOVE k preserved @" + r, Math.abs(m.newK - m.k) / m.k < 1e-12);
+  check("MOVE new reserves price at new price @" + r, Math.abs(m.newReserveB / m.newReserveA - m.newPrice) / m.newPrice < 1e-12);
+}
+/* direction: a rise sells A and gains B; a fall buys A and spends B */
+check("MOVE rise sells A, gains B", mv2.deltaA < 0 && mv2.deltaB > 0);
+check("MOVE fall buys A, spends B", app.cpReservesAfterMove("1000", "1000", 0.5).deltaA > 0 && app.cpReservesAfterMove("1000", "1000", 0.5).deltaB < 0);
+/* scaling all reserves scales the result, not the IL */
+near("MOVE 10x reserves IL unchanged", app.cpReservesAfterMove("10000", "10000", 2).ilPct, mv2.ilPct, 1e-12);
+near("MOVE 10x reserves new A scaled", app.cpReservesAfterMove("10000", "10000", 2).newReserveA, mv2.newReserveA * 10, 1e-6);
+check("MOVE rejects bad reserves", app.cpReservesAfterMove("0", "1000", 2) === null && app.cpReservesAfterMove("1000", "0", 2) === null && app.cpReservesAfterMove("-5", "1000", 2) === null && app.cpReservesAfterMove("", "1000", 2) === null);
+check("MOVE rejects bad multiple", app.cpReservesAfterMove("1000", "1000", 0) === null && app.cpReservesAfterMove("1000", "1000", -2) === null && app.cpReservesAfterMove("1000", "1000", "") === null);
+check("MOVE rejects junk", app.cpReservesAfterMove("x", "1000", 2) === null && app.cpReservesAfterMove("1000", "1000", "x") === null && app.cpReservesAfterMove("1000", "1000", null) === null);
+check("all move controls labelled", ["move-ra", "move-rb", "move-ratio", "move-na", "move-nb"].every(id => html.includes(`for="${id}"`)));
+check("move tool present in index.html", html.includes('id="move-calc"') && html.includes('id="move-result"'));
+check("move honesty: not-what-you-deposited and not-live labels", html.includes("are not what you deposited") && html.includes("not a live quote, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus twenty-six fully
+/* Raydium Renaissance hub logic: project filtering plus twenty-seven fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -12,7 +12,7 @@
    single-sided zap-in planner, a single-sided zap-out planner, an IL
    tolerance band, a CLMM symmetric-range planner, a two-hop swap
    model, a net LP return calculator, a CLMM capital-efficiency
-   calculator, and a pool depth planner.
+   calculator, a pool depth planner, and a post-move reserves calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1216,8 +1216,48 @@ function poolDepthPlan(amountInStr, maxImpactPctStr, spotStr, feeBps) {
   });
 }
 
+/* ---------- 27 · Post-move reserves calculator ---------- */
+/* Tool 2 prices a price move as a percentage; this shows what the move
+   physically does to a constant-product pool's reserves. Arbitrage keeps
+   the pool price equal to the market price, and x*y=k then forces the
+   reserves: at a price multiple r the A reserve becomes Ra/sqrt(r) and
+   the B reserve Rb*sqrt(r) — the pool sells A as A's price rises and
+   buys it as it falls, which is precisely the mechanism behind
+   impermanent loss. The new reserves are valued in B at the new price
+   and compared with holding the original reserves untouched; that ratio
+   is Tool 2's own lpVsHold (the IL figure itself is taken from Tool 2's
+   function, so the two tools can never disagree). No fees are modelled:
+   in a live pool, arbitrage trades pay the pool fee, which slightly
+   grows k — this model holds k exactly constant, as Tool 2 does. */
+function cpReservesAfterMove(reserveAStr, reserveBStr, priceRatio) {
+  var required = [reserveAStr, reserveBStr, priceRatio];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var ra = Number(reserveAStr), rb = Number(reserveBStr), r = Number(priceRatio);
+  if (![ra, rb, r].every(Number.isFinite)) return null;
+  if (ra <= 0 || rb <= 0 || r <= 0) return null;
+  var il = impermanentLoss(r);
+  if (il === null) return null;
+  var sqrtR = Math.sqrt(r);
+  var newRa = ra / sqrtR, newRb = rb * sqrtR;
+  if (![newRa, newRb].every(Number.isFinite) || !(newRa > 0) || !(newRb > 0)) return null;
+  var startPrice = rb / ra, newPrice = startPrice * r;
+  var lpValueInB = newRa * newPrice + newRb;
+  var holdValueInB = ra * newPrice + rb;
+  return {
+    reserveA: ra, reserveB: rb, priceRatio: r,
+    startPrice: startPrice, newPrice: newPrice,
+    newReserveA: newRa, newReserveB: newRb,
+    deltaA: newRa - ra, deltaB: newRb - rb,
+    k: ra * rb, newK: newRa * newRb,
+    lpValueInB: lpValueInB, holdValueInB: holdValueInB,
+    lpVsHold: lpValueInB / holdValueInB, ilPct: il.ilPct
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -1921,6 +1961,31 @@ if (typeof document !== "undefined") {
           "%). The depth is sized for one trade at the cap in an untouched pool — repeated same-direction trades each move the price further, and a deeper pool is not a safe pool. A pool depth model, not a live Raydium quote.";
         document.getElementById("depth-rin").value = fmt(res.reserveIn, 4);
         document.getElementById("depth-rout").value = fmt(res.reserveOut, 4);
+      }
+    });
+
+    /* --- post-move reserves calculator --- */
+    document.getElementById("move-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = cpReservesAfterMove(
+        document.getElementById("move-ra").value,
+        document.getElementById("move-rb").value,
+        document.getElementById("move-ratio").value
+      );
+      var out = document.getElementById("move-result");
+      if (res === null) {
+        out.textContent = "Enter a reserve above 0 for both tokens and a price multiple above 0 (2 = the price of A in B doubles, 0.5 = it halves).";
+        document.getElementById("move-na").value = "";
+        document.getElementById("move-nb").value = "";
+      } else {
+        out.textContent = "Model output: the price of A moves from " + fmt(res.startPrice, 6) + " to " + fmt(res.newPrice, 6) +
+          " B per A (" + fmt(res.priceRatio, 4) + "x). Arbitrage rebalances the pool to \u2248 " + fmt(res.newReserveA, 4) +
+          " A and \u2248 " + fmt(res.newReserveB, 4) + " B — a change of " + fmt(res.deltaA, 4) + " A and " + fmt(res.deltaB, 4) +
+          " B, with x\u00d7y=k unchanged. The pool sold the token that rose and bought the one that fell: valued in B at the new price the pool holds \u2248 " +
+          fmt(res.lpValueInB, 4) + " against \u2248 " + fmt(res.holdValueInB, 4) + " for simply holding the original reserves — impermanent loss " +
+          fmt(res.ilPct, 2) + "% (Tool 2's figure for the same move). The rebalanced reserves are not what you deposited. A post-move reserves model, not a live Raydium quote.";
+        document.getElementById("move-na").value = fmt(res.newReserveA, 4);
+        document.getElementById("move-nb").value = fmt(res.newReserveB, 4);
       }
     });
 

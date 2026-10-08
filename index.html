@@ -615,6 +615,23 @@
         <button type="submit" class="btn primary">Plan the depth</button>
         <p id="depth-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="move-calc">
+        <h3>27 · Post-move reserves calculator</h3>
+        <p>Tool 2 prices a price move as a percentage, but percentages hide the mechanism: when the market price of token A moves, arbitrageurs trade against the pool until its price matches, and x×y=k forces what is left — at a price multiple r the pool ends up holding reserve A ÷ √r and reserve B × √r. The pool has sold the token that rose and bought the one that fell, which is exactly why it trails simply holding. This shows those rebalanced reserves, the change in each token, and the pool's value in B at the new price against holding the original reserves untouched — the ratio is Tool 2's own figure for the same move, so the two tools cannot disagree. One simplification, stated plainly: no fees are modelled, so k is held exactly constant; in a live pool the arbitrage trades pay the pool fee and k grows slightly, which softens the loss a little. The rebalanced reserves are not what you deposited — check them before assuming a withdrawal returns your original split. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="move-ra">Reserve — token A (pool holds now)</label>
+        <input id="move-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="move-rb">Reserve — token B (pool holds now)</label>
+        <input id="move-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="move-ratio">Price multiple — new price ÷ old price of A in B (2 = doubles, 0.5 = halves)</label>
+        <input id="move-ratio" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="move-na">Reserve A after the move (model)</label>
+        <input id="move-na" readonly placeholder="—" autocomplete="off">
+        <label for="move-nb">Reserve B after the move (model)</label>
+        <input id="move-nb" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Show the rebalanced pool</button>
+        <p id="move-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -642,6 +659,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=24"></script>
+<script src="app.js?v=25"></script>
 </body>
 </html>
