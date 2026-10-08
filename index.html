@@ -1100,6 +1100,44 @@
         <button type="submit" class="btn primary">Price this three-range CLMM swap</button>
         <p id="tswap-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="txo-calc">
+        <h3>47 · CLMM three-range exact-out swap model</h3>
+        <p>Tool 45 prices an exact-out swap across two ranges and rejects any target above what the two hold together, because a real fill would cross into a third tick range. This model lets you supply that third range too: enter the active range (its liquidity L, its bounds, the current price), the exact amount out you need and your direction, then the second range's liquidity and outer edge and the third range's liquidity and outer edge — the ranges chain by construction, each sharing the previous range's edge, so paying token A the ranges run downward from the active range and paying token B upward. If the target fits inside the first two ranges, the third is never entered and the answer is exactly tool 45's. If it crosses the second wall, the first two ranges are drained at exactly tool 45's combined-ceiling price, and the remainder is solved on the third range's own curve from the second edge, under the same maths and the same fee tier — so the total fee is still exactly the tier's share of the total input. The ceiling is what three ranges hold together now, and it is still a ceiling: a target above that combined holding is rejected, not priced — a real fill would need a fourth range, which this model does not invent either. That third range's depth is the price of crossing twice: the same remainder costs noticeably more input, and walks the price noticeably further, against a thin third range than against a deep one. Three ranges at three constant L values only — a real pool's liquidity varies tick by tick. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="txo-liq">Active range liquidity L (model — tool 8 reports it)</label>
+        <input id="txo-liq" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="txo-lower">Active range lower price (token B per token A)</label>
+        <input id="txo-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="txo-upper">Active range upper price (token B per token A)</label>
+        <input id="txo-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="txo-price">Current price (token B per token A)</label>
+        <input id="txo-price" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="txo-dir">Direction</label>
+        <select id="txo-dir">
+          <option value="ab">Pay token A, receive token B (price falls)</option>
+          <option value="ba">Pay token B, receive token A (price rises)</option>
+        </select>
+        <label for="txo-aout">Exact amount out wanted (token you receive)</label>
+        <input id="txo-aout" inputmode="decimal" placeholder="e.g. 230" autocomplete="off">
+        <label for="txo-fee">Fee, basis points (25 = 0.25%)</label>
+        <input id="txo-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="txo-liq2">Second range liquidity L (model)</label>
+        <input id="txo-liq2" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="txo-outer">Second range outer edge price (token B per token A)</label>
+        <input id="txo-outer" inputmode="decimal" placeholder="e.g. 0.64 paying A · 1.5625 paying B" autocomplete="off">
+        <label for="txo-liq3">Third range liquidity L (model)</label>
+        <input id="txo-liq3" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="txo-outer3">Third range outer edge price (beyond the second range's outer edge, on the same side)</label>
+        <input id="txo-outer3" inputmode="decimal" placeholder="e.g. 0.512 paying A · 1.953125 paying B" autocomplete="off">
+        <label for="txo-ain">Amount in needed (model)</label>
+        <input id="txo-ain" readonly placeholder="—" autocomplete="off">
+        <label for="txo-newprice">Price after the swap, B per A (model)</label>
+        <input id="txo-newprice" readonly placeholder="—" autocomplete="off">
+        <label for="txo-maxout">Most the three ranges can pay out together (model)</label>
+        <input id="txo-maxout" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Price this three-range exact-out CLMM swap</button>
+        <p id="txo-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1127,6 +1165,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=53"></script>
+<script src="app.js?v=54"></script>
 </body>
 </html>

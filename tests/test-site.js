@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=53"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=54"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists forty-six tools", readme.includes("forty-six pool tools") || readme.includes("all forty-six"));
+check("README lists forty-seven tools", readme.includes("forty-seven pool tools") || readme.includes("all forty-seven"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts forty-six tools and names the CLMM three-range swap model",
-  appSrc.includes("plus forty-six fully") && appSrc.includes("CLMM three-range swap model.\n   These are educational MODELS"));
+check("app.js header counts forty-seven tools and names the CLMM three-range exact-out swap model",
+  appSrc.includes("plus forty-seven fully") && appSrc.includes("CLMM three-range\n   exact-out swap model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -2353,6 +2353,91 @@ check("all tswap controls labelled", ["tswap-liq", "tswap-lower", "tswap-upper",
 check("tswap tool present in index.html", html.includes('id="tswap-calc"') && html.includes('id="tswap-result"'));
 check("tswap honesty: third wall and not-live labels", html.includes("supply that third range too") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("is again unfilled, not absorbed"));
 check("guide covers CLMM three-range swap", guide.includes("The ladder keeps going past the second wall"));
+
+/* ---------- Tool 47: CLMM three-range exact-out swap model (TXO) ---------- */
+const TXO_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
+const txSmall = app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "150", 25, "ab", TXO_L, "0.64", TXO_L, "0.512");
+const xxoSmall = app.clmmCrossSwapExactOut(TXO_L, "0.8", "1.25", "1", "150", 25, "ab", TXO_L, "0.64");
+check("TXO target inside two ranges does not enter the third", txSmall !== null && txSmall.enteredThird === false && txSmall.hitThirdBoundary === false);
+check("TXO uncrossed answer is tool 45 verbatim", txSmall.amountIn === xxoSmall.amountIn && txSmall.newPrice === xxoSmall.newPrice && txSmall.feePaid === xxoSmall.feePaid && txSmall.leg1In === xxoSmall.leg1In && txSmall.leg2In === xxoSmall.leg2In);
+check("TXO uncrossed third leg is zero", txSmall.leg3In === 0 && txSmall.leg3Out === 0);
+near("TXO combined ceiling is the three holdings summed", txSmall.maxOut, 269.4427190999915, 1e-9);
+near("TXO third range holding", txSmall.thirdMaxOut, 80, 1e-9);
+const tx = app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "230", 25, "ab", TXO_L, "0.64", TXO_L, "0.512");
+check("TXO headline enters the third range without filling it", tx !== null && tx.enteredThird === true && tx.hitThirdBoundary === false && tx.crossed === true);
+near("TXO headline amount in", tx.amountIn, 304.5189622517961, 1e-9);
+near("TXO headline new price", tx.newPrice, 0.5733253978205031, 1e-9);
+near("TXO headline impact", tx.priceImpactPct, 24.4710417048443, 1e-9);
+near("TXO headline leg 1 in is tool 45's edge price", tx.leg1In, 112.0836078947263, 1e-9);
+near("TXO headline leg 1 out is the first range's holding", tx.leg1Out, 100, 1e-12);
+near("TXO headline leg 2 in", tx.leg2In, 125.31328320801993, 1e-9);
+near("TXO headline leg 2 out is the second range's holding", tx.leg2Out, 89.4427190999915, 1e-9);
+near("TXO headline leg 3 in", tx.leg3In, 67.12207114904986, 1e-9);
+near("TXO headline leg 3 out is the target past the two-range ceiling", tx.leg3Out, 40.55728090000849, 1e-9);
+near("TXO headline legs conserve the input", tx.leg1In + tx.leg2In + tx.leg3In, tx.amountIn, 1e-9);
+near("TXO headline legs conserve the output", tx.leg1Out + tx.leg2Out + tx.leg3Out, tx.amountOut, 1e-9);
+near("TXO headline fee is the tier's share of the total input", tx.feePaid, tx.amountIn * 0.0025, 1e-9);
+near("TXO headline leg 3 out is the third range's shed holding", tx.leg3Out, Number(TXO_L) * (Math.sqrt(0.64) - Math.sqrt(tx.newPrice)), 1e-9);
+const xxoCeil = app.clmmCrossSwapExactOut(TXO_L, "0.8", "1.25", "1", String(tx.firstMaxOut + tx.secondMaxOut), 25, "ab", TXO_L, "0.64");
+check("TXO first two legs are tool 45's combined-ceiling legs verbatim", xxoCeil !== null && tx.leg1In === xxoCeil.leg1In && tx.leg2In === xxoCeil.leg2In && tx.leg1Out === xxoCeil.leg1Out && tx.leg2Out === xxoCeil.leg2Out);
+const txRt = app.clmmTripleSwap(TXO_L, "0.8", "1.25", "1", String(tx.amountIn), 25, "ab", TXO_L, "0.64", TXO_L, "0.512");
+near("TXO headline round-trips through tool 46 to the target", txRt.amountOut, 230, 1e-7);
+near("TXO headline round-trip lands at the same price", txRt.newPrice, tx.newPrice, 1e-9);
+const txCeil = app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", String(tx.maxOut), 25, "ab", TXO_L, "0.64", TXO_L, "0.512");
+check("TXO combined-ceiling target fills the third range exactly", txCeil !== null && txCeil.enteredThird === true && txCeil.hitThirdBoundary === true);
+near("TXO ceiling walks to the third outer edge", txCeil.newPrice, 0.512, 1e-12);
+near("TXO ceiling amount in is tool 46's triple-cap used in", txCeil.amountIn, 377.50140097115417, 1e-7);
+near("TXO ceiling leg 3 out is the third range's whole holding", txCeil.leg3Out, 80, 1e-9);
+check("TXO rejects a target above the three ranges' combined holding", app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "270", 25, "ab", TXO_L, "0.64", TXO_L, "0.512") === null);
+const txBa = app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "230", 25, "ba", TXO_L, "1.5625", TXO_L, "1.953125");
+near("TXO pay-B mirror amount in", txBa.amountIn, tx.amountIn, 1e-9);
+near("TXO mirror prices are reciprocal", 1 / txBa.newPrice, tx.newPrice, 1e-9);
+near("TXO pay-B mirror leg 3 out", txBa.leg3Out, tx.leg3Out, 1e-9);
+const txZero = app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "230", 0, "ab", TXO_L, "0.64", TXO_L, "0.512");
+near("TXO zero-fee amount in", txZero.amountIn, 303.7576648461666, 1e-9);
+check("TXO zero fee charges no fee", txZero.feePaid === 0 && txZero.amountIn === txZero.netIn);
+const txThin = app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "195", 25, "ab", TXO_L, "0.64", String(Number(TXO_L) / 10), "0.512");
+const txEq195 = app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "195", 25, "ab", TXO_L, "0.64", TXO_L, "0.512");
+check("TXO thin third range charges more for the same remainder", txThin !== null && txThin.amountIn > txEq195.amountIn && txThin.leg3In > txEq195.leg3In);
+near("TXO thin third amount in", txThin.amountIn, 246.79083043336672, 1e-9);
+near("TXO thin third ceiling", txThin.maxOut, 197.4427190999915, 1e-9);
+check("TXO thin third range makes the headline target impossible outright", app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "230", 25, "ab", TXO_L, "0.64", String(Number(TXO_L) / 10), "0.512") === null);
+const txDeep = app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "230", 25, "ab", TXO_L, "0.64", String(Number(TXO_L) * 10), "0.512");
+check("TXO deep third range charges less for the same remainder", txDeep !== null && txDeep.amountIn < tx.amountIn && txDeep.leg3In < tx.leg3In);
+near("TXO deep third amount in", txDeep.amountIn, 301.2683179861769, 1e-9);
+near("TXO deep third new price walks barely into the third range", txDeep.newPrice, 0.6331675396373772, 1e-9);
+const txDust = app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "189.4427196", 25, "ab", TXO_L, "0.64", "1e12", "0.512");
+check("TXO dust remainder past the second wall against a deep third range still settles", txDust !== null && txDust.enteredThird === true && txDust.leg3In > 0);
+near("TXO dust remainder leg 3 out", txDust && txDust.leg3Out, 5.00008496828741e-7, 1e-12);
+near("TXO dust remainder amount in", txDust && txDust.amountIn, 237.39689188596756, 1e-9);
+check("TXO rejects a third outer edge on the wrong side or at the second edge", app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "230", 25, "ab", TXO_L, "0.64", TXO_L, "0.7") === null && app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "230", 25, "ab", TXO_L, "0.64", TXO_L, "0.64") === null && app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "230", 25, "ba", TXO_L, "1.5625", TXO_L, "1.4") === null && app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "230", 25, "ba", TXO_L, "1.5625", TXO_L, "1.5625") === null);
+check("TXO rejects bad third ranges and inherited bad inputs", app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "230", 25, "ab", TXO_L, "0.64", "0", "0.512") === null && app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "230", 25, "ab", TXO_L, "0.64", TXO_L, "abc") === null && app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "230", 25, "xx", TXO_L, "0.64", TXO_L, "0.512") === null && app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "230", 10000, "ab", TXO_L, "0.64", TXO_L, "0.512") === null && app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1.25", "230", 25, "ab", TXO_L, "0.64", TXO_L, "0.512") === null && app.clmmTripleSwapExactOut(TXO_L, "0.8", "1.25", "1", "0", 25, "ab", TXO_L, "0.64", TXO_L, "0.512") === null);
+for (const [liq, lo, hi, px, aout, fee, dir, liq2, outer, liq3, outer3] of [
+  [TXO_L, "0.8", "1.25", "1", "230", 25, "ab", TXO_L, "0.64", TXO_L, "0.512"],
+  ["5000", "0.5", "2", "1.1", "2300", 30, "ab", "2500", "0.25", "1200", "0.125"],
+  ["5000", "0.5", "2", "0.9", "3600", 5, "ba", "8000", "4", "3000", "8"],
+  ["123.456", "2.4", "2.6", "2.5", "7.5", 60, "ab", "60", "2.25", "30", "2.025"],
+  ["1000000", "0.99", "1.01", "1", "11000", 1, "ba", "1000000", "1.0201", "500000", "1.030301"]
+]) {
+  const x = app.clmmTripleSwapExactOut(liq, lo, hi, px, aout, fee, dir, liq2, outer, liq3, outer3);
+  const tag = "TXO sweep " + dir + " " + aout + " @ " + px + " in " + lo + "-" + hi;
+  check(tag + " settles entering the third range", x !== null && x.enteredThird === true);
+  if (x === null) continue;
+  const ceil2 = app.clmmCrossSwapExactOut(liq, lo, hi, px, String(x.firstMaxOut + x.secondMaxOut), fee, dir, liq2, outer);
+  check(tag + " first two legs are tool 45's ceiling legs verbatim", ceil2 !== null && x.leg1In === ceil2.leg1In && x.leg2In === ceil2.leg2In && x.leg1Out === ceil2.leg1Out && x.leg2Out === ceil2.leg2Out);
+  check(tag + " legs conserve the output", Math.abs(x.leg1Out + x.leg2Out + x.leg3Out - x.amountOut) <= x.amountOut * 1e-12);
+  check(tag + " legs conserve the input", Math.abs(x.leg1In + x.leg2In + x.leg3In - x.amountIn) <= x.amountIn * 1e-12);
+  check(tag + " fee is the tier's share of the total input", Math.abs(x.feePaid - x.amountIn * fee / 10000) <= x.amountIn * 1e-12);
+  const fwd = app.clmmTripleSwap(liq, lo, hi, px, String(x.amountIn), fee, dir, liq2, outer, liq3, outer3);
+  check(tag + " round-trips through tool 46 to the target", fwd !== null && Math.abs(fwd.amountOut - x.amountOut) <= x.amountOut * 1e-9 && Math.abs(fwd.newPrice - x.newPrice) <= x.newPrice * 1e-9);
+  check(tag + " new price stays inside the third range", x.newPrice >= x.thirdLowerPrice - 1e-12 && x.newPrice <= x.thirdUpperPrice + 1e-12);
+}
+check("XXO prices its exact combined ceiling at ranges where the fp remainder overshoots (tool 47 regression)", (() => { const a = app.clmmCrossSwapExactOut("5000", "0.5", "2", "1.1", "1", 30, "ab", "2500", "0.25"); const b = app.clmmCrossSwapExactOut("5000", "0.5", "2", "0.9", "1", 5, "ba", "8000", "4"); const ca = a && app.clmmCrossSwapExactOut("5000", "0.5", "2", "1.1", String(a.maxOut), 30, "ab", "2500", "0.25"); const cb = b && app.clmmCrossSwapExactOut("5000", "0.5", "2", "0.9", String(b.maxOut), 5, "ba", "8000", "4"); return ca !== null && cb !== null && ca.hitSecondBoundary === true && cb.hitSecondBoundary === true; })());
+check("XXO still rejects a target genuinely above the combined ceiling at those ranges", app.clmmCrossSwapExactOut("5000", "0.5", "2", "1.1", "2226.278", 30, "ab", "2500", "0.25") === null);
+check("all txo controls labelled", ["txo-liq", "txo-lower", "txo-upper", "txo-price", "txo-dir", "txo-aout", "txo-fee", "txo-liq2", "txo-outer", "txo-liq3", "txo-outer3", "txo-ain", "txo-newprice", "txo-maxout"].every(id => html.includes(`for="${id}"`)));
+check("txo tool present in index.html", html.includes('id="txo-calc"') && html.includes('id="txo-result"'));
+check("txo honesty: third ceiling and not-live labels", html.includes("supply that third range too") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("does not invent either"));
+check("guide covers CLMM three-range exact-out swap", guide.includes("Exact-out keeps going past the second wall too"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

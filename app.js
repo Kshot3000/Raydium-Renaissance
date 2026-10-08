@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus forty-six fully
+/* Raydium Renaissance hub logic: project filtering plus forty-seven fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -23,8 +23,9 @@
    constant-product break-even days calculator, a split-route
    exact-out swap model, a CLMM single-range swap model, a
    CLMM two-range swap model, a CLMM single-range exact-out
-   swap model, a CLMM two-range exact-out swap model, and a
-   CLMM three-range swap model.
+   swap model, a CLMM two-range exact-out swap model, a
+   CLMM three-range swap model, and a CLMM three-range
+   exact-out swap model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -2615,7 +2616,17 @@ function clmmCrossSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amoun
     });
   }
   var remainder = amountOut - maxOut1;
-  if (remainder > maxOut2) return null;
+  /* A target passed as the exact combined ceiling (maxOut1 + maxOut2,
+     formed by the caller in floating point) can leave a remainder a
+     few ulps above maxOut2 after this subtraction — at some ranges
+     that rejected the ceiling itself as above the combined holding.
+     Within a purely relative tolerance of the combined holding the
+     remainder is the ceiling, clamped to maxOut2; beyond it the
+     target is genuinely above what the two ranges hold. */
+  if (remainder > maxOut2) {
+    if (remainder - maxOut2 > (maxOut1 + maxOut2) * 1e-12) return null;
+    remainder = maxOut2;
+  }
   var leg1Full = clmmSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, String(maxOut1), feeBps, direction);
   if (leg1Full === null) return null;
   var sNew, net2;
@@ -2747,8 +2758,119 @@ function clmmTripleSwap(liquidityStr, lowerStr, upperStr, priceStr, amountInStr,
   });
 }
 
+/* ---------- 47 · CLMM three-range exact-out swap model ---------- */
+/* Tool 45 prices an exact-out swap across two ranges and rejects any
+   target above what the two hold together, because a real fill would
+   cross into a third tick range at THAT range's liquidity — which
+   the two-range model refused to invent. This tool lets the user
+   supply that third range instead: its own liquidity L3 and its
+   outer edge. The ranges chain by construction — paying A, the
+   third range is [outer3, outer2]; paying B it is [outer2, outer3] —
+   so adjacency is not an input to get wrong, only the third range's
+   depth and how far it extends. Everything up to the second wall IS
+   tool 45's own clmmCrossSwapExactOut: a target inside the two
+   ranges' combined holding returns tool 45's answer verbatim
+   (enteredThird false, third leg zero), and a bigger target drains
+   the two ranges at exactly tool 45's combined-ceiling price before
+   the remainder is solved on the third range's own curve from the
+   second edge, its net input formed cancellation-free the way tool
+   44 forms it (remainder/(sEdge·sNew) paying A, remainder·sEdge·sNew
+   paying B), grossed up for the same fee tier — so the total fee is
+   still exactly the tier's share of the total input. The ceiling is
+   now what three ranges hold together, and it is still a ceiling: a
+   target above it is rejected, not priced — a real fill would need
+   a fourth range, which this model does not invent either. Tool 45
+   cannot be called with the full target to validate the inputs (it
+   rightly rejects targets above its own ceiling), so the two-range
+   holdings are computed here with tool 45's own formulas and tool 45
+   itself is probed at the first range's holding, which it always
+   prices when the inputs are valid. Three ranges at three constant
+   L values only. Floating point, like every CLMM tool here. Model
+   only: a real CLMM pool's liquidity varies tick by tick and its
+   live quote is on the pool page. */
+function clmmTripleSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amountOutStr, feeBps, direction, secondLiquidityStr, secondOuterStr, thirdLiquidityStr, thirdOuterStr) {
+  var liquidity3 = Number(thirdLiquidityStr), outer3 = Number(thirdOuterStr);
+  var amountOut = Number(amountOutStr);
+  if (!Number.isFinite(liquidity3) || !Number.isFinite(outer3) || !Number.isFinite(amountOut)) return null;
+  if (liquidity3 <= 0 || outer3 <= 0 || amountOut <= 0) return null;
+  if (direction !== "ab" && direction !== "ba") return null;
+  var liquidity = Number(liquidityStr), lower = Number(lowerStr), upper = Number(upperStr);
+  var price = Number(priceStr), liquidity2 = Number(secondLiquidityStr), outer = Number(secondOuterStr);
+  if (![liquidity, lower, upper, price, liquidity2, outer].every(Number.isFinite)) return null;
+  if (liquidity <= 0 || price <= 0 || liquidity2 <= 0) return null;
+  var sa = Math.sqrt(lower), sb = Math.sqrt(upper), s = Math.sqrt(price), sOut2 = Math.sqrt(outer);
+  var maxOut1 = direction === "ab" ? liquidity * (s - sa) : liquidity * (1 / s - 1 / sb);
+  var maxOut2 = direction === "ab" ? liquidity2 * (sa - sOut2) : liquidity2 * (1 / sb - 1 / sOut2);
+  if (!(maxOut1 > 0) || !(maxOut2 > 0)) return null;
+  var probe = clmmCrossSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, String(maxOut1), feeBps, direction, secondLiquidityStr, secondOuterStr);
+  if (probe === null) return null;
+  var prev = probe;
+  if (amountOut <= maxOut1 + maxOut2) {
+    prev = clmmCrossSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amountOutStr, feeBps, direction, secondLiquidityStr, secondOuterStr);
+    if (prev === null) return null;
+  }
+  if (direction === "ab" && !(outer3 < prev.secondLowerPrice)) return null;
+  if (direction === "ba" && !(outer3 > prev.secondUpperPrice)) return null;
+  var secondBoundary = direction === "ab" ? prev.secondLowerPrice : prev.secondUpperPrice;
+  var sB = Math.sqrt(secondBoundary), sOut = Math.sqrt(outer3);
+  var maxOut3 = direction === "ab" ? liquidity3 * (sB - sOut) : liquidity3 * (1 / sB - 1 / sOut);
+  if (!(maxOut3 > 0)) return null;
+  var base = {
+    liquidity: prev.liquidity, lowerPrice: prev.lowerPrice, upperPrice: prev.upperPrice,
+    secondLiquidity: prev.secondLiquidity,
+    secondLowerPrice: prev.secondLowerPrice, secondUpperPrice: prev.secondUpperPrice,
+    thirdLiquidity: liquidity3,
+    thirdLowerPrice: direction === "ab" ? outer3 : prev.secondUpperPrice,
+    thirdUpperPrice: direction === "ab" ? prev.secondLowerPrice : outer3,
+    boundaryPrice: prev.boundaryPrice,
+    secondBoundaryPrice: secondBoundary,
+    price: prev.price, direction: direction, amountOut: amountOut,
+    maxOut: maxOut1 + maxOut2 + maxOut3, firstMaxOut: maxOut1, secondMaxOut: maxOut2, thirdMaxOut: maxOut3,
+    feeBps: prev.feeBps, feePct: prev.feePct, spotRate: prev.spotRate
+  };
+  if (amountOut <= maxOut1 + maxOut2) {
+    return Object.assign(base, {
+      crossed: prev.crossed, enteredThird: false, hitThirdBoundary: false,
+      amountIn: prev.amountIn, netIn: prev.netIn, feePaid: prev.feePaid,
+      leg1In: prev.leg1In, leg1Out: prev.leg1Out, leg2In: prev.leg2In, leg2Out: prev.leg2Out,
+      leg3In: 0, leg3Out: 0,
+      newPrice: prev.newPrice, effectiveRate: prev.effectiveRate, priceImpactPct: prev.priceImpactPct
+    });
+  }
+  var remainder = amountOut - (maxOut1 + maxOut2);
+  if (remainder > maxOut3) {
+    if (remainder - maxOut3 > (maxOut1 + maxOut2 + maxOut3) * 1e-12) return null;
+    remainder = maxOut3;
+  }
+  var leg12 = clmmCrossSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, String(maxOut1 + maxOut2), feeBps, direction, secondLiquidityStr, secondOuterStr);
+  if (leg12 === null) return null;
+  var f = prev.feeBps / 10000;
+  var sNew, net3;
+  if (direction === "ab") {
+    sNew = sB - remainder / liquidity3;
+    net3 = remainder / (sB * sNew);
+  } else {
+    sNew = 1 / (1 / sB - remainder / liquidity3);
+    net3 = remainder * sB * sNew;
+  }
+  if (!Number.isFinite(net3) || net3 <= 0 || !Number.isFinite(sNew)) return null;
+  var in3 = net3 / (1 - f);
+  var amountIn = leg12.amountIn + in3;
+  var netIn = leg12.netIn + net3;
+  var effectiveRate = amountOut / amountIn;
+  return Object.assign(base, {
+    crossed: true, enteredThird: true,
+    hitThirdBoundary: (maxOut1 + maxOut2 + maxOut3) - amountOut <= maxOut3 * 1e-12,
+    amountIn: amountIn, netIn: netIn, feePaid: amountIn - netIn,
+    leg1In: leg12.leg1In, leg1Out: leg12.leg1Out, leg2In: leg12.leg2In, leg2Out: leg12.leg2Out,
+    leg3In: in3, leg3Out: remainder,
+    newPrice: sNew * sNew, effectiveRate: effectiveRate,
+    priceImpactPct: (1 - effectiveRate / prev.spotRate) * 100
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -4150,6 +4272,67 @@ if (typeof document !== "undefined") {
           " (≈ " + fmt(res.feePaid, 6) + " of it is the fee at a " + fmt(res.feeBps, 0) + " bps tier), walking the price to ≈ " + fmt(res.newPrice, 4) +
           " B per A, still inside the third range. Price impact ≈ " + fmt(res.priceImpactPct, 2) +
           "% against the starting price, fee included. A thinner third range would have walked the price further for the same input — the ladder thins as price walks away from where it started. A CLMM three-range swap model — not a live quote, not financial advice.";
+        fill();
+      }
+    });
+
+    /* --- CLMM three-range exact-out swap model --- */
+    document.getElementById("txo-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmTripleSwapExactOut(
+        document.getElementById("txo-liq").value,
+        document.getElementById("txo-lower").value,
+        document.getElementById("txo-upper").value,
+        document.getElementById("txo-price").value,
+        document.getElementById("txo-aout").value,
+        document.getElementById("txo-fee").value,
+        document.getElementById("txo-dir").value,
+        document.getElementById("txo-liq2").value,
+        document.getElementById("txo-outer").value,
+        document.getElementById("txo-liq3").value,
+        document.getElementById("txo-outer3").value
+      );
+      var out = document.getElementById("txo-result");
+      var inName = res !== null && res.direction === "ba" ? "B" : "A";
+      var outName = res !== null && res.direction === "ba" ? "A" : "B";
+      var clear = function () {
+        document.getElementById("txo-ain").value = "";
+        document.getElementById("txo-newprice").value = "";
+        document.getElementById("txo-maxout").value = "";
+      };
+      var fill = function () {
+        document.getElementById("txo-ain").value = fmt(res.amountIn, 9);
+        document.getElementById("txo-newprice").value = fmt(res.newPrice, 9);
+        document.getElementById("txo-maxout").value = fmt(res.maxOut, 9);
+      };
+      if (res === null) {
+        out.textContent = "Enter a positive model liquidity L for the active range (tool 8 reports it for a deposit), a range with lower below upper, a current price strictly inside it, an exact amount out above 0 and no more than the three ranges hold of that token together, a fee tier between 0 and 9999 bps, positive liquidities for the second and third ranges, and each outer edge strictly beyond the previous range's edge on the side your direction walks toward — below the active range's lower edge, then below that, when paying token A; above its upper edge, then above that, when paying token B. A target above the three ranges' combined holding is rejected, not priced — three ranges cannot pay out more than they hold together.";
+        clear();
+      } else if (!res.enteredThird) {
+        out.textContent = "Model output: receiving exactly " + fmt(res.amountOut, 4) + " " + outName + " needs ≈ " + fmt(res.amountIn, 4) + " " + inName +
+          " in (≈ " + fmt(res.feePaid, 6) + " of it is the fee at a " + fmt(res.feeBps, 0) + " bps tier), walking the price from " + fmt(res.price, 4) +
+          " to ≈ " + fmt(res.newPrice, 4) + " B per A — the target fits inside the first two ranges, which hold ≈ " + fmt(res.firstMaxOut + res.secondMaxOut, 4) + " " + outName +
+          " together at the starting price, so the third range is never entered and this is exactly tool 45's two-range answer. Price impact ≈ " + fmt(res.priceImpactPct, 2) +
+          "% against the starting price, fee included. A CLMM three-range exact-out swap model — not a live quote, not financial advice.";
+        fill();
+      } else if (res.hitThirdBoundary) {
+        out.textContent = "Model output: receiving exactly " + fmt(res.amountOut, 4) + " " + outName + " takes every " + outName +
+          " all three ranges hold: the active range pays its ≈ " + fmt(res.leg1Out, 4) + " for ≈ " + fmt(res.leg1In, 4) + " " + inName +
+          " in, the second range pays its ≈ " + fmt(res.leg2Out, 4) + " for ≈ " + fmt(res.leg2In, 4) + " " + inName +
+          " in, walking the price to the second edge at " + fmt(res.secondBoundaryPrice, 4) + " B per A, and the third range pays the remaining ≈ " + fmt(res.leg3Out, 4) +
+          " for ≈ " + fmt(res.leg3In, 4) + " " + inName + " in, walking the price on to the third range's outer edge at " +
+          fmt(res.direction === "ab" ? res.thirdLowerPrice : res.thirdUpperPrice, 4) + " — ≈ " + fmt(res.amountIn, 4) + " " + inName +
+          " in total (≈ " + fmt(res.feePaid, 6) + " of it is the fee at a " + fmt(res.feeBps, 0) + " bps tier). One unit more out has no price across these three ranges at all. Price impact ≈ " +
+          fmt(res.priceImpactPct, 2) + "% against the starting price, fee included. A CLMM three-range exact-out swap model — not a live quote, not financial advice.";
+        fill();
+      } else {
+        out.textContent = "Model output: receiving exactly " + fmt(res.amountOut, 4) + " " + outName + " drains the first two ranges first — their ≈ " + fmt(res.leg1Out + res.leg2Out, 4) + " " + outName +
+          " for ≈ " + fmt(res.leg1In + res.leg2In, 4) + " " + inName + " in, walking the price to the second edge at " + fmt(res.secondBoundaryPrice, 4) +
+          " B per A — then takes the remaining ≈ " + fmt(res.leg3Out, 4) + " " + outName + " from the third range for ≈ " + fmt(res.leg3In, 4) + " " + inName +
+          " in at that range's own liquidity: ≈ " + fmt(res.amountIn, 4) + " " + inName + " in total (≈ " + fmt(res.feePaid, 6) + " of it is the fee at a " +
+          fmt(res.feeBps, 0) + " bps tier), walking the price to ≈ " + fmt(res.newPrice, 4) + " B per A, still inside the third range. The three ranges together hold at most ≈ " +
+          fmt(res.maxOut, 4) + " " + outName + ". Price impact ≈ " + fmt(res.priceImpactPct, 2) +
+          "% against the starting price, fee included. A thinner third range would have charged more for the same remainder — that fall-off is the cliff a two-range model cannot show. A CLMM three-range exact-out swap model — not a live quote, not financial advice.";
         fill();
       }
     });
