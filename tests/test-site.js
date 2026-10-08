@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=23"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=24"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1056,6 +1056,61 @@ check("EFF rejects junk", app.clmmCapitalEfficiency("x", "0.8", "1.25", "1") ===
 check("all eff controls labelled", ["eff-l", "eff-lower", "eff-upper", "eff-price", "eff-out"].every(id => html.includes(`for="${id}"`)));
 check("eff tool present in index.html", html.includes('id="eff-calc"') && html.includes('id="eff-result"'));
 check("eff honesty: not-free-money and not-live labels", html.includes("not free money") && html.includes("no efficiency is quoted"));
+
+/* ---------- 26 · Pool depth planner ---------- */
+/* headline vectors verified in a clean foreground run BEFORE these
+   tests were written: trade 100 at a 10% cap, spot 2, fee 25 bps —
+   reserveIn 920.7692307692308, reserveOut 1841.5384615384617, and the
+   trade returns exactly 180 (effective price = spot x (1 - cap)) */
+const dep1 = app.poolDepthPlan("100", "10", "2", 25);
+check("DEPTH headline feasible", dep1 !== null && dep1.feasible === true);
+near("DEPTH headline reserveIn", dep1.reserveIn, 920.7692307692308, 1e-9);
+near("DEPTH headline reserveOut", dep1.reserveOut, 1841.5384615384617, 1e-9);
+near("DEPTH headline amountOut", dep1.amountOut, 180, 1e-9);
+near("DEPTH headline effective price", dep1.effectivePrice, 1.8, 1e-12);
+near("DEPTH headline actual impact is the cap", dep1.actualImpactPct, 10, 1e-9);
+near("DEPTH headline post-trade spot", dep1.postTradeSpotPrice, 1.6281304765673583, 1e-9);
+near("DEPTH reserveOut is reserveIn x spot", dep1.reserveOut, dep1.reserveIn * 2, 1e-9);
+near("DEPTH total value in input terms", dep1.totalValueIn, dep1.reserveIn + dep1.reserveOut / dep1.spotPrice, 1e-9);
+/* clean zero-fee vectors: cap 10% at spot 1 needs 900/900 and returns
+   exactly 90; cap 50% at spot 4 needs 50/200 and returns exactly 100 */
+const depZero = app.poolDepthPlan("100", "10", "1", 0);
+near("DEPTH zero-fee reserveIn", depZero.reserveIn, 900, 1e-12);
+near("DEPTH zero-fee reserveOut", depZero.reserveOut, 900, 1e-12);
+near("DEPTH zero-fee amountOut", depZero.amountOut, 90, 1e-12);
+const depHalf = app.poolDepthPlan("50", "50", "4", 0);
+near("DEPTH 50% cap reserveIn", depHalf.reserveIn, 50, 1e-12);
+near("DEPTH 50% cap reserveOut", depHalf.reserveOut, 200, 1e-12);
+near("DEPTH 50% cap amountOut", depHalf.amountOut, 100, 1e-12);
+/* composition: a pool funded to the planned depth, traded through
+   Tool 1's own model, lands on the cap; and Tool 17 sized against
+   that same pool hands the original trade amount back — the two
+   tools can never drift from each other */
+for (const [amt, cap, spot, fee] of [["100", "10", "2", 25], ["100", "10", "1", 0], ["50", "50", "4", 0], ["10", "1", "0.5", 25], ["1000", "5", "0.02", 100]]) {
+  const d = app.poolDepthPlan(amt, cap, spot, fee);
+  const sw = app.cpSwap(d.reserveIn.toFixed(9), d.reserveOut.toFixed(9), amt, fee);
+  check("DEPTH Tool 1 lands on cap @" + cap + "/" + spot, sw !== null && Math.abs(sw.priceImpactPct - Number(cap)) < 1e-6);
+  const sz = app.priceImpactSizer(d.reserveIn.toFixed(9), d.reserveOut.toFixed(9), cap, fee);
+  check("DEPTH Tool 17 inverts it @" + cap + "/" + spot, sz !== null && sz.feasible && Math.abs(sz.maxAmountIn - Number(amt)) < 1e-6);
+}
+/* depth scales linearly with the trade, and a tighter cap needs a
+   deeper pool for the same trade */
+const depDouble = app.poolDepthPlan("200", "10", "2", 25);
+near("DEPTH doubling the trade doubles reserveIn", depDouble.reserveIn, dep1.reserveIn * 2, 1e-9);
+near("DEPTH doubling the trade doubles reserveOut", depDouble.reserveOut, dep1.reserveOut * 2, 1e-9);
+const depTight = app.poolDepthPlan("100", "1", "2", 25);
+check("DEPTH tighter cap needs deeper pool", depTight.reserveIn > dep1.reserveIn && depTight.reserveOut > dep1.reserveOut);
+/* a cap at or below the fee admits no trade at any depth */
+check("DEPTH cap equal to fee is infeasible", app.poolDepthPlan("100", "0.25", "2", 25).feasible === false);
+check("DEPTH cap below fee is infeasible", app.poolDepthPlan("100", "0.1", "2", 25).feasible === false && app.poolDepthPlan("100", "0.1", "2", 25).reserveIn === 0);
+check("DEPTH rejects bad trade amount", app.poolDepthPlan("0", "10", "2", 25) === null && app.poolDepthPlan("-5", "10", "2", 25) === null && app.poolDepthPlan("", "10", "2", 25) === null);
+check("DEPTH rejects bad cap", app.poolDepthPlan("100", "0", "2", 25) === null && app.poolDepthPlan("100", "100", "2", 25) === null && app.poolDepthPlan("100", "-1", "2", 25) === null);
+check("DEPTH rejects bad spot", app.poolDepthPlan("100", "10", "0", 25) === null && app.poolDepthPlan("100", "10", "-2", 25) === null && app.poolDepthPlan("100", "10", "", 25) === null);
+check("DEPTH rejects bad fee", app.poolDepthPlan("100", "10", "2", -1) === null && app.poolDepthPlan("100", "10", "2", 10000) === null && app.poolDepthPlan("100", "10", "2", 2.5) === null);
+check("DEPTH rejects junk", app.poolDepthPlan("x", "10", "2", 25) === null && app.poolDepthPlan("100", "x", "2", 25) === null && app.poolDepthPlan("100", "10", "2", null) === null);
+check("all depth controls labelled", ["depth-ain", "depth-cap", "depth-spot", "depth-fee", "depth-rin", "depth-rout"].every(id => html.includes(`for="${id}"`)));
+check("depth tool present in index.html", html.includes('id="depth-calc"') && html.includes('id="depth-result"'));
+check("depth honesty: not-a-safe-pool and not-live labels", html.includes("a deeper pool is not a safe pool") && html.includes("not a live quote, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus twenty-five fully
+/* Raydium Renaissance hub logic: project filtering plus twenty-six fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -11,8 +11,8 @@
    price-impact trade sizer, an LP-token share & value calculator, a
    single-sided zap-in planner, a single-sided zap-out planner, an IL
    tolerance band, a CLMM symmetric-range planner, a two-hop swap
-   model, a net LP return calculator, and a CLMM capital-efficiency
-   calculator.
+   model, a net LP return calculator, a CLMM capital-efficiency
+   calculator, and a pool depth planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1158,8 +1158,66 @@ function clmmCapitalEfficiency(liquidityStr, lowerStr, upperStr, priceStr) {
   };
 }
 
+/* ---------- 26 · Pool depth planner ---------- */
+/* Tool 17 answers "given this pool, how big a trade fits my impact
+   cap?". A pool creator asks the inverse: "given the trade size I
+   expect and the impact cap I want it to respect, how deep must the
+   pool be?". Tool 17's closed form inverts exactly. With impact
+   fraction p, fee fraction f and pay-in A, the input-side reserve
+   that puts a trade of A exactly at the cap is
+     reserveIn = A * (1 - p) * (1 - f) / (p - f)
+   and the output-side reserve follows from the spot price the
+   creator chooses (out per in): reserveOut = reserveIn * spot.
+   The trade then returns A * spot * (1 - p) by construction — its
+   effective price is exactly (1 - p) of spot. Depth scales linearly:
+   twice the expected trade needs twice the reserves on both sides,
+   and a tighter cap needs a deeper pool for the same trade. As in
+   Tool 17, a cap at or below the fee admits no positive trade at any
+   depth (the fee alone consumes the cap), so that case is reported
+   as feasible:false rather than an infinite reserve. Depth is quoted
+   for ONE trade at the cap in an otherwise untouched pool — repeated
+   same-direction trades each move the price further, and a deeper
+   pool is not a safe pool: depth says nothing about the tokens, the
+   price being right, or impermanent loss. Model only: the reserves
+   are targets you would have to fund, not live pool state. */
+function poolDepthPlan(amountInStr, maxImpactPctStr, spotStr, feeBps) {
+  var required = [amountInStr, maxImpactPctStr, spotStr, feeBps];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var ain = Number(amountInStr), capPct = Number(maxImpactPctStr);
+  var spot = Number(spotStr), fee = Number(feeBps);
+  if (![ain, capPct, spot, fee].every(Number.isFinite)) return null;
+  if (ain <= 0 || spot <= 0) return null;
+  if (capPct <= 0 || capPct >= 100) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var feeFrac = fee / 10000, pFrac = capPct / 100;
+  var base = { amountIn: ain, maxImpactPct: capPct, spotPrice: spot,
+    feeBps: fee, feeImpactPct: feeFrac * 100 };
+  if (pFrac <= feeFrac) {
+    return Object.assign(base, { feasible: false, reserveIn: 0, reserveOut: 0, netIn: 0, amountOut: 0, actualImpactPct: feeFrac * 100 });
+  }
+  var reserveIn = ain * (1 - pFrac) * (1 - feeFrac) / (pFrac - feeFrac);
+  var reserveOut = reserveIn * spot;
+  var netIn = ain * (1 - feeFrac);
+  var amountOut = reserveOut * netIn / (reserveIn + netIn);
+  if (![reserveIn, reserveOut, amountOut].every(Number.isFinite) || !(reserveIn > 0) || !(amountOut > 0)) return null;
+  var effective = amountOut / ain;
+  return Object.assign(base, {
+    feasible: true,
+    reserveIn: reserveIn,
+    reserveOut: reserveOut,
+    netIn: netIn,
+    amountOut: amountOut,
+    effectivePrice: effective,
+    actualImpactPct: (1 - effective / spot) * 100,
+    totalValueIn: reserveIn + reserveOut / spot,
+    postTradeSpotPrice: (reserveOut - amountOut) / (reserveIn + netIn)
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -1831,6 +1889,38 @@ if (typeof document !== "undefined") {
           " B) — so the ranged position puts the same liquidity to work with " + fmt(res.efficiency, 2) +
           "x less capital (" + fmt(res.capitalSavedPct, 2) + "% less). The honest half: that multiple is not free money — the position earns fees only while the price stays inside the range, and its impermanent loss per unit of liquidity is amplified by the same concentration (Tool 12 measures it). A capital-efficiency model at one price, not a live Raydium quote.";
         document.getElementById("eff-out").value = fmt(res.efficiency, 4);
+      }
+    });
+
+    /* --- pool depth planner --- */
+    document.getElementById("depth-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = poolDepthPlan(
+        document.getElementById("depth-ain").value,
+        document.getElementById("depth-cap").value,
+        document.getElementById("depth-spot").value,
+        document.getElementById("depth-fee").value
+      );
+      var out = document.getElementById("depth-result");
+      if (res === null) {
+        out.textContent = "Enter a trade amount above 0, a maximum price impact above 0% and below 100%, a spot price above 0 (out per in), and a pool fee in basis points (25 = 0.25%).";
+        document.getElementById("depth-rin").value = "";
+        document.getElementById("depth-rout").value = "";
+      } else if (!res.feasible) {
+        out.textContent = "Model output: no depth makes this work — a maximum impact of " + fmt(res.maxImpactPct, 4) +
+          "% is at or below the pool's own " + fmt(res.feeImpactPct, 4) + "% fee, and the fee alone counts toward price impact in this measure, " +
+          "so even the smallest trade in an infinitely deep pool would exceed the cap. Raise the cap above the fee tier first. A pool depth model, not a live Raydium quote.";
+        document.getElementById("depth-rin").value = "";
+        document.getElementById("depth-rout").value = "";
+      } else {
+        out.textContent = "Model output: for a trade of " + fmt(res.amountIn, 6) + " in to stay at a " + fmt(res.maxImpactPct, 4) +
+          "% price-impact cap at a spot price of " + fmt(res.spotPrice, 6) + " out per in, the pool needs reserves of ≈ " +
+          fmt(res.reserveIn, 4) + " of the input token and ≈ " + fmt(res.reserveOut, 4) + " of the output token (≈ " +
+          fmt(res.totalValueIn, 4) + " of the input token in total value to fund). That trade then returns ≈ " + fmt(res.amountOut, 6) +
+          " out (effective price ≈ " + fmt(res.effectivePrice, 6) + ", impact ≈ " + fmt(res.actualImpactPct, 4) +
+          "%). The depth is sized for one trade at the cap in an untouched pool — repeated same-direction trades each move the price further, and a deeper pool is not a safe pool. A pool depth model, not a live Raydium quote.";
+        document.getElementById("depth-rin").value = fmt(res.reserveIn, 4);
+        document.getElementById("depth-rout").value = fmt(res.reserveOut, 4);
       }
     });
 

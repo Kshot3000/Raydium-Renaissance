@@ -596,6 +596,25 @@
         <button type="submit" class="btn primary">Compare the capital</button>
         <p id="eff-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="depth-calc">
+        <h3>26 · Pool depth planner</h3>
+        <p>Tool 17 answers a trader's question — given a pool, how big a trade fits an impact cap? A pool creator asks the inverse: given the trade size you expect and the impact cap you want it to respect, how deep a pool must you fund? The same closed form, inverted: the input-side reserve that puts a trade exactly at its cap is amount × (1 − impact) × (1 − fee) ÷ (impact − fee), and the output-side reserve follows from the spot price you choose. Depth scales linearly — twice the expected trade needs twice the reserves — and a tighter cap needs a deeper pool. Two honest limits: a cap at or below the fee tier admits no positive trade at any depth (the fee alone counts toward impact in this measure), so that case is reported as impossible rather than an infinite reserve; and the depth is sized for one trade at the cap in an untouched pool — repeated same-direction trades each move the price further, and a deeper pool is not a safe pool: depth says nothing about the tokens, the price being right, or impermanent loss. Educational model only — the reserves are targets you would have to fund, not live pool state; not a live quote, not financial advice.</p>
+        <label for="depth-ain">Trade amount in (token you pay)</label>
+        <input id="depth-ain" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="depth-cap">Maximum price impact — %</label>
+        <input id="depth-cap" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="depth-spot">Spot price (out per in, before any trade)</label>
+        <input id="depth-spot" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="depth-fee">Pool fee — basis points (25 = 0.25%)</label>
+        <input id="depth-fee" inputmode="decimal" placeholder="e.g. 25" autocomplete="off">
+        <label for="depth-rin">Reserve needed — input token (model)</label>
+        <input id="depth-rin" readonly placeholder="—" autocomplete="off">
+        <label for="depth-rout">Reserve needed — output token (model)</label>
+        <input id="depth-rout" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan the depth</button>
+        <p id="depth-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -623,6 +642,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=23"></script>
+<script src="app.js?v=24"></script>
 </body>
 </html>
