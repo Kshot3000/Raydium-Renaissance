@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus forty fully
+/* Raydium Renaissance hub logic: project filtering plus forty-one fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -19,8 +19,9 @@
    zap-in planner, a CLMM single-sided zap-out planner, a CLMM
    token-B deposit planner, a CLMM re-centre / rebalance planner,
    a CLMM withdrawal planner, a constant-product wallet-balance
-   deposit planner, a two-hop exact-out swap model, and a
-   constant-product break-even days calculator.
+   deposit planner, a two-hop exact-out swap model, a
+   constant-product break-even days calculator, and a split-route
+   exact-out swap model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1369,16 +1370,40 @@ function splitExactOut(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2Out
     var a = legIn(1, y), b = legIn(2, target - y);
     return (a === null || b === null) ? null : a + b;
   }
+  /* The split is only feasible inside a band: leg 1 must stay below
+     pool 1's reserve out and leg 2 below pool 2's, so y ranges over
+     [target - reserve2Out + 1, reserve1Out - 1] in scaled units.
+     Searching fractions of the WHOLE target instead samples mostly
+     infeasible splits when the target is a large share of the combined
+     reserves — both probes come back null, the search breaks, and only
+     the endpoints survive, which can cost many times the true optimum
+     (or miss the one feasible split entirely). Search the band itself,
+     and offer its endpoints as candidates: when the band is a single
+     point, that point IS the only split. A pool whose reserve out does
+     not parse can take nothing, so the band collapses onto the other
+     pool's endpoint, which the endpoint candidates already cover. */
+  var rout1 = parseScaled(reserve1OutStr), rout2 = parseScaled(reserve2OutStr);
+  var yLo = rout2 === null ? target : (target - rout2 + 1n > 0n ? target - rout2 + 1n : 0n);
+  var yHi = rout1 === null ? 0n : (rout1 - 1n < target ? rout1 - 1n : target);
   var lo = 0, hi = 1, i, midFrac;
-  for (i = 0; i < 200; i++) {
-    var m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
-    var v1 = combinedIn(BigInt(Math.round(m1 * Number(target))));
-    var v2 = combinedIn(BigInt(Math.round(m2 * Number(target))));
-    if (v1 === null && v2 === null) break;
-    if (v2 === null || (v1 !== null && v1 <= v2)) hi = m2; else lo = m1;
+  var bandW = yHi - yLo;
+  if (bandW >= 0n) {
+    for (i = 0; i < 200; i++) {
+      var m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
+      var v1 = combinedIn(yLo + BigInt(Math.round(m1 * Number(bandW))));
+      var v2 = combinedIn(yLo + BigInt(Math.round(m2 * Number(bandW))));
+      if (v1 === null && v2 === null) break;
+      if (v2 === null || (v1 !== null && v1 <= v2)) hi = m2; else lo = m1;
+    }
   }
-  var mid = BigInt(Math.round(((lo + hi) / 2) * Number(target)));
-  var cands = [0n, target, mid, mid - 1n, mid + 1n];
+  var mid = yLo + BigInt(Math.round(((lo + hi) / 2) * Number(bandW > 0n ? bandW : 0n)));
+  /* The exact half split is a candidate in its own right, ahead of the
+     search midpoint: the ceiled leg costs form plateaus, the ternary
+     search settles on a plateau edge, and for identical pools that
+     leaves the reported split a few thousand scaled units off the even
+     split that is the true optimum (and costs a unit or two more). */
+  var half = target / 2n;
+  var cands = [0n, target, yLo, yHi, half, half + 1n, mid, mid - 1n, mid + 1n];
   var bestY = null, bestIn = null;
   for (i = 0; i < cands.length; i++) {
     var y = cands[i];

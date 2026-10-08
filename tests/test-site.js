@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=43"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=44"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1884,6 +1884,13 @@ check("SXO target no single pool can supply still settles split", sxoOnly !== nu
 check("SXO split-only case honestly has no single-pool comparison", sxoOnly.single1In === null && sxoOnly.single2In === null && sxoOnly.bestSingleIn === null && sxoOnly.savingVsBestSingle === null);
 const sxoDrain = app.splitExactOut("1000", "1000", "1000", "1000", "1999", 25, 25);
 check("SXO near-drain target settles evenly", sxoDrain !== null && sxoDrain.splitPct1 === 50 && sxoDrain.bestSingleIn === null);
+const sxoBand = app.splitExactOut("1176.977373", "1113.301880", "3852.772630", "4812.490857", "4671.588778", 100, 100);
+check("SXO narrow feasible band finds the split optimum, not the endpoint", sxoBand !== null && sxoBand.totalIn === "18846.924178173" && sxoBand.out1 === "849.906200105" && app.parseScaled(sxoBand.totalIn) < app.parseScaled(sxoBand.bestSingleIn) / 6n);
+const sxoUnique = app.splitExactOut("1000", "100", "1000", "150", "249.999999998", 25, 25);
+check("SXO single-point feasible band settles on the unique split", sxoUnique !== null && sxoUnique.out1 === "99.999999999" && sxoUnique.out2 === "149.999999999");
+check("SXO max feasible combined target is two units below the combined reserves",
+  app.splitExactOut("1000", "60", "1000", "60", "119.999999998", 25, 25) !== null &&
+  app.splitExactOut("1000", "60", "1000", "60", "119.999999999", 25, 25) === null);
 check("SXO target at or above the combined reserves is rejected, not priced",
   app.splitExactOut("1000", "1000", "1000", "1000", "2000", 25, 25) === null &&
   app.splitExactOut("1000", "1000", "1000", "1000", "2500", 25, 25) === null);
