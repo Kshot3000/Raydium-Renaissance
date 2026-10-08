@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=51"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=52"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists forty-five tools", readme.includes("forty-five pool tools") || readme.includes("all forty-five"));
+check("README lists forty-six tools", readme.includes("forty-six pool tools") || readme.includes("all forty-six"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1992,8 +1992,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts forty-five tools and names the CLMM two-range exact-out swap model",
-  appSrc.includes("plus forty-five fully") && appSrc.includes("CLMM two-range exact-out swap model.\n   These are educational MODELS"));
+check("app.js header counts forty-six tools and names the CLMM three-range swap model",
+  appSrc.includes("plus forty-six fully") && appSrc.includes("CLMM three-range swap model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -2230,6 +2230,89 @@ check("all xxo controls labelled", ["xxo-liq", "xxo-lower", "xxo-upper", "xxo-pr
 check("xxo tool present in index.html", html.includes('id="xxo-calc"') && html.includes('id="xxo-result"'));
 check("xxo honesty: combined ceiling and not-live labels", html.includes("supplies that second range instead of inventing it") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("is rejected, not priced"));
 check("guide covers CLMM two-range exact-out swap", guide.includes("Exact-out across two ranges has a combined ceiling"));
+
+/* ---------- Tool 46: CLMM three-range swap model (TSWAP) ---------- */
+const TSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
+const tsFit = app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "10", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "0.512");
+const xsFit = app.clmmCrossSwap(TSWAP_L, "0.8", "1.25", "1", "10", 25, "ab", TSWAP_L, "0.64");
+check("TSWAP small swap does not cross", tsFit !== null && tsFit.crossed === false && tsFit.enteredThird === false && tsFit.hitThirdBoundary === false);
+check("TSWAP uncrossed answer is tool 43 verbatim", tsFit.amountOut === xsFit.amountOut && tsFit.newPrice === xsFit.newPrice && tsFit.usedIn === xsFit.usedIn && tsFit.feePaid === xsFit.feePaid);
+check("TSWAP uncrossed third leg is zero", tsFit.leg3UsedIn === 0 && tsFit.leg3Out === 0);
+const tsMid = app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "0.512");
+const xsMid = app.clmmCrossSwap(TSWAP_L, "0.8", "1.25", "1", "200", 25, "ab", TSWAP_L, "0.64");
+check("TSWAP two-range fill does not enter the third range", tsMid !== null && tsMid.crossed === true && tsMid.enteredThird === false);
+check("TSWAP two-range answer is tool 43 verbatim", tsMid.amountOut === xsMid.amountOut && tsMid.newPrice === xsMid.newPrice && tsMid.leg2Out === xsMid.leg2Out);
+near("TSWAP two-range out", tsMid.amountOut, 164.791900125552, 1e-9);
+const ts = app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "0.512");
+check("TSWAP headline enters the third range without filling it", ts !== null && ts.enteredThird === true && ts.hitThirdBoundary === false);
+near("TSWAP headline amount out", ts.amountOut, 227.40629527946123, 1e-9);
+near("TSWAP headline new price", ts.newPrice, 0.5774796013451008, 1e-9);
+near("TSWAP headline impact", ts.priceImpactPct, 24.197901573512926, 1e-9);
+near("TSWAP headline uses all of its input", ts.usedIn, 300, 1e-9);
+near("TSWAP headline unfilled is zero", ts.unfilledIn, 0, 1e-9);
+near("TSWAP headline fee is the tier's share of the used input", ts.feePaid, 0.75, 1e-9);
+near("TSWAP headline leg 1 in", ts.leg1UsedIn, 112.08360789472633, 1e-9);
+near("TSWAP headline leg 1 out is the first range's holding", ts.leg1Out, 100, 1e-12);
+near("TSWAP headline leg 2 in", ts.leg2UsedIn, 125.31328320801995, 1e-9);
+near("TSWAP headline leg 2 out is the second range's holding", ts.leg2Out, 89.4427190999915, 1e-9);
+near("TSWAP headline leg 3 in", ts.leg3UsedIn, 62.60310889725372, 1e-9);
+near("TSWAP headline leg 3 out", ts.leg3Out, 37.96357617946974, 1e-9);
+near("TSWAP headline legs conserve the input", ts.leg1UsedIn + ts.leg2UsedIn + ts.leg3UsedIn, ts.usedIn, 1e-9);
+near("TSWAP headline legs conserve the output", ts.leg1Out + ts.leg2Out + ts.leg3Out, ts.amountOut, 1e-9);
+near("TSWAP headline leg 3 out is the third range's shed holding", ts.leg3Out, Number(TSWAP_L) * (Math.sqrt(0.64) - Math.sqrt(ts.newPrice)), 1e-9);
+const xsHead = app.clmmCrossSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ab", TSWAP_L, "0.64");
+check("TSWAP first two legs are tool 43's capped legs verbatim", xsHead.hitSecondBoundary === true && ts.leg1UsedIn === xsHead.leg1UsedIn && ts.leg2UsedIn === xsHead.leg2UsedIn && ts.leg1Out === xsHead.leg1Out && ts.leg2Out === xsHead.leg2Out);
+const tsCap = app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "400", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "0.512");
+check("TSWAP oversized swap fills all three ranges", tsCap !== null && tsCap.enteredThird === true && tsCap.hitThirdBoundary === true);
+near("TSWAP triple-cap amount out is the three holdings summed", tsCap.amountOut, 269.4427190999915, 1e-9);
+near("TSWAP triple-cap walks to the third outer edge", tsCap.newPrice, 0.512, 1e-12);
+near("TSWAP triple-cap used in", tsCap.usedIn, 377.50140097115417, 1e-9);
+near("TSWAP triple-cap unfilled remainder", tsCap.unfilledIn, 22.49859902884583, 1e-9);
+near("TSWAP triple-cap leg 3 out is the third range's whole holding", tsCap.leg3Out, 80, 1e-9);
+const tsHuge = app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "10000", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "0.512");
+check("TSWAP a still bigger input changes nothing past the third wall", tsHuge.usedIn === tsCap.usedIn && tsHuge.amountOut === tsCap.amountOut && tsHuge.newPrice === tsCap.newPrice);
+const tsBa = app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ba", TSWAP_L, "1.5625", TSWAP_L, "1.953125");
+check("TSWAP pay-B mirror returns exactly the same amount out", tsBa !== null && tsBa.amountOut === ts.amountOut && tsBa.usedIn === ts.usedIn);
+near("TSWAP pay-B mirror new price", tsBa.newPrice, 1.7316628979980226, 1e-9);
+near("TSWAP mirror prices are reciprocal", 1 / tsBa.newPrice, ts.newPrice, 1e-12);
+const tsThin = app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "400", 25, "ab", TSWAP_L, "0.64", String(Number(TSWAP_L) / 10), "0.512");
+check("TSWAP thin third range caps and leaves most of the crossing input unfilled", tsThin !== null && tsThin.hitThirdBoundary === true && tsThin.leg3Out < tsCap.leg3Out && tsThin.unfilledIn > tsCap.unfilledIn);
+near("TSWAP thin third leg out", tsThin.leg3Out, 8, 1e-9);
+near("TSWAP thin third total out", tsThin.amountOut, 197.4427190999915, 1e-9);
+const tsDeep = app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "400", 25, "ab", TSWAP_L, "0.64", String(Number(TSWAP_L) * 10), "0.512");
+check("TSWAP deep third range fills the same input in full", tsDeep !== null && tsDeep.enteredThird === true && tsDeep.hitThirdBoundary === false && tsDeep.unfilledIn === 0);
+near("TSWAP deep third amount out", tsDeep.amountOut, 291.84574114074337, 1e-9);
+near("TSWAP deep third new price walks barely into the third range", tsDeep.newPrice, 0.6228193176745782, 1e-9);
+const tsZero = app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 0, "ab", TSWAP_L, "0.64", TSWAP_L, "0.512");
+near("TSWAP zero-fee amount out", tsZero.amountOut, 227.83914453408232, 1e-9);
+check("TSWAP zero fee charges no fee", tsZero.feePaid === 0);
+check("TSWAP rejects a third outer edge on the wrong side or at the second edge", app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "0.7") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "0.64") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ba", TSWAP_L, "1.5625", TSWAP_L, "1.4") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ba", TSWAP_L, "1.5625", TSWAP_L, "1.5625") === null);
+check("TSWAP rejects bad third ranges and inherited bad inputs", app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ab", TSWAP_L, "0.64", "0", "0.512") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "abc") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 25, "xx", TSWAP_L, "0.64", TSWAP_L, "0.512") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1", "300", 10000, "ab", TSWAP_L, "0.64", TSWAP_L, "0.512") === null && app.clmmTripleSwap(TSWAP_L, "0.8", "1.25", "1.25", "300", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "0.512") === null);
+for (const [liq, lo, hi, px, ain, fee, dir, liq2, outer, liq3, outer3] of [
+  [TSWAP_L, "0.8", "1.25", "1", "75", 25, "ab", TSWAP_L, "0.64", TSWAP_L, "0.512"],
+  [TSWAP_L, "0.8", "1.25", "1.2", "500", 25, "ba", TSWAP_L, "1.5625", "500", "2"],
+  ["5000", "0.5", "2", "1.1", "900", 30, "ab", "2500", "0.25", "1200", "0.125"],
+  ["5000", "0.5", "2", "0.9", "700", 5, "ba", "8000", "4", "3000", "8"],
+  ["123.456", "2.4", "2.6", "2.5", "40", 60, "ab", "60", "2.25", "30", "2.025"],
+  ["1000000", "0.99", "1.01", "1", "20000", 1, "ba", "1000000", "1.0201", "500000", "1.030301"]
+]) {
+  const x = app.clmmTripleSwap(liq, lo, hi, px, ain, fee, dir, liq2, outer, liq3, outer3);
+  const p = app.clmmCrossSwap(liq, lo, hi, px, ain, fee, dir, liq2, outer);
+  const tag = "TSWAP sweep " + dir + " " + ain + " @ " + px + " in " + lo + "-" + hi;
+  check(tag + " settles", x !== null && p !== null);
+  near(tag + " legs conserve the used input", x.leg1UsedIn + x.leg2UsedIn + x.leg3UsedIn, x.usedIn, 1e-7);
+  near(tag + " legs conserve the output", x.leg1Out + x.leg2Out + x.leg3Out, x.amountOut, 1e-7);
+  near(tag + " used plus unfilled is the amount in", x.usedIn + x.unfilledIn, x.amountIn, 1e-7);
+  near(tag + " fee is the tier's share of the used input", x.feePaid, x.usedIn * fee / 10000, 1e-7);
+  check(tag + " enteredThird matches tool 43's second wall", x.enteredThird === p.hitSecondBoundary);
+  check(tag + " first two legs are tool 43 verbatim", x.leg1UsedIn === p.leg1UsedIn && x.leg2UsedIn === p.leg2UsedIn && x.leg1Out === p.leg1Out && x.leg2Out === p.leg2Out);
+  check(tag + " third range only ever adds output", x.enteredThird ? x.amountOut > p.amountOut : (x.amountOut === p.amountOut && x.newPrice === p.newPrice));
+  check(tag + " new price stays inside the third range when entered", !x.enteredThird || (x.newPrice >= x.thirdLowerPrice - 1e-12 && x.newPrice <= x.thirdUpperPrice + 1e-12));
+}
+check("all tswap controls labelled", ["tswap-liq", "tswap-lower", "tswap-upper", "tswap-price", "tswap-dir", "tswap-ain", "tswap-fee", "tswap-liq2", "tswap-outer", "tswap-liq3", "tswap-outer3", "tswap-out", "tswap-newprice", "tswap-used"].every(id => html.includes(`for="${id}"`)));
+check("tswap tool present in index.html", html.includes('id="tswap-calc"') && html.includes('id="tswap-result"'));
+check("tswap honesty: third wall and not-live labels", html.includes("supply that third range too") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("is again unfilled, not absorbed"));
+check("guide covers CLMM three-range swap", guide.includes("The ladder keeps going past the second wall"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
