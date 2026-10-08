@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=41"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=42"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1846,6 +1846,7 @@ check("CPBED real hurdle with zero volume never breaks even", app.cpBreakEvenDay
 check("CPBED real hurdle with zero fee tier never breaks even", app.cpBreakEvenDays(2, "1000", "1000000", 0, "10000", "1000000").daysToBreakEven === Infinity);
 check("CPBED rejects blank fields", app.cpBreakEvenDays(2, "", "1000000", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", " ", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "1000000", "", "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "1000000", 25, "", "1000000") === null && app.cpBreakEvenDays(2, "1000", "1000000", 25, "10000", "") === null);
 check("CPBED rejects your liquidity above TVL", app.cpBreakEvenDays(2, "1000", "1000000", 25, "1000001", "1000000") === null);
+check("CPBED rejects zero or negative share as no position, not never", app.cpBreakEvenDays(2, "1000", "1000000", 25, "0", "1000000") === null && app.cpBreakEvenDays(1, "1000", "1000000", 25, "0", "1000000") === null && app.cpBreakEvenDays(2, "1000", "1000000", 25, "-5", "1000000") === null);
 check("CPBED rejects zero or negative deposit and volume", app.cpBreakEvenDays(2, "0", "1000000", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "-5", "1000000", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "-1", 25, "10000", "1000000") === null);
 check("CPBED rejects bad ratio, junk and bad fee tier", app.cpBreakEvenDays(0, "1000", "1000000", 25, "10000", "1000000") === null && app.cpBreakEvenDays(-2, "1000", "1000000", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "abc", "1000000", 25, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "1000000", 10001, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "1000000", -1, "10000", "1000000") === null && app.cpBreakEvenDays(2, "1000", "1000000", 25.5, "10000", "1000000") === null);
 check("all cpbed controls labelled", ["cpbed-ratio", "cpbed-deposit", "cpbed-volume", "cpbed-bps", "cpbed-your", "cpbed-tvl", "cpbed-out"].every(id => html.includes(`for="${id}"`)));

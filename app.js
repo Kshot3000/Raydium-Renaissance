@@ -1615,8 +1615,11 @@ function cpRequiredVolume(priceRatio, depositStr, yourStr, tvlStr, feeBps, daysS
    exactly this volume). Two honest edges, mirroring Tool 15: at no
    price move there is no hurdle, so the answer is 0 days even at a
    zero fee rate or zero volume; and with a real hurdle but a zero
-   rate — no volume, a zero fee tier, or a zero share — the position
-   never breaks even, reported as Infinity, not a large number. The
+   rate — no volume or a zero fee tier — the position never breaks
+   even, reported as Infinity, not a large number. A zero share is
+   NOT a zero-rate case: Tool 3 rejects it (no position at all),
+   exactly as Tool 32 does, so it is rejected as invalid input here
+   too rather than reported as never. The
    blank-field guard matters here: Number("") is 0, so without it an
    empty volume would slip through Tool 3 as a zero rate and be
    reported as "never" instead of rejected as missing input. The
