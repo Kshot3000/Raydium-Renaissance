@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus twenty-eight fully
+/* Raydium Renaissance hub logic: project filtering plus twenty-nine fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -13,7 +13,7 @@
    tolerance band, a CLMM symmetric-range planner, a two-hop swap
    model, a net LP return calculator, a CLMM capital-efficiency
    calculator, a pool depth planner, a post-move reserves calculator,
-   and a split-route swap planner.
+   a split-route swap planner, and a CLMM net return calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1324,8 +1324,49 @@ function splitSwap(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2OutStr,
   };
 }
 
+/* ---------- 29 · CLMM net return calculator ---------- */
+/* Tool 24 settles a constant-product position against holding with the
+   fees it actually earned; this is that settlement for a CLMM position.
+   Every value comes from Tool 12's own clmmVsHold, so the halves can
+   never drift from their own form:
+     net value      = position value at the check price + fees earned (B)
+     verdict vs hold = net value - holding value = fees - Tool 12's hurdle
+   Both bottom lines are reported: % vs holding AND % return on the
+   position's value at entry — they answer different questions, and a
+   CLMM position makes the gap vivid: at the upper edge of the headline
+   range it is +5.90% on its entry value yet -5.87% vs holding with no
+   fees, because holding kept the full token that rose. At the entry
+   price the hurdle is zero, so coverage is honestly null (nothing to
+   cover), not a made-up percentage. Fees are counted in token B outside
+   the position; no compounding, no fee growth inside the range, and no
+   re-centring is modelled. Model only — not a live quote. */
+function clmmNetReturn(liquidityStr, lowerStr, upperStr, entryPriceStr, checkPriceStr, feesStr) {
+  if (feesStr == null || String(feesStr).trim() === "") return null;
+  var fees = Number(feesStr);
+  if (!Number.isFinite(fees) || fees < 0) return null;
+  var vh = clmmVsHold(liquidityStr, lowerStr, upperStr, entryPriceStr, checkPriceStr);
+  if (vh === null) return null;
+  var entryValueInB = vh.entryAmountA * vh.entryPrice + vh.entryAmountB;
+  var netValueInB = vh.positionValueInB + fees;
+  var netVsHoldInB = netValueInB - vh.holdValueInB;
+  return {
+    liquidity: vh.liquidity, lowerPrice: vh.lowerPrice, upperPrice: vh.upperPrice,
+    entryPrice: vh.entryPrice, checkPrice: vh.checkPrice,
+    entryValueInB: entryValueInB,
+    positionValueInB: vh.positionValueInB,
+    holdValueInB: vh.holdValueInB,
+    feesNeededInB: vh.feesNeededInB,
+    feesInB: fees,
+    netValueInB: netValueInB,
+    netVsHoldInB: netVsHoldInB,
+    netVsHoldPct: vh.holdValueInB > 0 ? netVsHoldInB / vh.holdValueInB * 100 : 0,
+    returnOnEntryPct: entryValueInB > 0 ? (netValueInB - entryValueInB) / entryValueInB * 100 : 0,
+    coveragePct: vh.feesNeededInB > 0 ? fees / vh.feesNeededInB * 100 : null
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -2081,6 +2122,33 @@ if (typeof document !== "undefined") {
           ", so splitting gains ≈ " + fmt(res.gainVsBestSingle, 6) + " in this model. Each leg is Tool 1's own model for that pool. A split-route model over two pools you typed — not a live aggregator quote, not financial advice.";
         document.getElementById("split-a1").value = res.amount1;
         document.getElementById("split-a2").value = res.amount2;
+      }
+    });
+
+    /* --- CLMM net return --- */
+    document.getElementById("cnet-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmNetReturn(
+        document.getElementById("cnet-l").value,
+        document.getElementById("cnet-lower").value,
+        document.getElementById("cnet-upper").value,
+        document.getElementById("cnet-entry").value,
+        document.getElementById("cnet-check").value,
+        document.getElementById("cnet-fees").value
+      );
+      var out = document.getElementById("cnet-result");
+      if (res === null) {
+        out.textContent = "Enter a positive model liquidity L, a range with lower below upper, entry and check prices above zero, and fees earned of zero or more in token B.";
+        document.getElementById("cnet-out").value = "";
+      } else {
+        out.textContent = "Model output: the position is worth ≈ " + fmt(res.positionValueInB, 6) + " B at the check price against ≈ " +
+          fmt(res.holdValueInB, 6) + " B for holding, a hurdle of ≈ " + fmt(res.feesNeededInB, 6) + " B. With ≈ " + fmt(res.feesInB, 6) +
+          " B of fees earned, the net value is ≈ " + fmt(res.netValueInB, 6) + " B — " + fmt(res.netVsHoldInB, 6) + " B (" +
+          fmt(res.netVsHoldPct, 4) + "%) vs holding, and " + fmt(res.returnOnEntryPct, 4) + "% on the position's ≈ " +
+          fmt(res.entryValueInB, 6) + " B entry value" +
+          (res.coveragePct === null ? "; at the entry price there is no hurdle to cover." : "; fees cover ≈ " + fmt(res.coveragePct, 2) + "% of the hurdle.") +
+          " A CLMM net-return model — not a live quote, not financial advice.";
+        document.getElementById("cnet-out").value = fmt(res.netVsHoldInB, 6);
       }
     });
 

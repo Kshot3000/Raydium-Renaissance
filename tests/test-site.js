@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=26"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=27"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1213,6 +1213,44 @@ check("SPLIT one bad-fee pool falls back to the other", (() => { const s = app.s
 check("all split controls labelled", ["split-r1in", "split-r1out", "split-fee1", "split-r2in", "split-r2out", "split-fee2", "split-ain", "split-a1", "split-a2"].every(id => html.includes(`for="${id}"`)));
 check("split tool present in index.html", html.includes('id="split-calc"') && html.includes('id="split-result"'));
 check("split honesty: parallel-not-series and not-live labels", html.includes("parallel move aggregators also make") && html.includes("an extra leg are not modelled") && html.includes("not a live quote, not financial advice"));
+
+
+/* ---------- Tool 29: CLMM net return calculator (CNET) ---------- */
+const cn1 = app.clmmNetReturn("947.2135955", "0.8", "1.25", "1", "1.25", "0");
+near("CNET entry value", cn1.entryValueInB, 200, 1e-6);
+near("CNET position value at upper edge", cn1.positionValueInB, 211.80339887, 1e-6);
+near("CNET hold value at upper edge", cn1.holdValueInB, 225, 1e-9);
+near("CNET hurdle at upper edge", cn1.feesNeededInB, 13.19660113, 1e-6);
+near("CNET no fees net vs hold", cn1.netVsHoldInB, -13.19660113, 1e-6);
+near("CNET no fees vs hold pct", cn1.netVsHoldPct, -5.865156, 1e-4);
+near("CNET honest twist: up on entry yet behind hold", cn1.returnOnEntryPct, 5.901699, 1e-4);
+check("CNET zero fees coverage is 0, not null", cn1.coveragePct === 0);
+const cnExact = app.clmmNetReturn("947.2135955", "0.8", "1.25", "1", "1.25", "13.19660113");
+near("CNET fees = hurdle settles exactly even (upper)", cnExact.netVsHoldInB, 0, 1e-6);
+near("CNET fees = hurdle coverage 100 (upper)", cnExact.coveragePct, 100, 1e-6);
+const cnLow = app.clmmNetReturn("947.2135955", "0.8", "1.25", "1", "0.8", "10.5572809");
+near("CNET fees = hurdle settles exactly even (lower)", cnLow.netVsHoldInB, 0, 1e-6);
+near("CNET lower edge return on entry", cnLow.returnOnEntryPct, -10, 1e-4);
+const cnEntry = app.clmmNetReturn("947.2135955", "0.8", "1.25", "1", "1", "50");
+check("CNET entry price coverage honestly null", cnEntry.coveragePct === null && cnEntry.feesNeededInB === 0);
+near("CNET entry price fees are pure gain vs hold", cnEntry.netVsHoldInB, 50, 1e-9);
+const cnOut = app.clmmNetReturn("947.2135955", "0.8", "1.25", "1", "2", "0");
+near("CNET out-of-range hurdle", cnOut.feesNeededInB, 88.19660113, 1e-6);
+near("CNET out-of-range vs hold pct", cnOut.netVsHoldPct, -29.398867, 1e-4);
+const cn2x = app.clmmNetReturn("947.2135955", "0.8", "1.25", "1", "1.25", "26.39320226");
+near("CNET double hurdle coverage 200", cn2x.coveragePct, 200, 1e-4);
+near("CNET double hurdle net vs hold", cn2x.netVsHoldInB, 13.19660113, 1e-6);
+/* composition: every CNET figure must equal Tool 12's own values */
+[["1", "1.25"], ["1", "0.8"], ["1", "1"], ["1", "2"], ["0.9", "1.1"]].forEach(([e, c]) => {
+  const vh = app.clmmVsHold("947.2135955", "0.8", "1.25", e, c);
+  const cn = app.clmmNetReturn("947.2135955", "0.8", "1.25", e, c, "7.5");
+  check("CNET is Tool 12 verbatim " + e + "->" + c, cn !== null && cn.positionValueInB === vh.positionValueInB && cn.holdValueInB === vh.holdValueInB && cn.feesNeededInB === vh.feesNeededInB && Math.abs(cn.netVsHoldInB - (7.5 - vh.feesNeededInB)) < 1e-9);
+});
+check("CNET rejects negative or blank fees", app.clmmNetReturn("947.2135955", "0.8", "1.25", "1", "1.25", "-1") === null && app.clmmNetReturn("947.2135955", "0.8", "1.25", "1", "1.25", "") === null);
+check("CNET rejects bad position inputs", app.clmmNetReturn("0", "0.8", "1.25", "1", "1.25", "5") === null && app.clmmNetReturn("947.2135955", "1.25", "0.8", "1", "1.25", "5") === null && app.clmmNetReturn("947.2135955", "0.8", "1.25", "1", "0", "5") === null);
+check("all cnet controls labelled", ["cnet-l", "cnet-lower", "cnet-upper", "cnet-entry", "cnet-check", "cnet-fees", "cnet-out"].every(id => html.includes(`for="${id}"`)));
+check("cnet tool present in index.html", html.includes('id="cnet-calc"') && html.includes('id="cnet-result"'));
+check("cnet honesty: both bottom lines and not-live labels", html.includes("different bottom line, reported alongside rather than instead") && html.includes("nothing-to-cover rather than a percentage") && html.includes("not a live quote, not financial advice"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

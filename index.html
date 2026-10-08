@@ -657,6 +657,27 @@
         <button type="submit" class="btn primary">Plan the split</button>
         <p id="split-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="cnet-calc">
+        <h3>29 · CLMM net return calculator</h3>
+        <p>Tool 24 settles a constant-product position against holding with the fees it actually earned — this is that settlement for a CLMM position, built entirely on Tool 12's own numbers. Enter the model liquidity Tool 8 reported, your range, the price you entered at, a price to check, and the fees you actually earned in token B: the calculator adds the fees to the position's value at the check price and gives the verdict against holding, in B and as a %. It also reports the return on the position's entry value — a different bottom line, reported alongside rather than instead: at the top edge of a 0.8–1.25 range the position is +5.90% on its entry value yet −5.87% vs holding with no fees, because holding kept all of the token that rose. At the entry price there is no hurdle, so coverage is honestly reported as nothing-to-cover rather than a percentage. Educational model only — fees counted in token B outside the position, no compounding or re-centring modelled; your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="cnet-l">Position liquidity L (model, from Tool 8)</label>
+        <input id="cnet-l" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="cnet-lower">Range lower price (B per A)</label>
+        <input id="cnet-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="cnet-upper">Range upper price (B per A)</label>
+        <input id="cnet-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="cnet-entry">Entry price (token B per token A)</label>
+        <input id="cnet-entry" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="cnet-check">Price to check (token B per token A)</label>
+        <input id="cnet-check" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="cnet-fees">Fees earned — token B</label>
+        <input id="cnet-fees" inputmode="decimal" placeholder="e.g. 13.2" autocomplete="off">
+        <label for="cnet-out">Net vs holding — token B (model, negative = behind)</label>
+        <input id="cnet-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Settle my CLMM return</button>
+        <p id="cnet-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -684,6 +705,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=26"></script>
+<script src="app.js?v=27"></script>
 </body>
 </html>
