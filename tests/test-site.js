@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=61"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=62"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists fifty-two tools", readme.includes("fifty-two pool tools") || readme.includes("all fifty-two"));
+check("README lists fifty-three tools", readme.includes("fifty-three pool tools") || readme.includes("all fifty-three"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts fifty-two tools and names the fee compounding calculator",
-  appSrc.includes("plus fifty-two fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, and a fee compounding calculator.\n   These are educational MODELS"));
+check("app.js header counts fifty-three tools and names the LVR round-trip calculator",
+  appSrc.includes("plus fifty-three fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, and a\n   loss-versus-rebalancing round-trip calculator.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -2762,6 +2762,69 @@ check("cmp tool present in index.html", html.includes('id="cmp-calc"') && html.i
 check("cmp honesty: APR held constant and not-live labels", html.includes("the APR is held constant on a growing balance") && html.includes("not a live yield") && html.includes("not financial advice"));
 check("guide covers compounding", guide.includes("APR is not APY"));
 check("README lists tool 52", readme.includes("52. **Fee compounding calculator (APR to APY)**"));
+
+/* ---------- 53 · Loss-versus-rebalancing (LVR) round-trip calculator ---------- */
+const lvrHead = app.lvrRoundTrip("1000", "1000", "10", "1");
+near("LVR headline start price", lvrHead.startPrice, 1, 1e-12);
+near("LVR headline top price", lvrHead.topPrice, 1.1, 1e-12);
+near("LVR headline top reserve A is Tool 27's", lvrHead.topReserveA, 953.4625892455923, 1e-9);
+near("LVR headline top reserve B is Tool 27's", lvrHead.topReserveB, 1048.8088481701516, 1e-9);
+near("LVR headline up leg", lvrHead.lvrUpInB, 2.382303659696845, 1e-9);
+near("LVR headline down leg", lvrHead.lvrDownInB, 2.2714374157440034, 1e-9);
+near("LVR headline per-cycle", lvrHead.perCycleInB, 4.653741075440848, 1e-9);
+near("LVR headline per-cycle pct", lvrHead.perCyclePct, 0.2326870537720424, 1e-9);
+near("LVR headline position value", lvrHead.positionValueInB, 2000, 1e-9);
+/* closed forms: up = Rb*(sqrt(m)-1)^2, down = up/sqrt(m) */
+near("LVR up leg is the closed form Rb(sqrt m -1)^2", lvrHead.lvrUpInB, 1000 * Math.pow(Math.sqrt(1.1) - 1, 2), 1e-9);
+near("LVR down leg is the up leg divided by sqrt m", lvrHead.lvrDownInB, lvrHead.lvrUpInB / Math.sqrt(1.1), 1e-9);
+/* both legs are Tool 27 verbatim, and the up leg's share of the
+   rebalancing value is exactly Tool 2's IL for the same move */
+const lvrUp27 = app.cpReservesAfterMove("1000", "1000", 1.1);
+check("LVR up leg is Tool 27 verbatim", lvrHead.lvrUpInB === lvrUp27.holdValueInB - lvrUp27.lpValueInB && lvrHead.topReserveA === lvrUp27.newReserveA);
+near("LVR up-leg IL pct matches Tool 2", lvrHead.upLegIlPct, -app.impermanentLoss(1.1).ilPct, 1e-9);
+check("LVR down-leg IL pct equals up-leg (m and 1/m are the same IL)", lvrHead.downLegIlPct === lvrHead.upLegIlPct);
+/* a round trip restores the starting reserves and value, while
+   Tool 2's end-price IL is exactly zero — the path is the cost */
+near("LVR round trip restores reserve A", lvrHead.finalReserveA, 1000, 1e-6);
+near("LVR round trip restores reserve B", lvrHead.finalReserveB, 1000, 1e-6);
+near("LVR round trip restores value", lvrHead.finalValueInB, 2000, 1e-6);
+check("LVR end-price IL is zero but the trip still costs", app.impermanentLoss(1).ilPct === 0 && lvrHead.perCycleInB > 0);
+const lvr2x = app.lvrRoundTrip("1000", "1000", "100", "1");
+near("LVR 2x up leg", lvr2x.lvrUpInB, 171.5728752538098, 1e-7);
+near("LVR 2x per-cycle", lvr2x.perCycleInB, 292.8932188134522, 1e-7);
+near("LVR 2x per-cycle pct", lvr2x.perCyclePct, 14.64466094067261, 1e-9);
+const lvrAsym = app.lvrRoundTrip("2000", "1000", "25", "1");
+near("LVR asym start price", lvrAsym.startPrice, 0.5, 1e-12);
+near("LVR asym per-cycle", lvrAsym.perCycleInB, 26.393202250020977, 1e-7);
+near("LVR asym per-cycle pct", lvrAsym.perCyclePct, 1.3196601125010488, 1e-9);
+const lvr500 = app.lvrRoundTrip("500", "2000", "50", "3");
+near("LVR 500/2000 per-cycle", lvr500.perCycleInB, 183.50341907227403, 1e-7);
+near("LVR total is per-cycle times cycles", lvr500.totalInB, 550.5102572168221, 1e-6);
+near("LVR total pct", lvr500.totalPctOfPosition, 13.762756430420552, 1e-9);
+/* scaling laws across a sweep: cycles scale linearly, a bigger
+   excursion costs strictly more, reserves restore every time */
+for (const [ra, rb, mv, cy] of [[1000, 1000, 5, 7], [250, 4000, 33, 2], [10000, 10, 250, 4], [3, 3, 1, 100]]) {
+  const s = app.lvrRoundTrip(String(ra), String(rb), String(mv), String(cy));
+  check("LVR sweep " + ra + "/" + rb + " ±" + mv + "% x" + cy, s !== null &&
+    Math.abs(s.totalInB - s.perCycleInB * cy) <= 1e-9 * Math.max(1, s.totalInB) &&
+    Math.abs(s.finalReserveA - ra) <= 1e-6 * ra && Math.abs(s.finalReserveB - rb) <= 1e-6 * rb &&
+    Math.abs(s.lvrUpInB - rb * Math.pow(Math.sqrt(1 + mv / 100) - 1, 2)) <= 1e-7 * Math.max(1, rb) &&
+    s.perCycleInB > 0);
+}
+check("LVR cost rises with the excursion", app.lvrRoundTrip("1000", "1000", "20", "1").perCycleInB > lvrHead.perCycleInB &&
+  lvrHead.perCycleInB > app.lvrRoundTrip("1000", "1000", "1", "1").perCycleInB);
+/* rejections */
+check("LVR rejects blank / junk", app.lvrRoundTrip("", "1000", "10", "1") === null && app.lvrRoundTrip("1000", "1000", "abc", "1") === null && app.lvrRoundTrip("1000", "1000", "10", "") === null);
+check("LVR rejects non-positive reserves", app.lvrRoundTrip("0", "1000", "10", "1") === null && app.lvrRoundTrip("1000", "-5", "10", "1") === null);
+check("LVR rejects a zero or negative excursion (no trip, no price)", app.lvrRoundTrip("1000", "1000", "0", "1") === null && app.lvrRoundTrip("1000", "1000", "-10", "1") === null);
+check("LVR rejects excursion above 10000%", app.lvrRoundTrip("1000", "1000", "10001", "1") === null);
+check("LVR rejects bad cycles", app.lvrRoundTrip("1000", "1000", "10", "0") === null && app.lvrRoundTrip("1000", "1000", "10", "2.5") === null && app.lvrRoundTrip("1000", "1000", "10", "10001") === null);
+check("LVR rejects overflowing inputs", app.lvrRoundTrip("1e308", "1e308", "10000", "10000") === null);
+check("all lvr controls labelled", ["lvr-ra", "lvr-rb", "lvr-move", "lvr-cycles", "lvr-per", "lvr-total"].every(id => html.includes(`for="${id}"`)));
+check("lvr tool present in index.html", html.includes('id="lvr-calc"') && html.includes('id="lvr-result"'));
+check("lvr honesty: gross-of-fees and not-live labels", html.includes("gross of fees") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers LVR", guide.includes("A flat end price does not mean a free trip"));
+check("README lists tool 53", readme.includes("53. **Loss-versus-rebalancing (LVR) round-trip calculator**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

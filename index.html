@@ -1243,6 +1243,25 @@
         <button type="submit" class="btn primary">Model the compounding</button>
         <p id="cmp-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="lvr-calc">
+        <h3>53 · Loss-versus-rebalancing (LVR) round-trip calculator</h3>
+        <p>Tool 2's impermanent loss only looks at the end price — so a price that rises and then falls straight back scores exactly zero there, even though the LP lost money on the trip. Arbitrageurs traded against the pool's stale price on <em>both</em> legs and kept the difference; that path-dependent cost is loss-versus-rebalancing (LVR), measured against a portfolio that holds the pool's own reserves but rebalances them at the external price. Each leg here is tool 27's own post-move maths: up by your excursion, the pool is arbitraged to the new price and gives up Rb·(√m − 1)<sup>2</sup> of token B; back down by the same multiple it gives up that divided by √m — and because the price ends home and k never changed, the reserves return to exactly where they began, so every identical round trip costs the same. The honest edges: this is gross of fees — arbitrageurs in a live pool pay the swap fee, part of which reaches LPs and offsets some of the LVR (tools 3 and 13 estimate fee income separately) — and a real price path is many unequal steps, not identical round trips, so read the per-trip figure as the cost of <em>volatility itself</em>, not a prediction. Educational model only — your reserves and excursion inputs, not live pool data; not a live quote, not financial advice.</p>
+        <label for="lvr-ra">Pool reserve — token A</label>
+        <input id="lvr-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="lvr-rb">Pool reserve — token B</label>
+        <input id="lvr-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="lvr-move">Price excursion up, then straight back (%)</label>
+        <input id="lvr-move" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="lvr-cycles">Identical round trips</label>
+        <input id="lvr-cycles" inputmode="numeric" placeholder="e.g. 30" autocomplete="off">
+        <label for="lvr-per">LVR per round trip — token B (model)</label>
+        <input id="lvr-per" readonly placeholder="—" autocomplete="off">
+        <label for="lvr-total">Total LVR over all trips — token B (model)</label>
+        <input id="lvr-total" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model the round trip</button>
+        <p id="lvr-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1270,6 +1289,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=61"></script>
+<script src="app.js?v=62"></script>
 </body>
 </html>

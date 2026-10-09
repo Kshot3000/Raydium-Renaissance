@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus fifty-two fully
+/* Raydium Renaissance hub logic: project filtering plus fifty-three fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -29,7 +29,8 @@
    planner from token B, a CLMM single-sided zap-out
    planner to token B, a single-sided zap-in planner
    from token B, a single-sided zap-out planner
-   to token B, and a fee compounding calculator.
+   to token B, a fee compounding calculator, and a
+   loss-versus-rebalancing round-trip calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3235,8 +3236,71 @@ function feeCompounding(depositStr, aprPctStr, compoundsStr, yearsStr) {
   return result;
 }
 
+/* ---------- 53 · Loss-versus-rebalancing (LVR) round-trip calculator ---------- */
+/* Impermanent loss (Tool 2) compares an LP position with holding at the
+   END price only, so a price that rises and then falls straight back
+   scores exactly zero there — yet the LP did lose money on the trip.
+   Arbitrageurs traded against the pool's stale price on BOTH legs and
+   kept the difference: that path-dependent cost is loss-versus-
+   rebalancing. The benchmark is a portfolio that holds the pool's own
+   reserves but rebalances them at the external price; on each leg its
+   advantage over the pool is (value of the pre-leg reserves at the new
+   price) − (the pool's value at that price), which is Tool 27's own
+   holdValueInB − lpValueInB, so both legs here are Tool 27 verbatim:
+   up by a multiple m, then back by 1/m to exactly the start price.
+   The reserves after a full round trip are the starting reserves
+   again (k never changed and the price is home), so every identical
+   cycle costs exactly the same and the total is per-cycle × cycles.
+   Closed forms agree: the up leg is Rb·(√m − 1)² and the down leg
+   that divided by √m. Gross of fees — arbitrageurs in a live pool
+   pay the swap fee, part of which reaches LPs and offsets some of
+   this; the fee tools (3/13) estimate that offset separately. A real
+   price path is many unequal steps, not identical round trips, and
+   no step here is a trade anyone can place. Educational model only —
+   your reserves and excursion inputs, not live pool data, not a live
+   quote, not financial advice. */
+function lvrRoundTrip(reserveAStr, reserveBStr, movePctStr, cyclesStr) {
+  var required = [reserveAStr, reserveBStr, movePctStr, cyclesStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var ra = Number(reserveAStr), rb = Number(reserveBStr);
+  var move = Number(movePctStr), cycles = Number(cyclesStr);
+  if (![ra, rb, move, cycles].every(Number.isFinite)) return null;
+  if (ra <= 0 || rb <= 0) return null;
+  if (move <= 0 || move > 10000) return null;
+  if (!Number.isInteger(cycles) || cycles < 1 || cycles > 10000) return null;
+  var m = 1 + move / 100;
+  var up = cpReservesAfterMove(ra, rb, m);
+  if (up === null) return null;
+  var down = cpReservesAfterMove(up.newReserveA, up.newReserveB, 1 / m);
+  if (down === null) return null;
+  var lvrUp = up.holdValueInB - up.lpValueInB;
+  var lvrDown = down.holdValueInB - down.lpValueInB;
+  var perCycle = lvrUp + lvrDown;
+  var positionValue = ra * up.startPrice + rb;
+  var result = {
+    reserveA: ra, reserveB: rb, movePct: move, multiplier: m, cycles: cycles,
+    startPrice: up.startPrice, topPrice: up.newPrice,
+    topReserveA: up.newReserveA, topReserveB: up.newReserveB,
+    lvrUpInB: lvrUp, lvrDownInB: lvrDown,
+    upLegIlPct: -up.ilPct, downLegIlPct: -down.ilPct,
+    perCycleInB: perCycle, perCyclePct: (perCycle / positionValue) * 100,
+    totalInB: perCycle * cycles, totalPctOfPosition: (perCycle * cycles / positionValue) * 100,
+    positionValueInB: positionValue,
+    finalReserveA: down.newReserveA, finalReserveB: down.newReserveB,
+    finalValueInB: down.lpValueInB
+  };
+  var fields = Object.keys(result);
+  for (var k = 0; k < fields.length; k++) {
+    if (!Number.isFinite(result[fields[k]])) return null;
+  }
+  if (!(result.lvrUpInB >= 0) || !(result.lvrDownInB >= 0)) return null;
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -4853,6 +4917,32 @@ if (typeof document !== "undefined") {
           fmt(res.simpleFinal, 6) + ", so compounding adds ≈ " + fmt(res.compoundingGain, 6) + ". That gap assumes the APR never changes on a growing balance, which in a live pool it will — volume, TVL, your share and time in range all move, impermanent loss is not modelled here, and each real reinvestment costs a transaction. A fee compounding model, not a live Raydium yield — not financial advice.";
         document.getElementById("cmp-apy").value = fmt(res.apyPct, 4);
         document.getElementById("cmp-final").value = fmt(res.finalValue, 6);
+      }
+    });
+
+    /* --- loss-versus-rebalancing round-trip calculator --- */
+    document.getElementById("lvr-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = lvrRoundTrip(
+        document.getElementById("lvr-ra").value,
+        document.getElementById("lvr-rb").value,
+        document.getElementById("lvr-move").value,
+        document.getElementById("lvr-cycles").value
+      );
+      var out = document.getElementById("lvr-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, a price excursion above 0 and at most 10000% (the price rises by that much, then falls straight back), and a whole number of round trips between 1 and 10000.";
+        document.getElementById("lvr-per").value = "";
+        document.getElementById("lvr-total").value = "";
+      } else {
+        out.textContent = "Model output: from ≈ " + fmt(res.reserveA, 6) + " A / ≈ " + fmt(res.reserveB, 6) + " B at ≈ " + fmt(res.startPrice, 6) +
+          " B per A, one round trip up " + fmt(res.movePct, 4) + "% to ≈ " + fmt(res.topPrice, 6) + " and straight back costs the LP ≈ " + fmt(res.perCycleInB, 6) +
+          " B to arbitrageurs — ≈ " + fmt(res.lvrUpInB, 6) + " B on the way up, ≈ " + fmt(res.lvrDownInB, 6) + " B on the way down — ≈ " + fmt(res.perCyclePct, 4) +
+          "% of the position's ≈ " + fmt(res.positionValueInB, 6) + " B value per trip, even though the price ends exactly where it started and tool 2's end-price impermanent loss is zero. Over " +
+          fmt(res.cycles, 0) + " identical trip(s) that is ≈ " + fmt(res.totalInB, 6) + " B (≈ " + fmt(res.totalPctOfPosition, 4) +
+          "% of the starting position value), while the pool's reserves return to where they began. This is gross of fees — arbitrageurs in a live pool pay the swap fee and part of it reaches LPs, offsetting some of this; a real price path is many unequal steps, not identical round trips. A loss-versus-rebalancing model, not live pool data — not financial advice.";
+        document.getElementById("lvr-per").value = fmt(res.perCycleInB, 6);
+        document.getElementById("lvr-total").value = fmt(res.totalInB, 6);
       }
     });
 
