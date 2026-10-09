@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=85"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=86"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1357,7 +1357,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists sixty-eight tools", readme.includes("sixty-eight pool tools") || readme.includes("all sixty-eight"));
+check("README lists sixty-nine tools", readme.includes("sixty-nine pool tools") || readme.includes("all sixty-nine"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2000,8 +2000,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts sixty-eight tools and names the weighted-pool net return calculator",
-  appSrc.includes("plus sixty-eight fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, and a weighted-pool net\n   return calculator.\n   These are educational MODELS"));
+check("app.js header counts sixty-nine tools and names the stableswap net return calculator",
+  appSrc.includes("plus sixty-nine fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, and a stableswap net\n   return calculator.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -3992,6 +3992,67 @@ check("wnet handler wired to its own form", appSrc.includes('getElementById("wne
 check("wnet honesty: bet-not-shield and not-live labels", html.includes("it is a bet, not a shield") && html.includes("not live pool data, not a live quote, not financial advice"));
 check("guide covers weighted net return", guide.includes("Settle a weighted position against holding, not against its deposit"));
 check("README lists tool 68", readme.includes("68. **Weighted-pool net return calculator**"));
+
+
+/* ---------- Tool 69: Stableswap net return calculator (SNET) ---------- */
+const sn1 = app.stableNetReturn("1000", "1000", "100", "0.9", "10", "0");
+near("SNET headline deposit at starting spot", sn1.depositValueA, 200, 1e-9);
+near("SNET headline hold value = Tool 61 pro-rata", sn1.holdValueA, 190, 1e-9);
+near("SNET headline LP value = Tool 61 pro-rata", sn1.lpValueA, 183.57243343067023, 1e-9);
+near("SNET headline hurdle", sn1.feesNeeded, 6.42756656932977, 1e-9);
+near("SNET headline loss pct = Tool 61 verbatim", sn1.lossPct, -3.3829297733314667, 1e-12);
+near("SNET headline no-fees net vs hold", sn1.netVsHoldA, -6.42756656932977, 1e-9);
+near("SNET headline net return vs deposit splits from vs-hold", sn1.netReturnPct, -8.213783284664885, 1e-9);
+check("SNET headline verdict behind, coverage 0", sn1.verdict === "behind" && sn1.feesCoveragePct === 0 && sn1.netReturnPct < sn1.netVsHoldPct);
+const snEven = app.stableNetReturn("1000", "1000", "100", "0.9", "10", String(sn1.feesNeeded));
+check("SNET fees = hurdle settles even with holding", snEven.verdict === "even" && Math.abs(snEven.netVsHoldA) < 1e-6);
+near("SNET even coverage is 100%", snEven.feesCoveragePct, 100, 1e-6);
+near("SNET even-with-holding is still -5% vs deposit (holding fell too)", snEven.netReturnPct, -5, 1e-6);
+const sn2x = app.stableNetReturn("1000", "1000", "100", "0.9", "10", String(2 * sn1.feesNeeded));
+check("SNET double-hurdle verdict ahead, coverage 200%", sn2x.verdict === "ahead" && Math.abs(sn2x.feesCoveragePct - 200) < 1e-6 && Math.abs(sn2x.netVsHoldA - sn1.feesNeeded) < 1e-6);
+const snPeg0 = app.stableNetReturn("1000", "1000", "100", "1", "10", "0");
+check("SNET peg holds, no fees: even, hurdle 0, coverage null", snPeg0.verdict === "even" && snPeg0.feesNeeded === 0 && snPeg0.feesCoveragePct === null && snPeg0.depositValueA === 200);
+const snPeg = app.stableNetReturn("1000", "1000", "100", "1", "10", "5");
+check("SNET peg holds, 5 A fees: ahead by the fees, +2.5% on deposit", snPeg.verdict === "ahead" && snPeg.netVsHoldA === 5 && snPeg.netReturnPct === 2.5);
+const snUp = app.stableNetReturn("1000", "1000", "100", "1.1", "10", "0");
+near("SNET price above spot hold value", snUp.holdValueA, 210, 1e-9);
+near("SNET price above spot hurdle (reverse drain)", snUp.feesNeeded, 6.268172217424308, 1e-9);
+check("SNET price above spot: up on deposit yet behind holding", snUp.netReturnPct > 0 && snUp.verdict === "behind");
+near("SNET hurdle grows with amp: A1", app.stableNetReturn("1000", "1000", "1", "0.9", "10", "0").feesNeeded, 0.5252347737445859, 1e-9);
+near("SNET hurdle grows with amp: A5000", app.stableNetReturn("1000", "1000", "5000", "0.9", "10", "0").feesNeeded, 9.41392304348372, 1e-9);
+/* composition: every SNET figure must equal Tool 61's own values pro-rata */
+for (const combo of [["1000", "1000", "100", "0.9", "10"], ["1000", "1000", "1", "0.95", "25"], ["1000", "500", "100", "0.9", "20"], ["2000", "1000", "50", "1.05", "5"], ["500", "1500", "5000", "0.8", "100"], ["1000", "1000", "100", "1.1", "33.5"]]) {
+  const s = app.stableNetReturn(combo[0], combo[1], combo[2], combo[3], combo[4], "7.5");
+  const d = app.stableDepegLoss(combo[0], combo[1], combo[2], combo[3]);
+  const sh = Number(combo[4]) / 100;
+  check("SNET composes Tool 61 @" + combo.join("/"),
+    s !== null && d !== null &&
+    Math.abs(s.holdValueA - sh * d.holdValueA) < 1e-9 &&
+    Math.abs(s.lpValueA - sh * d.lpValueA) < 1e-9 &&
+    Math.abs(s.feesNeeded - sh * (d.holdValueA - d.lpValueA)) < 1e-9 &&
+    Math.abs(s.lossPct - d.lossPct) < 1e-12 &&
+    Math.abs(s.depositValueA - sh * (d.reserveA + d.startSpotB * d.reserveB)) < 1e-9 &&
+    Math.abs(s.netLpValueA - (s.lpValueA + 7.5)) < 1e-12);
+}
+const sn25 = app.stableNetReturn("1000", "1000", "100", "0.9", "25", "0");
+near("SNET hurdle scales linearly with share", sn25.feesNeeded, 2.5 * sn1.feesNeeded, 1e-9);
+near("SNET loss pct is share-invariant", sn25.lossPct, sn1.lossPct, 1e-12);
+const sn100 = app.stableNetReturn("1000", "1000", "100", "0.9", "100", "0");
+near("SNET 100% share equals Tool 61 whole-pool LP value", sn100.lpValueA, app.stableDepegLoss("1000", "1000", "100", "0.9").lpValueA, 1e-9);
+const snMore = app.stableNetReturn("1000", "1000", "100", "0.9", "10", "100000");
+check("SNET fees don't move hold/LP/hurdle", snMore.holdValueA === sn1.holdValueA && snMore.lpValueA === sn1.lpValueA && snMore.feesNeeded === sn1.feesNeeded && snMore.verdict === "ahead");
+check("SNET rejects share at/over the edges", app.stableNetReturn("1000", "1000", "100", "0.9", "0", "0") === null && app.stableNetReturn("1000", "1000", "100", "0.9", "101", "0") === null && app.stableNetReturn("1000", "1000", "100", "0.9", "-5", "0") === null);
+check("SNET rejects bad share and fees", app.stableNetReturn("1000", "1000", "100", "0.9", "", "0") === null && app.stableNetReturn("1000", "1000", "100", "0.9", null, "0") === null && app.stableNetReturn("1000", "1000", "100", "0.9", "10", "-1") === null && app.stableNetReturn("1000", "1000", "100", "0.9", "10", "xyz") === null && app.stableNetReturn("1000", "1000", "100", "0.9", "10", "") === null && app.stableNetReturn("1000", "1000", "100", "0.9", "10", null) === null);
+check("SNET rejects bad pool inputs via Tool 61", app.stableNetReturn("0", "1000", "100", "0.9", "10", "0") === null && app.stableNetReturn("1000", "1000", "0", "0.9", "10", "0") === null && app.stableNetReturn("1000", "1000", "100", "0", "10", "0") === null && app.stableNetReturn("1000", "1000", "100", "", "10", "0") === null);
+check("SNET settles via tool 61 in source", appSrc.includes("var dep = stableDepegLoss("));
+check("all snet controls labelled",
+  ["snet-ra", "snet-rb", "snet-amp", "snet-price", "snet-share", "snet-fees", "snet-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("snet tool present in index.html", html.includes('id="snet-calc"') && html.includes('id="snet-result"'));
+check("snet handler wired to its own form", appSrc.includes('getElementById("snet-calc")') && appSrc.includes('getElementById("snet-result")'));
+check("snet honesty: split baselines and not-live labels", html.includes("fees that cover the hurdle still leave it down against the deposit") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers stableswap net return", guide.includes("Settle a stable position against holding AND against its deposit"));
+check("README lists tool 69", readme.includes("69. **Stableswap net return calculator**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

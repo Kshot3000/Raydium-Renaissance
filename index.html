@@ -1564,6 +1564,27 @@
         <button type="submit" class="btn primary">Settle the weighted position</button>
         <p id="wnet-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="snet-calc">
+        <h3>69 · Stableswap net return calculator</h3>
+        <p>Tools 24, 29 and 68 settle a position — its value plus the fees actually earned, against simply holding — for a constant-product pool, a CLMM position and a weighted pool; this settles the stableswap pools of tool 58 the same way, built on tool 61's own depeg loss so the halves cannot drift. Your share of the pool takes tool 61's whole-pool values pro-rata, and the deposit baseline is that share's value at the pool's own starting spot — which is why the two bottom lines split on a depeg: at a 0.90 depeg of a balanced 1,000/1,000 pool at A = 100, a 10% share worth 200 A at entry is worth 190 A held (the depeg hurt the held token too) and ≈183.5724 A as an LP, so it is ≈6.4276 A behind holding yet ≈−8.21% against its own deposit, and fees that cover the hurdle still leave it down against the deposit. The hurdle grows with the amplification, because a higher A defends par longer. Fees are counted in token A terms outside the position, and tool 61's no-fee arbitrage shape is inherited, so the hurdle is the gross shape. Educational model only — your reserves, amplification, depeg price, share and fee inputs; not live pool data, not a live quote, not financial advice.</p>
+        <label for="snet-ra">Reserve of token A</label>
+        <input id="snet-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="snet-rb">Reserve of token B</label>
+        <input id="snet-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="snet-amp">Amplification A (pool property, above 0)</label>
+        <input id="snet-amp" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="snet-price">External price of token B, in token A (1 = peg holds)</label>
+        <input id="snet-price" inputmode="decimal" placeholder="e.g. 0.9" autocomplete="off">
+        <label for="snet-share">Your share of the pool (percent, above 0 and at most 100)</label>
+        <input id="snet-share" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="snet-fees">Fees earned, in token A (counted outside the position)</label>
+        <input id="snet-fees" inputmode="decimal" placeholder="e.g. 5" autocomplete="off">
+        <label for="snet-out">Net vs holding in token A (model, negative = behind)</label>
+        <input id="snet-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Settle the stableswap position</button>
+        <p id="snet-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1591,6 +1612,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=85"></script>
+<script src="app.js?v=86"></script>
 </body>
 </html>

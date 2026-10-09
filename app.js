@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus sixty-eight fully
+/* Raydium Renaissance hub logic: project filtering plus sixty-nine fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -41,7 +41,8 @@
    swap model, a weighted-pool price-impact
    sizer, a stableswap arbitrage model, a
    stableswap price-impact sizer, a curve
-   comparison model, and a weighted-pool net
+   comparison model, a weighted-pool net
+   return calculator, and a stableswap net
    return calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
@@ -4517,8 +4518,76 @@ function weightedNetReturn(weightAPctStr, priceRatioStr, depositStr, feesStr) {
   };
 }
 
+/* ---------- 69 · Stableswap net return calculator ---------- */
+/* Tools 24, 29 and 68 settle a position — LP value plus the fees
+   actually earned, against simply holding — for a constant-product
+   pool, a CLMM position and a weighted pool. This is the same
+   settlement for the stableswap pools of tool 58, and the last
+   curve family without one. It is built entirely on tool 61's own
+   stableDepegLoss: the user's share of the pool takes that tool's
+   whole-pool hold and LP values pro-rata, so the hurdle is the
+   share of tool 61's depeg loss and the settlement can never drift
+   from the depeg tool it settles. The deposit baseline is the
+   share's value at the pool's own starting spot (reserveA +
+   startSpot x reserveB, pro-rata), which is what makes the two
+   bottom lines differ on a depeg: at a 0.90 depeg of a balanced
+   1,000/1,000 pool at A = 100, a 10% share was worth 200 A at
+   entry; holding is worth 190 A (the depeg hurt the held token
+   too, -5%), the LP share 183.5724 A, so the position is 6.4276 A
+   behind holding (-3.3829%, tool 61's figure) and -8.2138% against
+   its own deposit. Fees that cover the hurdle still leave the
+   position down against its deposit, because holding fell too.
+   The hurdle grows with the amplification exactly as tool 61's
+   loss does (per 200 A of deposit share at the 0.90 depeg:
+   0.5252 A at A = 1, 6.4276 A at A = 100, 9.4139 A at A = 5,000).
+   A price above the starting spot runs the same settlement the
+   other way (tool 61's reverse drain). At the peg the hurdle is
+   0 and coverage is honestly null (nothing to cover), not a
+   made-up percentage. Model only — fees counted in token A terms
+   outside the position, no compounding; tool 61's no-fee
+   arbitrage assumption is inherited, so live fees slow the drain
+   slightly and the hurdle is the gross shape. Not financial
+   advice. */
+function stableNetReturn(reserveAStr, reserveBStr, ampStr, priceBStr, sharePctStr, feesStr) {
+  if (sharePctStr == null || String(sharePctStr).trim() === "") return null;
+  if (feesStr == null || String(feesStr).trim() === "") return null;
+  var dep = stableDepegLoss(reserveAStr, reserveBStr, ampStr, priceBStr);
+  if (dep === null) return null;
+  var sharePct = Number(sharePctStr), fees = Number(feesStr);
+  if (!Number.isFinite(sharePct) || sharePct <= 0 || sharePct > 100) return null;
+  if (!Number.isFinite(fees) || fees < 0) return null;
+  var share = sharePct / 100;
+  var depositValueA = share * (dep.reserveA + dep.startSpotB * dep.reserveB);
+  if (!(depositValueA > 0)) return null;
+  var holdValueA = share * dep.holdValueA;
+  var lpValueA = share * dep.lpValueA;
+  var feesNeeded = holdValueA - lpValueA;
+  var netLpValueA = lpValueA + fees;
+  var netVsHoldA = netLpValueA - holdValueA;
+  var tol = 1e-9 * Math.max(1, holdValueA);
+  var result = {
+    reserveA: dep.reserveA, reserveB: dep.reserveB, amp: dep.amp, priceB: dep.priceB,
+    startSpotB: dep.startSpotB, endSpotB: dep.endSpotB,
+    newReserveA: dep.newReserveA, newReserveB: dep.newReserveB,
+    sharePct: sharePct, depositValueA: depositValueA,
+    holdValueA: holdValueA, lpValueA: lpValueA, lossPct: dep.lossPct,
+    feesEarned: fees, feesNeeded: feesNeeded,
+    feesCoveragePct: feesNeeded > 1e-9 ? fees / feesNeeded * 100 : null,
+    netLpValueA: netLpValueA, netVsHoldA: netVsHoldA,
+    netVsHoldPct: holdValueA > 0 ? netVsHoldA / holdValueA * 100 : 0,
+    netReturnPct: (netLpValueA - depositValueA) / depositValueA * 100,
+    verdict: Math.abs(netVsHoldA) <= tol ? "even" : (netVsHoldA > 0 ? "ahead" : "behind")
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    var v = result[fields[j]];
+    if (typeof v === "number" && !Number.isFinite(v)) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, weightedNetReturn, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, weightedNetReturn, stableNetReturn, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -6584,6 +6653,40 @@ if (typeof document !== "undefined") {
           ". Against the $" + fmt(res.deposit, 2) + " deposit itself that is a net return of " + fmt(res.netReturnPct, 2) +
           "% — a different bottom line: weighting toward the token that rose shrinks the hurdle but never removes it, and a position can be well up on its deposit and still behind holding. At a 50% weight this is tool 24's constant-product settlement exactly. A weighted-pool net-return model, not a live Raydium quote — fees are counted in $ terms outside the pool, with no compounding modelled. Weighted pools are a generalised design used elsewhere; Raydium's own pools are the 50/50 case. Not financial advice.";
         document.getElementById("wnet-out").value = fmt(res.netVsHold, 2);
+      }
+    });
+
+    /* --- Stableswap net return calculator --- */
+    document.getElementById("snet-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = stableNetReturn(
+        document.getElementById("snet-ra").value,
+        document.getElementById("snet-rb").value,
+        document.getElementById("snet-amp").value,
+        document.getElementById("snet-price").value,
+        document.getElementById("snet-share").value,
+        document.getElementById("snet-fees").value
+      );
+      var out = document.getElementById("snet-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, an amplification above 0, an external price for token B (in token A) above 0, a pool share above 0% and at most 100%, and the fees you've earned in token A (0 or more). A price the curve cannot reach is rejected, not extrapolated.";
+        document.getElementById("snet-out").value = "";
+      } else {
+        var verdictText = res.verdict === "ahead"
+          ? "≈ " + fmt(res.netVsHoldA, 4) + " A ahead of holding (" + fmt(res.netVsHoldPct, 2) + "%)"
+          : res.verdict === "behind"
+            ? "≈ " + fmt(0 - res.netVsHoldA, 4) + " A behind holding (" + fmt(res.netVsHoldPct, 2) + "%)"
+            : "exactly even with holding (0 A either way)";
+        out.textContent = "Model output: your " + fmt(res.sharePct, 4) + "% share was worth ≈ " + fmt(res.depositValueA, 4) +
+          " A at the pool's starting spot of ≈ " + fmt(res.startSpotB, 6) + " A per B. At an external price of ≈ " + fmt(res.priceB, 6) +
+          " A per B, holding that share would be worth ≈ " + fmt(res.holdValueA, 4) + " A and the LP share ≈ " + fmt(res.lpValueA, 4) +
+          " A — a depeg loss of " + fmt(res.lossPct, 2) + "% vs holding (tool 61), so ≈ " + fmt(res.feesNeeded, 4) +
+          " A in fees breaks even. Adding your ≈ " + fmt(res.feesEarned, 4) + " A in fees" +
+          (res.feesCoveragePct !== null ? " (" + fmt(res.feesCoveragePct, 2) + "% of that hurdle)" : "") +
+          " brings the position to ≈ " + fmt(res.netLpValueA, 4) + " A — " + verdictText +
+          ". Against the ≈ " + fmt(res.depositValueA, 4) + " A deposit itself that is a net return of " + fmt(res.netReturnPct, 2) +
+          "% — a different bottom line: on a depeg holding falls too, so covering the hurdle can still leave the position down against its deposit. The hurdle grows with the amplification, because a higher A defends par longer. A stableswap net-return model, not a live Raydium quote — fees are counted in token A terms outside the pool, with no compounding modelled, and tool 61's no-fee arbitrage shape is inherited. Not financial advice.";
+        document.getElementById("snet-out").value = fmt(res.netVsHoldA, 4);
       }
     });
 
