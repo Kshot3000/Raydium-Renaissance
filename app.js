@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus sixty-three fully
+/* Raydium Renaissance hub logic: project filtering plus sixty-four fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -37,8 +37,9 @@
    swap model, a stableswap exact-out swap model, a
    weighted-pool impermanent-loss calculator, a
    stableswap depeg-loss calculator, a weighted-pool
-   arbitrage model, and a weighted-pool exact-out
-   swap model.
+   arbitrage model, a weighted-pool exact-out
+   swap model, and a weighted-pool price-impact
+   sizer.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3594,6 +3595,87 @@ function weightedSwapExactOut(reserveInStr, reserveOutStr, weightInPctStr, amoun
   return result;
 }
 
+/* ---------- 64 · Weighted-pool price-impact sizer ---------- */
+/* Tool 17's question for the weighted pools of Tool 56: how much
+   can go in before the trade's own price impact reaches a cap?
+   Tool 56 measures impact Tool 1's way — 1 minus the effective
+   price (out divided by the GROSS input, fee included) over the
+   weighted spot — so with u the fraction of the input reserve
+   surviving the trade (u = reserveIn / (reserveIn + netIn)) the
+   cap condition 1 - impact = (1 - feeFrac) x u(1 - u^e) /
+   (e(1 - u)), with e = wIn/wOut, has no closed form once the
+   weight leaves 50%: the left factor g(u) = u(1 - u^e)/(1 - u)
+   rises monotonically from 0 to e on (0, 1) (verified numerically
+   in tests), so the root is bisected and the trade rebuilt from
+   it — netIn = reserveIn(1 - u)/u, grossed back up for the fee,
+   out in Tool 56's own cancellation-free expm1 form. At 50/50
+   g(u) = u exactly and the answer collapses to Tool 17's closed
+   form (asserted against priceImpactSizer in tests to ~1e-15);
+   feeding the sized input through Tool 56 returns the cap as the
+   impact across a weight/cap/fee sweep (also asserted). The
+   honest edges mirror Tool 17's: a cap at or below the fee tier
+   admits NO trade at any weight — the fee alone spends the whole
+   cap, since even a dust trade's impact is exactly the fee — and
+   the weight is inside the price, so the same cap admits very
+   different trades at different weights (zero fee, 10% cap,
+   balanced 1,000/1,000: at an 80% input weight, spot 4, only
+   ~43.5180 goes in but ~156.6649 comes out; at 20%, spot 0.25,
+   ~181.5623 goes in for ~40.8515 out). The maths is floating
+   point. Educational model only — your reserves, weights and
+   cap, not live pool data, not a live quote, not financial
+   advice. */
+function weightedImpactSizer(reserveInStr, reserveOutStr, weightInPctStr, maxImpactPctStr, feeBps) {
+  var raw = [reserveInStr, reserveOutStr, weightInPctStr, maxImpactPctStr, feeBps];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var reserveIn = Number(reserveInStr), reserveOut = Number(reserveOutStr);
+  var weightInPct = Number(weightInPctStr), capPct = Number(maxImpactPctStr);
+  var fee = Number(feeBps);
+  if (![reserveIn, reserveOut, weightInPct, capPct].every(Number.isFinite)) return null;
+  if (reserveIn <= 0 || reserveOut <= 0) return null;
+  if (weightInPct <= 0 || weightInPct >= 100) return null;
+  if (capPct <= 0 || capPct >= 100) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var wIn = weightInPct / 100, wOut = 1 - wIn;
+  var exponent = wIn / wOut;
+  var feeFrac = fee / 10000, pFrac = capPct / 100;
+  var spotPrice = (reserveOut / wOut) / (reserveIn / wIn);
+  var base = { reserveIn: reserveIn, reserveOut: reserveOut,
+    weightInPct: weightInPct, weightOutPct: 100 - weightInPct,
+    exponent: exponent, spotPrice: spotPrice,
+    maxImpactPct: capPct, feeBps: fee, feeImpactPct: feeFrac * 100 };
+  if (pFrac <= feeFrac) {
+    return Object.assign(base, { feasible: false, maxAmountIn: 0, netIn: 0, amountOut: 0, actualImpactPct: feeFrac * 100 });
+  }
+  var target = exponent * (1 - pFrac) / (1 - feeFrac);
+  function g(u) { return u * (-Math.expm1(exponent * Math.log(u))) / (1 - u); }
+  var lo = 0, hi = 1;
+  for (var it = 0; it < 200; it++) {
+    var mid = (lo + hi) / 2;
+    if (g(mid) < target) lo = mid; else hi = mid;
+  }
+  var u = (lo + hi) / 2;
+  var netIn = reserveIn * (1 - u) / u;
+  var grossIn = netIn / (1 - feeFrac);
+  var out = -reserveOut * Math.expm1(exponent * Math.log(u));
+  if (!(grossIn > 0) || !(out > 0) || !(out < reserveOut)) return null;
+  var effectivePrice = out / grossIn;
+  var result = Object.assign(base, {
+    feasible: true,
+    maxAmountIn: grossIn, netIn: netIn, amountOut: out,
+    effectivePrice: effectivePrice,
+    actualImpactPct: (1 - effectivePrice / spotPrice) * 100,
+    postTradeSpotPrice: ((reserveOut - out) / wOut) / ((reserveIn + netIn) / wIn)
+  });
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    var v = result[fields[j]];
+    if (typeof v === "number" && !Number.isFinite(v)) return null;
+  }
+  return result;
+}
+
 /* ---------- 57 · CLMM range-order (limit-order) planner ---------- */
 /* A single-sided CLMM position placed entirely outside the current
    price is a limit order in LP clothing: a position in a range above
@@ -4085,7 +4167,7 @@ function weightedArbitrage(reserveAStr, reserveBStr, weightAPctStr, externalPric
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -6007,6 +6089,35 @@ if (typeof document !== "undefined") {
           ", a price impact of ≈ " + fmt(res.priceImpactPct, 4) + "%. At a 50% input weight this is exactly the constant-product exact-out model's answer. A weighted-pool exact-out model — not live pool data, not a live quote, not financial advice.";
         document.getElementById("wxo-ain").value = fmt(res.amountIn, 6);
         document.getElementById("wxo-spot").value = fmt(res.spotPrice, 6);
+      }
+    });
+
+    /* --- weighted-pool price-impact sizer --- */
+    document.getElementById("wis-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = weightedImpactSizer(
+        document.getElementById("wis-rin").value,
+        document.getElementById("wis-rout").value,
+        document.getElementById("wis-win").value,
+        document.getElementById("wis-cap").value,
+        document.getElementById("wis-fee").value
+      );
+      var out = document.getElementById("wis-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, an input-token weight between 0 and 100 (exclusive), a price-impact cap above 0% and below 100%, and a fee tier in whole basis points (0–9999).";
+        document.getElementById("wis-ain").value = "";
+        document.getElementById("wis-aout").value = "";
+      } else if (!res.feasible) {
+        out.textContent = "Model output: no trade fits. The cap of ≈ " + fmt(res.maxImpactPct, 4) + "% is at or below the fee tier of ≈ " + fmt(res.feeImpactPct, 4) + "% — even a dust trade's price impact is exactly the fee, because the fee is part of the impact measure, so the fee alone spends the whole cap at any input weight. Raise the cap or find a cheaper pool. A weighted-pool price-impact model — not live pool data, not a live quote, not financial advice.";
+        document.getElementById("wis-ain").value = "0";
+        document.getElementById("wis-aout").value = "0";
+      } else {
+        out.textContent = "Model output: the largest input that keeps the price impact at ≈ " + fmt(res.maxImpactPct, 4) + "% is ≈ " + fmt(res.maxAmountIn, 6) +
+          " in (≈ " + fmt(res.netIn, 6) + " after the fee reaches the pool), returning ≈ " + fmt(res.amountOut, 6) +
+          " out. The weighted spot price before the trade is ≈ " + fmt(res.spotPrice, 6) + " out per in — the weights are inside that quote — the effective price is ≈ " + fmt(res.effectivePrice, 6) +
+          ", and the trade moves the pool's own spot to ≈ " + fmt(res.postTradeSpotPrice, 6) + ". At a 50% input weight this is exactly tool 17's constant-product answer; at lopsided weights the same cap admits a very different trade, because the weight is part of the price. A weighted-pool price-impact model — not live pool data, not a live quote, not financial advice.";
+        document.getElementById("wis-ain").value = fmt(res.maxAmountIn, 6);
+        document.getElementById("wis-aout").value = fmt(res.amountOut, 6);
       }
     });
 

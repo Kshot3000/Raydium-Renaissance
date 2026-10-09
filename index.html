@@ -1465,6 +1465,27 @@
         <button type="submit" class="btn primary">Model this exact-out weighted swap</button>
         <p id="wxo-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="wis-calc">
+        <h3>64 · Weighted-pool price-impact sizer</h3>
+        <p>Tool 17's question for the weighted pools of tool 56: how much can go in before the trade's own price impact reaches a cap you set? Tool 56 measures impact as 1 minus the effective price (out divided by the gross input, fee included) over the weighted spot, and with u the fraction of the input reserve surviving the trade that condition reads (1 − fee) × u(1 − u<sup>e</sup>) ÷ (e(1 − u)) = 1 − cap, with e the weight ratio — no closed form once the weight leaves 50%, so the root is found numerically and the trade rebuilt from it. At a 50% input weight it collapses to tool 17's constant-product answer exactly (zero fee, a 10% cap on balanced 1,000/1,000 reserves: ≈111.1111 in for exactly 100 out). The honest edges mirror tool 17's: a cap at or below the fee tier admits no trade at any weight — even a dust trade's impact is exactly the fee, so the fee alone spends the whole cap — and the weight is inside the price, so the same cap admits very different trades at different weights: at that 10% cap and zero fee, an 80% input weight (spot 4) admits only ≈43.5180 in but pays ≈156.6649 out, while a 20% weight (spot 0.25) admits ≈181.5623 in for ≈40.8515 out. The maths is floating point. Weighted pools are a generalised design used elsewhere, modelled here for comparison — Raydium's own constant-product pools are the 50/50 case. Educational model only — your reserves, weights and cap; not live pool data, not a live quote, not financial advice.</p>
+        <label for="wis-rin">Reserve in (tokens)</label>
+        <input id="wis-rin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="wis-rout">Reserve out (tokens)</label>
+        <input id="wis-rout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="wis-win">Weight of the input token (%) — the output token takes the rest</label>
+        <input id="wis-win" inputmode="decimal" placeholder="e.g. 80 (50 = tool 17's pool)" autocomplete="off">
+        <label for="wis-cap">Maximum price impact you accept (%)</label>
+        <input id="wis-cap" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="wis-fee">Swap fee (basis points, 25 = 0.25%)</label>
+        <input id="wis-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="wis-ain">Largest amount in at that impact cap (model)</label>
+        <input id="wis-ain" readonly placeholder="—" autocomplete="off">
+        <label for="wis-aout">Amount out that trade returns (model)</label>
+        <input id="wis-aout" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Size this weighted trade</button>
+        <p id="wis-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1492,6 +1513,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=78"></script>
+<script src="app.js?v=79"></script>
 </body>
 </html>

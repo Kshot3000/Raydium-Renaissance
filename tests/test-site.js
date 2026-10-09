@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=78"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=79"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists sixty-three tools", readme.includes("sixty-three pool tools") || readme.includes("all sixty-three"));
+check("README lists sixty-four tools", readme.includes("sixty-four pool tools") || readme.includes("all sixty-four"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts sixty-three tools and names the weighted-pool exact-out swap model",
-  appSrc.includes("plus sixty-three fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, and a weighted-pool exact-out\n   swap model.\n   These are educational MODELS"));
+check("app.js header counts sixty-four tools and names the weighted-pool price-impact sizer",
+  appSrc.includes("plus sixty-four fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, and a weighted-pool price-impact\n   sizer.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -3540,6 +3540,90 @@ check("wxo tool present in index.html", html.includes('id="wxo-calc"') && html.i
 check("wxo honesty: asymptotic ceiling and not-live labels", html.includes("a target at or above the whole output reserve is impossible on this curve") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers weighted-pool exact-out", guide.includes("the weight sets how fast the cost explodes"));
 check("README lists tool 63", readme.includes("63. **Weighted-pool exact-out swap model**"));
+
+/* ---------- Tool 64: Weighted-pool price-impact sizer (WIS) ---------- */
+const wis1 = app.weightedImpactSizer("1000", "1000", "50", "10", 0);
+check("WIS headline is feasible", wis1 !== null && wis1.feasible === true);
+near("WIS zero-fee 50/50 gross in at a 10% cap", wis1.maxAmountIn, 111.11111111111111, 1e-6);
+near("WIS zero-fee 50/50 out at a 10% cap", wis1.amountOut, 100, 1e-6);
+near("WIS headline actual impact is the cap", wis1.actualImpactPct, 10, 1e-9);
+near("WIS headline spot", wis1.spotPrice, 1, 1e-12);
+near("WIS headline post-trade spot", wis1.postTradeSpotPrice, 0.81, 1e-9);
+/* At 50/50 the bisected root must collapse to tool 17's closed form. */
+for (const [ri, ro, cap, fee] of [[1000, 1000, 10, 25], [1000, 4000, 5, 25], [500, 2000, 25, 100], [10000, 250, 1, 0], [1000, 1000, 50, 25]]) {
+  const a = app.weightedImpactSizer(String(ri), String(ro), "50", String(cap), fee);
+  const b = app.priceImpactSizer(String(ri), String(ro), String(cap), fee);
+  check("WIS 50/50 gross equals tool 17 at " + ri + "/" + ro + " cap " + cap + " fee " + fee,
+    Math.abs(a.maxAmountIn - b.maxAmountIn) / b.maxAmountIn < 1e-9);
+  check("WIS 50/50 out equals tool 17 at " + ri + "/" + ro + " cap " + cap + " fee " + fee,
+    Math.abs(a.amountOut - b.amountOut) / b.amountOut < 1e-9);
+}
+/* The sized trade, run through tool 56 itself, lands on the cap. */
+for (const w of [5, 20, 50, 80, 95]) {
+  for (const cap of [1, 5, 10, 25, 60]) {
+    for (const fee of [0, 25, 100]) {
+      if (cap <= fee / 100) continue;
+      const s = app.weightedImpactSizer("1000", "1000", String(w), String(cap), fee);
+      const sw = s && app.weightedSwap("1000", "1000", String(w), String(s.maxAmountIn), fee);
+      check("WIS sized trade hits the cap at w" + w + " cap " + cap + " fee " + fee,
+        s !== null && s.feasible && Math.abs(s.actualImpactPct - cap) < 1e-6 &&
+        sw !== null && Math.abs(sw.priceImpactPct - cap) < 1e-6 &&
+        Math.abs(sw.out - s.amountOut) / s.amountOut < 1e-9);
+    }
+  }
+}
+/* The weight is inside the price: lopsided weights admit different trades. */
+const wis80 = app.weightedImpactSizer("1000", "1000", "80", "10", 0);
+const wis20 = app.weightedImpactSizer("1000", "1000", "20", "10", 0);
+near("WIS w80 spot", wis80.spotPrice, 4, 1e-9);
+near("WIS w80 gross in", wis80.maxAmountIn, 43.51803585007562, 1e-6);
+near("WIS w80 out", wis80.amountOut, 156.6649290602723, 1e-6);
+near("WIS w20 spot", wis20.spotPrice, 0.25, 1e-12);
+near("WIS w20 gross in", wis20.maxAmountIn, 181.56234034448536, 1e-6);
+near("WIS w20 out", wis20.amountOut, 40.851526577509205, 1e-6);
+check("WIS gross-in ordering by weight", wis80.maxAmountIn < wis1.maxAmountIn && wis1.maxAmountIn < wis20.maxAmountIn);
+check("WIS post-trade spot is the weighted spot at the new reserves",
+  Math.abs(wis80.postTradeSpotPrice - ((1000 - wis80.amountOut) / 0.2) / ((1000 + wis80.netIn) / 0.8)) < 1e-9);
+/* A cap at or below the fee tier admits no trade, at any weight. */
+for (const w of [20, 50, 80]) {
+  const s = app.weightedImpactSizer("1000", "1000", String(w), "0.25", 25);
+  check("WIS cap equal to the fee is infeasible at w" + w, s !== null && s.feasible === false && s.maxAmountIn === 0 && Math.abs(s.feeImpactPct - 0.25) < 1e-12);
+}
+check("WIS cap below the fee is infeasible", app.weightedImpactSizer("1000", "1000", "50", "0.1", 25).feasible === false);
+check("WIS cap equal to a 100 bps fee is infeasible", app.weightedImpactSizer("1000", "1000", "50", "1", 100).feasible === false);
+/* Token-swap mirror: reciprocal spots. */
+const wisM1 = app.weightedImpactSizer("1000", "4000", "80", "10", 25);
+const wisM2 = app.weightedImpactSizer("4000", "1000", "20", "10", 25);
+near("WIS mirror spots are reciprocal", wisM1.spotPrice * wisM2.spotPrice, 1, 1e-9);
+/* A 10x deeper pool admits a 10x trade at the same cap and weight. */
+const wisD = app.weightedImpactSizer("10000", "10000", "80", "10", 25);
+const wisS = app.weightedImpactSizer("1000", "1000", "80", "10", 25);
+near("WIS 10x pool admits 10x the trade", wisD.maxAmountIn / wisS.maxAmountIn, 10, 1e-9);
+check("WIS rejects blank and junk",
+  app.weightedImpactSizer("", "1000", "50", "10", 25) === null &&
+  app.weightedImpactSizer("1000", "1000", "abc", "10", 25) === null);
+check("WIS rejects non-positive inputs",
+  app.weightedImpactSizer("0", "1000", "50", "10", 25) === null &&
+  app.weightedImpactSizer("1000", "-5", "50", "10", 25) === null);
+check("WIS rejects weight at the edges",
+  app.weightedImpactSizer("1000", "1000", "0", "10", 25) === null &&
+  app.weightedImpactSizer("1000", "1000", "100", "10", 25) === null);
+check("WIS rejects cap at the edges",
+  app.weightedImpactSizer("1000", "1000", "50", "0", 25) === null &&
+  app.weightedImpactSizer("1000", "1000", "50", "100", 25) === null);
+check("WIS rejects bad fee",
+  app.weightedImpactSizer("1000", "1000", "50", "10", 25.5) === null &&
+  app.weightedImpactSizer("1000", "1000", "50", "10", -1) === null &&
+  app.weightedImpactSizer("1000", "1000", "50", "10", 10000) === null);
+check("WIS rejects an overflowing cap", app.weightedImpactSizer("1000", "1000", "50", "1e309", 0) === null);
+check("WIS handler bisects the impact condition", appSrc.includes("if (g(mid) < target) lo = mid; else hi = mid;"));
+check("all wis controls labelled",
+  ["wis-rin", "wis-rout", "wis-win", "wis-cap", "wis-fee", "wis-ain", "wis-aout"]
+    .every(id => html.includes(`for="${id}"`)));
+check("wis tool present in index.html", html.includes('id="wis-calc"') && html.includes('id="wis-result"'));
+check("wis honesty: fee-floor and not-live labels", html.includes("a cap at or below the fee tier admits no trade at any weight") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers weighted-pool impact sizing", guide.includes("read the weight as part of the price"));
+check("README lists tool 64", readme.includes("64. **Weighted-pool price-impact sizer**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
