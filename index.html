@@ -1262,6 +1262,23 @@
         <button type="submit" class="btn primary">Model the round trip</button>
         <p id="lvr-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="seed-calc">
+        <h3>54 · Pool seeding / initial-liquidity planner</h3>
+        <p>Every other tool here assumes a pool that already exists. Creating a constant-product pool is the one act where the depositor chooses the price — by choosing the amounts: the opening spot is simply token B ÷ token A in your seed, the two sides are worth exactly the same at that price by construction, and the amounts are the price — there is no separate price field to set. The LP tokens minted for the seed are the geometric mean √(A×B) of the two amounts, computed in exact scaled BigInt and floored at 9 dp the way on-chain programs floor, and a full holding of that supply redeems for exactly the seed through tool 18's maths. The trap is quiet: seed at a ratio the rest of the market does not trade at and the pool opens mispriced — give the planner a reference price you trust and it reports the gap, because arbitrageurs close a gap like that against your deposit in the first trades (tool 16 sizes that trade on an existing pool). Program-specific minimum-liquidity locks or burns are not modelled — a live program may keep a small part of the mint unwithdrawable, and no number is invented for it. Educational model only — your seed amounts, not live pool data; not a live quote, not financial advice.</p>
+        <label for="seed-a">Seed amount — token A</label>
+        <input id="seed-a" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="seed-b">Seed amount — token B</label>
+        <input id="seed-b" inputmode="decimal" placeholder="e.g. 400" autocomplete="off">
+        <label for="seed-ref">Reference price — token B per token A (optional)</label>
+        <input id="seed-ref" inputmode="decimal" placeholder="e.g. 4 — leave blank to skip the gap check" autocomplete="off">
+        <label for="seed-price">Opening spot price — token B per token A (model)</label>
+        <input id="seed-price" readonly placeholder="—" autocomplete="off">
+        <label for="seed-lp">LP tokens minted for the seed (model)</label>
+        <input id="seed-lp" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model the seed</button>
+        <p id="seed-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1289,6 +1306,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=63"></script>
+<script src="app.js?v=64"></script>
 </body>
 </html>

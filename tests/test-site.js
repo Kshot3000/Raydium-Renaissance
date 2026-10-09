@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=63"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=64"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists fifty-three tools", readme.includes("fifty-three pool tools") || readme.includes("all fifty-three"));
+check("README lists fifty-four tools", readme.includes("fifty-four pool tools") || readme.includes("all fifty-four"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts fifty-three tools and names the LVR round-trip calculator",
-  appSrc.includes("plus fifty-three fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, and a\n   loss-versus-rebalancing round-trip calculator.\n   These are educational MODELS"));
+check("app.js header counts fifty-four tools and names the pool seeding planner",
+  appSrc.includes("plus fifty-four fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator,\n   and a pool seeding / initial-liquidity planner.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -2834,6 +2834,76 @@ check("lvr tool present in index.html", html.includes('id="lvr-calc"') && html.i
 check("lvr honesty: gross-of-fees and not-live labels", html.includes("gross of fees") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers LVR", guide.includes("A flat end price does not mean a free trip"));
 check("README lists tool 53", readme.includes("53. **Loss-versus-rebalancing (LVR) round-trip calculator**"));
+
+/* ---------- 54 · Pool seeding / initial-liquidity planner ---------- */
+const seed1 = app.poolSeedPlan("100", "100", "");
+check("SEED balanced seed is not null", seed1 !== null);
+near("SEED balanced spot", seed1.spotPrice, 1, 1e-12);
+near("SEED balanced k", seed1.k, 10000, 1e-9);
+check("SEED balanced LP minted exactly 100", seed1.lpMinted === "100" && seed1.lpMintedNum === 100);
+near("SEED balanced total value in B", seed1.totalValueInB, 200, 1e-12);
+near("SEED balanced per-LP A", seed1.perLpA, 1, 1e-12);
+near("SEED balanced per-LP B", seed1.perLpB, 1, 1e-12);
+check("SEED no reference leaves the gap fields null", seed1.referencePrice === null && seed1.spotGapPct === null && seed1.refDirection === null);
+const seed2 = app.poolSeedPlan("100", "400", "");
+near("SEED 100/400 spot", seed2.spotPrice, 4, 1e-12);
+near("SEED 100/400 k", seed2.k, 40000, 1e-9);
+check("SEED 100/400 LP minted exactly 200", seed2.lpMinted === "200");
+near("SEED 100/400 total value in B", seed2.totalValueInB, 800, 1e-12);
+near("SEED 100/400 per-LP A", seed2.perLpA, 0.5, 1e-12);
+near("SEED 100/400 per-LP B", seed2.perLpB, 2, 1e-12);
+const seed3 = app.poolSeedPlan("1000", "250");
+near("SEED 1000/250 spot", seed3.spotPrice, 0.25, 1e-12);
+check("SEED 1000/250 LP minted exactly 500", seed3.lpMinted === "500");
+near("SEED 1000/250 per-LP A", seed3.perLpA, 2, 1e-12);
+near("SEED 1000/250 per-LP B", seed3.perLpB, 0.5, 1e-12);
+const seedNs = app.poolSeedPlan("100", "300", "");
+check("SEED non-square mint floors at 9 dp", seedNs.lpMinted === "173.205080756");
+near("SEED non-square mint within one scaled unit of sqrt(30000)", seedNs.lpMintedNum, Math.sqrt(30000), 1e-9);
+check("SEED dust seed mints one scaled unit", app.poolSeedPlan("0.000000001", "0.000000002", "").lpMinted === "0.000000001");
+check("SEED 1e12 square mints exactly", app.poolSeedPlan("1000000000000", "1000000000000", "").lpMinted === "1000000000000");
+/* reference-price gap */
+const seedBelow = app.poolSeedPlan("100", "100", "1.25");
+near("SEED seed below reference gap", seedBelow.spotGapPct, -20, 1e-9);
+check("SEED seed below reference direction", seedBelow.refDirection === "below" && seedBelow.referencePrice === 1.25);
+const seedAligned = app.poolSeedPlan("100", "400", "4");
+check("SEED aligned reference", seedAligned.refDirection === "aligned" && seedAligned.spotGapPct === 0);
+const seedAbove = app.poolSeedPlan("100", "400", "2");
+near("SEED seed above reference gap", seedAbove.spotGapPct, 100, 1e-9);
+check("SEED seed above reference direction", seedAbove.refDirection === "above");
+/* composition: tool 18 redeems a full holding of the minted supply for
+   exactly the seed; half the supply redeems half the seed */
+const seedRedeem = app.lpTokenValue("100", "400", seed2.lpMinted, seed2.lpMinted);
+check("SEED full mint redeems the seed exactly (tool 18)", seedRedeem !== null && seedRedeem.amountA === "100" && seedRedeem.amountB === "400" && seedRedeem.sharePct === 100);
+const seedHalf = app.lpTokenValue("100", "400", seed2.lpMinted, "100");
+check("SEED half the mint redeems half the seed (tool 18)", seedHalf !== null && seedHalf.amountA === "50" && seedHalf.amountB === "200" && seedHalf.sharePct === 50);
+/* composition: later deposits follow the seeded ratio (tool 5) and the
+   seeded reserves trade through tool 1 */
+check("SEED later deposits follow the seeded ratio (tool 5)", app.depositPlan("100", "400", "10").requiredB === "40");
+check("SEED seeded reserves trade (tool 1)", app.cpSwap("100", "400", "10", 25).out === "36.280972948");
+/* sweep: mint is the floored geometric mean, each side is worth the
+   same at the seed price, per-LP amounts rebuild the seed */
+for (const [sa, sb] of [["10", "90"], ["123.456", "789.012"], ["5", "5"], ["999999", "0.5"], ["0.001", "250000"]]) {
+  const s = app.poolSeedPlan(sa, sb, "");
+  const A = Number(sa), B = Number(sb), g = Math.sqrt(A * B);
+  check("SEED sweep " + sa + "/" + sb,
+    s !== null && s.lpMintedNum <= g + 1e-12 && g - s.lpMintedNum < 1.1e-9 &&
+    Math.abs(s.spotPrice - B / A) <= 1e-12 * Math.max(1, B / A) &&
+    Math.abs(s.totalValueInB - 2 * B) <= 1e-9 * Math.max(1, B) &&
+    Math.abs(s.perLpA * s.lpMintedNum - A) <= 1e-6 * A &&
+    Math.abs(s.perLpB * s.lpMintedNum - B) <= 1e-6 * B);
+}
+/* rejections */
+check("SEED rejects blank / junk", app.poolSeedPlan("", "100", "") === null && app.poolSeedPlan("100", "", "") === null && app.poolSeedPlan("abc", "100", "") === null);
+check("SEED rejects non-positive amounts", app.poolSeedPlan("0", "100", "") === null && app.poolSeedPlan("100", "-5", "") === null);
+check("SEED rejects more than 9 dp", app.poolSeedPlan("0.0000000001", "100", "") === null);
+check("SEED rejects a bad reference price", app.poolSeedPlan("100", "100", "0") === null && app.poolSeedPlan("100", "100", "-1") === null && app.poolSeedPlan("100", "100", "xyz") === null);
+check("SEED rejects overflowing inputs", app.poolSeedPlan("1" + "0".repeat(400), "100", "") === null);
+check("all seed controls labelled", ["seed-a", "seed-b", "seed-ref", "seed-price", "seed-lp"].every(id => html.includes(`for="${id}"`)));
+check("seed tool present in index.html", html.includes('id="seed-calc"') && html.includes('id="seed-result"'));
+check("seed honesty: amounts-are-the-price and lock labels", html.includes("the amounts are the price") && html.includes("minimum-liquidity locks or burns are not modelled") && html.includes("not live pool data"));
+check("guide covers pool seeding", guide.includes("Seeding a pool sets its price"));
+check("README lists tool 54", readme.includes("54. **Pool seeding / initial-liquidity planner**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

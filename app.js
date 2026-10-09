@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus fifty-three fully
+/* Raydium Renaissance hub logic: project filtering plus fifty-four fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -29,8 +29,9 @@
    planner from token B, a CLMM single-sided zap-out
    planner to token B, a single-sided zap-in planner
    from token B, a single-sided zap-out planner
-   to token B, a fee compounding calculator, and a
-   loss-versus-rebalancing round-trip calculator.
+   to token B, a fee compounding calculator, a
+   loss-versus-rebalancing round-trip calculator,
+   and a pool seeding / initial-liquidity planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3314,8 +3315,69 @@ function lvrRoundTrip(reserveAStr, reserveBStr, movePctStr, cyclesStr) {
   return result;
 }
 
+/* ---------- 54 · Pool seeding / initial-liquidity planner ---------- */
+/* Every other tool here assumes a pool that already exists, with
+   reserves and a price someone else set. Creating a constant-product
+   pool is the one act where the depositor chooses the price — by
+   choosing the amounts: the opening spot price is simply reserveB /
+   reserveA in the seed, so the two sides are worth exactly the same
+   at that price by construction, and there is no separate price
+   field to set. The LP tokens minted for the seed are the geometric
+   mean sqrt(A * B) of the two amounts — the standard constant-product
+   mint — computed here as an exact integer square root of the scaled
+   (9 dp) BigInt product and floored at 9 dp, the way on-chain
+   programs floor. Tool 18 then redeems a full holding of that supply
+   for exactly the seed (asserted in the tests), and later deposits
+   follow the seeded ratio through Tool 5. The optional reference
+   price is the check that matters: seed at a ratio the rest of the
+   market does not trade at and the pool opens mispriced — the gap is
+   reported against your reference, and arbitrageurs close gaps like
+   it against the seed in the first trades (Tool 16 sizes that trade
+   on an existing pool). Program-specific minimum-liquidity locks or
+   burns are NOT modelled — a live program may keep a small part of
+   the mint unwithdrawable; no number is invented for it.
+   Educational model only — your seed amounts, not live pool data,
+   not a live quote, not financial advice. */
+function isqrtBigInt(n) {
+  if (n < 2n) return n;
+  var x = 1n << BigInt(Math.ceil(n.toString(2).length / 2));
+  var y = (x + n / x) / 2n;
+  while (y < x) { x = y; y = (x + n / x) / 2n; }
+  return x;
+}
+function poolSeedPlan(amountAStr, amountBStr, referencePriceStr) {
+  if (amountAStr == null || String(amountAStr).trim() === "" ||
+      amountBStr == null || String(amountBStr).trim() === "") return null;
+  var a = parseScaled(amountAStr), b = parseScaled(amountBStr);
+  if (a === null || b === null || a <= 0n || b <= 0n) return null;
+  var ref = null;
+  if (referencePriceStr != null && String(referencePriceStr).trim() !== "") {
+    ref = Number(referencePriceStr);
+    if (!Number.isFinite(ref) || ref <= 0) return null;
+  }
+  var aNum = scaledToNumber(a), bNum = scaledToNumber(b);
+  var spot = bNum / aNum;
+  var lpScaled = isqrtBigInt(a * b);
+  var lpNum = scaledToNumber(lpScaled);
+  var result = {
+    amountA: aNum, amountB: bNum, spotPrice: spot, k: aNum * bNum,
+    lpMinted: formatScaled(lpScaled), lpMintedNum: lpNum,
+    totalValueInB: 2 * bNum, perLpA: aNum / lpNum, perLpB: bNum / lpNum,
+    referencePrice: ref,
+    spotGapPct: ref === null ? null : (spot / ref - 1) * 100,
+    refDirection: ref === null ? null : (spot < ref ? "below" : (spot > ref ? "above" : "aligned"))
+  };
+  var fields = Object.keys(result);
+  for (var i = 0; i < fields.length; i++) {
+    var v = result[fields[i]];
+    if (typeof v === "number" && !Number.isFinite(v)) return null;
+  }
+  if (!(result.spotPrice > 0) || !(result.lpMintedNum > 0)) return null;
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -4958,6 +5020,36 @@ if (typeof document !== "undefined") {
           "% of the starting position value), while the pool's reserves return to where they began. This is gross of fees — arbitrageurs in a live pool pay the swap fee and part of it reaches LPs, offsetting some of this; a real price path is many unequal steps, not identical round trips. A loss-versus-rebalancing model, not live pool data — not financial advice.";
         document.getElementById("lvr-per").value = fmt(res.perCycleInB, 6);
         document.getElementById("lvr-total").value = fmt(res.totalInB, 6);
+      }
+    });
+
+    /* --- pool seeding / initial-liquidity planner --- */
+    document.getElementById("seed-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = poolSeedPlan(
+        document.getElementById("seed-a").value,
+        document.getElementById("seed-b").value,
+        document.getElementById("seed-ref").value
+      );
+      var out = document.getElementById("seed-result");
+      if (res === null) {
+        out.textContent = "Enter positive amounts for both seed tokens (up to 9 decimal places), and optionally a positive reference price in token B per token A to check the seed ratio against.";
+        document.getElementById("seed-price").value = "";
+        document.getElementById("seed-lp").value = "";
+      } else {
+        var gap = "";
+        if (res.refDirection === "aligned") {
+          gap = " Against your reference price of ≈ " + fmt(res.referencePrice, 6) + " B per A the seed ratio matches, so there is no opening arbitrage gap on that measure.";
+        } else if (res.refDirection !== null) {
+          gap = " Against your reference price of ≈ " + fmt(res.referencePrice, 6) + " B per A, this seed prices token A ≈ " + fmt(Math.abs(res.spotGapPct), 4) + "% " + res.refDirection +
+            " that reference — the pool would open mispriced, and arbitrageurs trade against a gap like that in the first fills, out of the seed (tool 16 sizes that trade on an existing pool). Check the ratio before creating anything.";
+        }
+        out.textContent = "Model output: seeding ≈ " + fmt(res.amountA, 6) + " A and ≈ " + fmt(res.amountB, 6) + " B sets the pool's opening price at ≈ " + fmt(res.spotPrice, 6) +
+          " B per A — the amounts are the price; there is no separate price to choose — and mints ≈ " + res.lpMinted + " LP tokens (the geometric mean √(A×B), floored at 9 dp), so you start with 100% of the pool and each LP token stands for ≈ " +
+          fmt(res.perLpA, 6) + " A and ≈ " + fmt(res.perLpB, 6) + " B. The seed is worth ≈ " + fmt(res.totalValueInB, 6) + " B at its own price, split evenly between the two sides by construction." + gap +
+          " Program-specific minimum-liquidity locks or burns are not modelled — a live program may keep a small part of the mint unwithdrawable. A pool seeding model, not a live quote — not financial advice.";
+        document.getElementById("seed-price").value = fmt(res.spotPrice, 6);
+        document.getElementById("seed-lp").value = res.lpMinted;
       }
     });
 
