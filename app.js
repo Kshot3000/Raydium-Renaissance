@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus fifty-one fully
+/* Raydium Renaissance hub logic: project filtering plus fifty-two fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -28,8 +28,8 @@
    exact-out swap model, a CLMM single-sided zap-in
    planner from token B, a CLMM single-sided zap-out
    planner to token B, a single-sided zap-in planner
-   from token B, and a single-sided zap-out planner
-   to token B.
+   from token B, a single-sided zap-out planner
+   to token B, and a fee compounding calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3175,8 +3175,56 @@ function clmmTripleSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amou
   });
 }
 
+/* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
+/* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
+   annualise a day's fees by x365) and every settlement tool counts
+   fees held outside the position, with no compounding modelled.
+   This is the missing half: if the fees are put back into the
+   position and themselves start earning, at n reinvestments a year
+   for t years the deposit grows by
+     final = deposit * (1 + r/n)^(n*t),   r = APR / 100,
+   and the effective annual yield (APY) is (1 + r/n)^n - 1 — always
+   above the APR when r > 0 and n > 1, rising with n toward the
+   continuous limit e^r - 1 and never past it. Against that, the
+   no-compounding line deposit * (1 + r*t) is reported too, so the
+   compounding gain is a number, not a vibe. The honest catch is
+   the assumption doing the work: the APR is held CONSTANT on a
+   growing balance, which in a live pool it will not be — volume,
+   TVL, your share and (for CLMM) time in range all move, the
+   position also carries impermanent loss this model ignores, and
+   each reinvestment in reality costs a transaction and re-enters
+   at whatever ratio the pool then has. Model only — your APR
+   input (e.g. from Tools 3/13), not a live yield, not financial
+   advice. */
+function feeCompounding(depositStr, aprPctStr, compoundsStr, yearsStr) {
+  var required = [depositStr, aprPctStr, compoundsStr, yearsStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var dep = Number(depositStr), apr = Number(aprPctStr);
+  var n = Number(compoundsStr), yrs = Number(yearsStr);
+  if (![dep, apr, n, yrs].every(Number.isFinite)) return null;
+  if (dep <= 0 || apr < 0) return null;
+  if (!Number.isInteger(n) || n < 1 || n > 36500) return null;
+  if (yrs <= 0 || yrs > 100) return null;
+  var r = apr / 100;
+  var factor = Math.pow(1 + r / n, n * yrs);
+  if (!Number.isFinite(factor)) return null;
+  var finalValue = dep * factor;
+  var simpleFinal = dep * (1 + r * yrs);
+  return {
+    deposit: dep, aprPct: apr, compoundsPerYear: n, years: yrs,
+    periods: n * yrs, periodicRatePct: (r / n) * 100,
+    apyPct: (Math.pow(1 + r / n, n) - 1) * 100,
+    finalValue: finalValue, feesEarned: finalValue - dep,
+    simpleFinal: simpleFinal, simpleFees: simpleFinal - dep,
+    compoundingGain: finalValue - simpleFinal,
+    growthPct: (finalValue / dep - 1) * 100
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -4769,6 +4817,30 @@ if (typeof document !== "undefined") {
           fmt(res.maxOut, 4) + " " + outName + ". Price impact ≈ " + fmt(res.priceImpactPct, 2) +
           "% against the starting price, fee included. A thinner third range would have charged more for the same remainder — that fall-off is the cliff a two-range model cannot show. A CLMM three-range exact-out swap model — not a live quote, not financial advice.";
         fill();
+      }
+    });
+
+    /* --- fee compounding calculator --- */
+    document.getElementById("cmp-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = feeCompounding(
+        document.getElementById("cmp-dep").value,
+        document.getElementById("cmp-apr").value,
+        document.getElementById("cmp-n").value,
+        document.getElementById("cmp-years").value
+      );
+      var out = document.getElementById("cmp-result");
+      if (res === null) {
+        out.textContent = "Enter a positive deposit, an APR of zero or more (e.g. the naive APR from tools 3 or 13), a whole number of reinvestments per year between 1 and 36500 (1 = yearly, 12 = monthly, 365 = daily), and a period above 0 and at most 100 years.";
+        document.getElementById("cmp-apy").value = "";
+        document.getElementById("cmp-final").value = "";
+      } else {
+        out.textContent = "Model output: reinvesting the fees on ≈ " + fmt(res.deposit, 6) + " at a naive " + fmt(res.aprPct, 4) +
+          "% APR, " + fmt(res.compoundsPerYear, 0) + "× a year for " + fmt(res.years, 4) + " year(s), is an effective ≈ " + fmt(res.apyPct, 4) +
+          "% APY and grows the position to ≈ " + fmt(res.finalValue, 6) + " — ≈ " + fmt(res.feesEarned, 6) + " of fees. Held outside the pool instead, the same APR gives ≈ " +
+          fmt(res.simpleFinal, 6) + ", so compounding adds ≈ " + fmt(res.compoundingGain, 6) + ". That gap assumes the APR never changes on a growing balance, which in a live pool it will — volume, TVL, your share and time in range all move, impermanent loss is not modelled here, and each real reinvestment costs a transaction. A fee compounding model, not a live Raydium yield — not financial advice.";
+        document.getElementById("cmp-apy").value = fmt(res.apyPct, 4);
+        document.getElementById("cmp-final").value = fmt(res.finalValue, 6);
       }
     });
 

@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=59"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=60"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists fifty-one tools", readme.includes("fifty-one pool tools") || readme.includes("all fifty-one"));
+check("README lists fifty-two tools", readme.includes("fifty-two pool tools") || readme.includes("all fifty-two"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts fifty-one tools and names the single-sided zap-out planner to token B",
-  appSrc.includes("plus fifty-one fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, and a single-sided zap-out planner\n   to token B.\n   These are educational MODELS"));
+check("app.js header counts fifty-two tools and names the fee compounding calculator",
+  appSrc.includes("plus fifty-two fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, and a fee compounding calculator.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -2701,6 +2701,55 @@ check("zob tool present in index.html", html.includes('id="zob-calc"') && html.i
 check("zob honesty: exit mirror and not-live labels", html.includes("Tool 20's exit mirror") && html.includes("post-withdrawal reserves") && html.includes("not a live quote, not financial advice"));
 check("guide covers zap-out to token B", guide.includes("Leaving a constant-product pool into token B"));
 check("README lists tool 51", readme.includes("51. **Single-sided zap-out planner to token B**"));
+
+/* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
+const cmpAnnual = app.feeCompounding("1000", "25", "1", "2");
+near("CMP annual final is the clean closed form", cmpAnnual.finalValue, 1562.5, 1e-9);
+near("CMP annual fees", cmpAnnual.feesEarned, 562.5, 1e-9);
+near("CMP yearly compounding makes APY equal APR", cmpAnnual.apyPct, 25, 1e-12);
+near("CMP annual simple line", cmpAnnual.simpleFinal, 1500, 1e-9);
+near("CMP annual compounding gain", cmpAnnual.compoundingGain, 62.5, 1e-9);
+const cmpMonthly = app.feeCompounding("1000", "12", "12", "1");
+near("CMP monthly APY", cmpMonthly.apyPct, 12.682503013196978, 1e-9);
+near("CMP monthly final", cmpMonthly.finalValue, 1126.8250301319697, 1e-7);
+near("CMP monthly periodic rate is APR/12", cmpMonthly.periodicRatePct, 1, 1e-12);
+const cmpDaily = app.feeCompounding("1000", "25", "365", "1");
+near("CMP daily APY", cmpDaily.apyPct, 28.391553787871015, 1e-9);
+near("CMP daily final", cmpDaily.finalValue, 1283.9155378787102, 1e-7);
+near("CMP daily gain over the simple line", cmpDaily.compoundingGain, 33.91553787871021, 1e-7);
+check("CMP daily stays below the continuous limit", cmpDaily.finalValue < 1000 * Math.exp(0.25));
+const cmpDaily2 = app.feeCompounding("5000", "36.5", "365", "1");
+near("CMP 0.1%-a-day APY", cmpDaily2.apyPct, 44.02513134295205, 1e-9);
+near("CMP 0.1%-a-day final", cmpDaily2.finalValue, 7201.256567147602, 1e-6);
+const cmpHalf = app.feeCompounding("1000", "12", "12", "0.5");
+near("CMP half-year final is (1.01)^6", cmpHalf.finalValue, 1061.520150601, 1e-7);
+near("CMP half-year periods", cmpHalf.periods, 6, 1e-12);
+check("CMP APY does not depend on the horizon", cmpHalf.apyPct === cmpMonthly.apyPct);
+const cmpZero = app.feeCompounding("1000", "0", "365", "3");
+check("CMP zero APR is the identity", cmpZero.finalValue === 1000 && cmpZero.apyPct === 0 && cmpZero.feesEarned === 0 && cmpZero.compoundingGain === 0);
+/* frequency ordering: more frequent reinvestment never earns less, and is bounded by e^r */
+for (const [label, dep, apr, yrs] of [["25%/1y", "1000", "25", "1"], ["12%/3y", "2500", "12", "3"], ["91.25%/2y", "10000", "91.25", "2"], ["5%/0.5y", "750", "5", "0.5"]]) {
+  const finals = [1, 12, 52, 365, 8760].map(n => app.feeCompounding(dep, apr, String(n), yrs).finalValue);
+  check("CMP " + label + " final rises with frequency", finals.every((v, i) => i === 0 || v > finals[i - 1]));
+  check("CMP " + label + " final stays below the continuous limit", finals[finals.length - 1] < Number(dep) * Math.exp(Number(apr) / 100 * Number(yrs)) * (1 + 1e-12));
+  const any = app.feeCompounding(dep, apr, "12", yrs);
+  near("CMP " + label + " fees are final minus deposit", any.feesEarned, any.finalValue - any.deposit, 1e-9);
+  near("CMP " + label + " gain is final minus simple", any.compoundingGain, any.finalValue - any.simpleFinal, 1e-9);
+  check("CMP " + label + " compounding never loses to the simple line", any.compoundingGain >= 0);
+}
+/* composition: Tool 3's naive APR at n=1 over 1 year earns exactly its daily fees x365 */
+const lfCmp = app.lpFees("1000000", 25, "10000", "1000000");
+const cmpFromTool3 = app.feeCompounding("10000", String(lfCmp.aprPct), "1", "1");
+near("CMP Tool 3 APR composes to daily fees x365", cmpFromTool3.feesEarned, lfCmp.dailyFees * 365, 1e-6);
+check("CMP rejects blank / junk", app.feeCompounding("", "25", "12", "1") === null && app.feeCompounding("1000", "abc", "12", "1") === null && app.feeCompounding("1000", "25", "12", "") === null);
+check("CMP rejects non-positive deposit / negative APR", app.feeCompounding("0", "25", "12", "1") === null && app.feeCompounding("-5", "25", "12", "1") === null && app.feeCompounding("1000", "-1", "12", "1") === null);
+check("CMP rejects bad frequency", app.feeCompounding("1000", "25", "0", "1") === null && app.feeCompounding("1000", "25", "2.5", "1") === null && app.feeCompounding("1000", "25", "36501", "1") === null);
+check("CMP rejects bad horizon", app.feeCompounding("1000", "25", "12", "0") === null && app.feeCompounding("1000", "25", "12", "-1") === null && app.feeCompounding("1000", "25", "12", "101") === null);
+check("all cmp controls labelled", ["cmp-dep", "cmp-apr", "cmp-n", "cmp-years", "cmp-apy", "cmp-final"].every(id => html.includes(`for="${id}"`)));
+check("cmp tool present in index.html", html.includes('id="cmp-calc"') && html.includes('id="cmp-result"'));
+check("cmp honesty: APR held constant and not-live labels", html.includes("the APR is held constant on a growing balance") && html.includes("not a live yield") && html.includes("not financial advice"));
+check("guide covers compounding", guide.includes("APR is not APY"));
+check("README lists tool 52", readme.includes("52. **Fee compounding calculator (APR to APY)**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

@@ -1224,6 +1224,25 @@
         <button type="submit" class="btn primary">Plan my zap-out to B</button>
         <p id="zob-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="cmp-calc">
+        <h3>52 · Fee compounding calculator (APR to APY)</h3>
+        <p>Every fee tool here reports a <em>naive</em> APR — tools 3 and 13 annualise a day's fees by ×365 — and every settlement tool counts fees held outside the position, with no compounding modelled. This is the missing half: if the fees are put back into the position and themselves start earning, the deposit grows by (1 + APR/n)<sup>n·t</sup> at n reinvestments a year, and the effective annual yield — the APY — is (1 + APR/n)<sup>n</sup> − 1, always above the APR when both are positive, rising with the reinvestment frequency toward the continuous limit e<sup>APR</sup> − 1 and never past it. The no-compounding line is reported alongside, so what compounding itself adds is a number, not a vibe. The honest catch is the assumption doing the work: the APR is held constant on a growing balance, which in a live pool it will not be — volume, TVL, your share and (for a CLMM position) time in range all move, impermanent loss is ignored here entirely, and each real reinvestment costs a transaction and re-enters at whatever ratio the pool then has. Educational model only — your APR input (e.g. from tools 3 or 13), not a live yield; not a live quote, not financial advice.</p>
+        <label for="cmp-dep">Deposit / position value</label>
+        <input id="cmp-dep" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="cmp-apr">Naive APR (%) — e.g. from tool 3 or 13</label>
+        <input id="cmp-apr" inputmode="decimal" placeholder="e.g. 25" autocomplete="off">
+        <label for="cmp-n">Reinvestments per year (1 = yearly, 12 = monthly, 365 = daily)</label>
+        <input id="cmp-n" inputmode="numeric" placeholder="e.g. 365" autocomplete="off">
+        <label for="cmp-years">Period (years)</label>
+        <input id="cmp-years" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="cmp-apy">Effective APY (%) (model)</label>
+        <input id="cmp-apy" readonly placeholder="—" autocomplete="off">
+        <label for="cmp-final">Position value at the end (model)</label>
+        <input id="cmp-final" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model the compounding</button>
+        <p id="cmp-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1251,6 +1270,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=59"></script>
+<script src="app.js?v=60"></script>
 </body>
 </html>
