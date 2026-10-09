@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus sixty-four fully
+/* Raydium Renaissance hub logic: project filtering plus sixty-five fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -38,8 +38,8 @@
    weighted-pool impermanent-loss calculator, a
    stableswap depeg-loss calculator, a weighted-pool
    arbitrage model, a weighted-pool exact-out
-   swap model, and a weighted-pool price-impact
-   sizer.
+   swap model, a weighted-pool price-impact
+   sizer, and a stableswap arbitrage model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -4195,8 +4195,121 @@ function weightedArbitrage(reserveAStr, reserveBStr, weightAPctStr, externalPric
   return result;
 }
 
+function stableSpotAInB(reserveA, reserveB, amp, D) {
+  var Ann = 2 * amp, K = Math.pow(D, 3) / 4;
+  return (K / (reserveA * reserveA * reserveB) + Ann) /
+    (Ann + K / (reserveA * reserveB * reserveB));
+}
+
+/* ---------- 65 · Stableswap arbitrage model ---------- */
+/* Tool 16's question for the stableswap pools of Tool 58: if the
+   pool's own spot price of A (in B, Tool 58's spot formula with A
+   as the input side) differs from a price elsewhere, the trade
+   that moves the pool's spot exactly to that external price Pe is
+   the textbook arbitrage. There is no closed form — the target
+   reserves lie on the stableswap invariant at spot Pe, and the
+   spot falls strictly as reserve A grows along the curve, so the
+   target is bisected geometrically on reserve A exactly the way
+   Tool 61 bisects its depeg endpoint, the other reserve coming
+   from Tool 58's own stableSolveY at the same invariant D. The
+   fee comes off the input before it reaches the pool (Tool 58's
+   convention), so the gross input is net / (1 - fee) and the
+   modelled profit, valued in B at the external price, is
+   outValueInB - grossInValueInB. Feeding the gross input through
+   Tool 58 returns the modelled output and lands the pool's spot
+   on Pe (asserted in tests, both directions, with and without a
+   fee). The honest shape is the amplification: because the curve
+   defends par, even a 1% gap on a balanced 1,000/1,000 pool at
+   A = 100 takes a trade of ~375 B — over a third of the reserve —
+   to close, and at Pe = 1.1 the aligning input grows with A
+   (~97.17 B at A = 1, ~795.83 at A = 100, ~971.44 at A = 5,000).
+   A gap smaller than the fee honestly comes out unprofitable at
+   the aligning size (a 0.1% gap at a 25 bps tier: ~-0.1007 B).
+   With zero fee the endpoint is Tool 61's depeg endpoint at the
+   reciprocal price and the profit is exactly that tool's LP loss
+   with the sign flipped (asserted). A price the bisection cannot
+   bracket on the curve is rejected, not extrapolated.
+   Educational model only — your reserves, amplification and
+   external price, not live pool data, not a found opportunity,
+   not financial advice. */
+function stableArbitrage(reserveAStr, reserveBStr, ampStr, externalPriceStr, feeBps) {
+  var raw = [reserveAStr, reserveBStr, ampStr, externalPriceStr, feeBps];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var reserveA = Number(reserveAStr), reserveB = Number(reserveBStr);
+  var amp = Number(ampStr), pe = Number(externalPriceStr);
+  var fee = Number(feeBps);
+  if (![reserveA, reserveB, amp, pe].every(Number.isFinite)) return null;
+  if (reserveA <= 0 || reserveB <= 0 || amp <= 0 || pe <= 0) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var D = stableInvariantD(reserveA, reserveB, amp);
+  if (D === null || !(D > 0)) return null;
+  var startSpot = stableSpotAInB(reserveA, reserveB, amp, D);
+  if (!Number.isFinite(startSpot) || !(startSpot > 0)) return null;
+  var base = { reserveA: reserveA, reserveB: reserveB, amp: amp,
+    spotPrice: startSpot, externalPrice: pe,
+    priceGapPct: (pe / startSpot - 1) * 100, feeBps: fee,
+    invariantD: D, targetReserveA: reserveA, targetReserveB: reserveB };
+  if (Math.abs(pe - startSpot) / startSpot < 1e-12) {
+    return Object.assign(base, { direction: "none", inToken: null, netIn: 0, grossIn: 0, amountOut: 0, outToken: null, profitInB: 0, postTradeSpot: startSpot });
+  }
+  function at(x) {
+    var y = stableSolveY(x, reserveB, amp, D);
+    if (!(y > 0) || !Number.isFinite(y)) return null;
+    var s = stableSpotAInB(x, y, amp, D);
+    if (!Number.isFinite(s) || !(s > 0)) return null;
+    return { x: x, y: y, spot: s };
+  }
+  var lo = null, hi = null, k;
+  if (pe > startSpot) {
+    hi = { x: reserveA, y: reserveB, spot: startSpot };
+    var xd = reserveA;
+    for (k = 0; k < 200 && lo === null; k++) {
+      xd /= 1.5;
+      var ad = at(xd);
+      if (ad !== null && ad.spot >= pe) lo = ad;
+    }
+  } else {
+    lo = { x: reserveA, y: reserveB, spot: startSpot };
+    var xu = reserveA;
+    for (k = 0; k < 200 && hi === null; k++) {
+      xu *= 1.5;
+      var au = at(xu);
+      if (au !== null && au.spot <= pe) hi = au;
+    }
+  }
+  if (lo === null || hi === null) return null;
+  for (var b = 0; b < 200; b++) {
+    var mid = at(Math.sqrt(lo.x * hi.x));
+    if (mid === null) return null;
+    if (mid.spot < pe) hi = mid; else lo = mid;
+    if (hi.x / lo.x - 1 < 1e-12) break;
+  }
+  var end = at(Math.sqrt(lo.x * hi.x));
+  if (end === null) return null;
+  var result;
+  if (pe > startSpot) {
+    var netInB = end.y - reserveB, outA = reserveA - end.x;
+    if (!(netInB > 0) || !(outA > 0)) return null;
+    var grossInB = netInB / (1 - fee / 10000);
+    result = Object.assign(base, { direction: "buy-a", inToken: "B", netIn: netInB, grossIn: grossInB, amountOut: outA, outToken: "A", profitInB: outA * pe - grossInB, targetReserveA: end.x, targetReserveB: end.y, postTradeSpot: end.spot });
+  } else {
+    var netInA = end.x - reserveA, outB = reserveB - end.y;
+    if (!(netInA > 0) || !(outB > 0)) return null;
+    var grossInA = netInA / (1 - fee / 10000);
+    result = Object.assign(base, { direction: "sell-a", inToken: "A", netIn: netInA, grossIn: grossInA, amountOut: outB, outToken: "B", profitInB: outB - grossInA * pe, targetReserveA: end.x, targetReserveB: end.y, postTradeSpot: end.spot });
+  }
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    var v = result[fields[j]];
+    if (typeof v === "number" && !Number.isFinite(v)) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -6147,6 +6260,38 @@ if (typeof document !== "undefined") {
           ", and the trade moves the pool's own spot to ≈ " + fmt(res.postTradeSpotPrice, 6) + ". At a 50% input weight this is exactly tool 17's constant-product answer; at lopsided weights the same cap admits a very different trade, because the weight is part of the price. A weighted-pool price-impact model — not live pool data, not a live quote, not financial advice.";
         document.getElementById("wis-ain").value = fmt(res.maxAmountIn, 6);
         document.getElementById("wis-aout").value = fmt(res.amountOut, 6);
+      }
+    });
+
+    /* --- stableswap arbitrage model --- */
+    document.getElementById("sarb-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = stableArbitrage(
+        document.getElementById("sarb-ra").value,
+        document.getElementById("sarb-rb").value,
+        document.getElementById("sarb-amp").value,
+        document.getElementById("sarb-ext").value,
+        document.getElementById("sarb-fee").value
+      );
+      var out = document.getElementById("sarb-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, an amplification above 0, an external price above 0 and a fee tier in whole basis points (0–9999). An external price the curve cannot reach is rejected, not extrapolated.";
+        document.getElementById("sarb-out").value = "";
+      } else if (res.direction === "none") {
+        out.textContent = "Model output: the pool's stableswap spot price is already ≈ " + fmt(res.spotPrice, 6) + " B per A, so there is no price-aligning trade to size at your external price. A stableswap arbitrage model, not live pool data — not financial advice.";
+        document.getElementById("sarb-out").value = fmt(0, 6);
+      } else {
+        var dirText = res.direction === "buy-a"
+          ? "token A is cheap in the pool: pay token B in and take token A out"
+          : "token A is expensive in the pool: pay token A in and take token B out";
+        out.textContent = "Model output: the pool's stableswap spot price is ≈ " + fmt(res.spotPrice, 6) +
+          " B per A against your external price of ≈ " + fmt(res.externalPrice, 6) + " (a gap of ≈ " + fmt(res.priceGapPct, 4) + "%) — " + dirText +
+          ". The price-aligning trade pays ≈ " + fmt(res.grossIn, 6) + " of token " + res.inToken + " in (≈ " + fmt(res.netIn, 6) +
+          " after the fee reaches the pool) and takes ≈ " + fmt(res.amountOut, 6) + " of token " + res.outToken +
+          " out, leaving the pool at ≈ " + fmt(res.targetReserveA, 6) + " A / ≈ " + fmt(res.targetReserveB, 6) +
+          " B with its spot on your price. Modelled profit valued in B at your external price: ≈ " + fmt(res.profitInB, 6) +
+          " B — a gap smaller than the fee honestly comes out negative, and because the curve defends par the aligning trade is large for its gap. A stableswap arbitrage model over a price you typed — not a live feed, not a found opportunity, not financial advice.";
+        document.getElementById("sarb-out").value = fmt(res.profitInB, 6);
       }
     });
 

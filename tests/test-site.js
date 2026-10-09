@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=80"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=81"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists sixty-four tools", readme.includes("sixty-four pool tools") || readme.includes("all sixty-four"));
+check("README lists sixty-five tools", readme.includes("sixty-five pool tools") || readme.includes("all sixty-five"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts sixty-four tools and names the weighted-pool price-impact sizer",
-  appSrc.includes("plus sixty-four fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, and a weighted-pool price-impact\n   sizer.\n   These are educational MODELS"));
+check("app.js header counts sixty-five tools and names the stableswap arbitrage model",
+  appSrc.includes("plus sixty-five fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, and a stableswap arbitrage model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -3639,6 +3639,100 @@ check("wis tool present in index.html", html.includes('id="wis-calc"') && html.i
 check("wis honesty: fee-floor and not-live labels", html.includes("a cap at or below the fee tier admits no trade at any weight") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers weighted-pool impact sizing", guide.includes("read the weight as part of the price"));
 check("README lists tool 64", readme.includes("64. **Weighted-pool price-impact sizer**"));
+
+
+/* ---------- Tool 65: Stableswap arbitrage model (SARB) ---------- */
+/* Vectors verified against a clean-room prototype BEFORE these tests
+   were written: the gross input fed through Tool 58 returns the
+   modelled output and lands on the target reserves; the zero-fee
+   endpoint equals Tool 61's depeg endpoint at the reciprocal price. */
+const sarbNone = app.stableArbitrage("1000", "1000", "100", "1", 25);
+check("SARB balanced pool at par is no trade", sarbNone !== null && sarbNone.direction === "none" && sarbNone.grossIn === 0 && sarbNone.amountOut === 0 && sarbNone.profitInB === 0);
+near("SARB balanced spot is exactly 1", sarbNone.spotPrice, 1, 1e-12);
+const sarb = app.stableArbitrage("1000", "1000", "100", "1.01", 0);
+check("SARB pe above spot buys A", sarb !== null && sarb.direction === "buy-a" && sarb.inToken === "B" && sarb.outToken === "A");
+near("SARB 1% gap net in", sarb.netIn, 375.061093965, 1e-6);
+near("SARB 1% gap amount out", sarb.amountOut, 373.453959492, 1e-6);
+near("SARB 1% gap profit", sarb.profitInB, 2.12740512232, 1e-6);
+near("SARB 1% gap target A", sarb.targetReserveA, 626.546040508, 1e-6);
+near("SARB 1% gap target B", sarb.targetReserveB, 1375.06109397, 1e-5);
+near("SARB post-trade spot lands on external price", sarb.postTradeSpot, 1.01, 1e-9);
+near("SARB price gap pct", sarb.priceGapPct, 1, 1e-9);
+const sarbFee = app.stableArbitrage("1000", "1000", "100", "1.01", 25);
+near("SARB fee grosses the input up", sarbFee.grossIn, 376.001096707, 1e-6);
+near("SARB fee leaves net in unchanged", sarbFee.netIn, sarb.netIn, 1e-9);
+near("SARB fee profit", sarbFee.profitInB, 1.18740238055, 1e-6);
+const sarbDown = app.stableArbitrage("1000", "1000", "100", "0.99", 0);
+check("SARB pe below spot sells A", sarbDown !== null && sarbDown.direction === "sell-a" && sarbDown.inToken === "A" && sarbDown.outToken === "B");
+near("SARB down net in", sarbDown.netIn, 377.364995477, 1e-6);
+near("SARB down amount out", sarbDown.amountOut, 375.734936219, 1e-6);
+near("SARB down profit", sarbDown.profitInB, 2.14359069696, 1e-6);
+const sarbSmall = app.stableArbitrage("1000", "1000", "100", "1.001", 25);
+check("SARB gap below the fee is honestly unprofitable", sarbSmall !== null && sarbSmall.profitInB < 0);
+near("SARB small-gap profit", sarbSmall.profitInB, -0.100734874844, 1e-6);
+const sarbA1 = app.stableArbitrage("1000", "1000", "1", "1.1", 0);
+const sarbA100 = app.stableArbitrage("1000", "1000", "100", "1.1", 0);
+const sarbA5000 = app.stableArbitrage("1000", "1000", "5000", "1.1", 0);
+near("SARB amp 1 aligning input", sarbA1.netIn, 97.1748582785, 1e-5);
+near("SARB amp 100 aligning input", sarbA100.netIn, 795.827461397, 1e-5);
+near("SARB amp 5000 aligning input", sarbA5000.netIn, 971.444316885, 1e-5);
+check("SARB aligning input grows with amplification", sarbA1.netIn < sarbA100.netIn && sarbA100.netIn < sarbA5000.netIn);
+const sarbLop = app.stableArbitrage("1000", "500", "100", "1.05", 25);
+near("SARB lopsided spot", sarbLop.spotPrice, 0.9917176313020062, 1e-9);
+near("SARB lopsided net in", sarbLop.netIn, 774.591902196, 1e-5);
+near("SARB lopsided amount out", sarbLop.amountOut, 768.728597645, 1e-5);
+near("SARB lopsided profit", sarbLop.profitInB, 30.6317922427, 1e-5);
+/* Composition: the modelled gross input through Tool 58 itself
+   returns the modelled output and lands on the target reserves. */
+for (const [ra, rb, amp, pe, fee] of [[1000, 1000, 100, 1.01, 0], [1000, 1000, 100, 1.01, 25], [1000, 1000, 100, 0.99, 25], [1000, 500, 100, 1.05, 25], [1000, 500, 5, 0.9, 0], [2000, 1000, 500, 1.02, 4], [500, 2000, 25, 0.98, 10]]) {
+  const r = app.stableArbitrage(String(ra), String(rb), String(amp), String(pe), fee);
+  const sw = r.direction === "buy-a"
+    ? app.stableSwap(String(rb), String(ra), String(amp), String(r.grossIn), fee)
+    : app.stableSwap(String(ra), String(rb), String(amp), String(r.grossIn), fee);
+  const tgtIn = r.direction === "buy-a" ? r.targetReserveB : r.targetReserveA;
+  const tgtOut = r.direction === "buy-a" ? r.targetReserveA : r.targetReserveB;
+  check(`SARB composition ${ra}/${rb} A${amp} pe${pe} fee${fee}`,
+    Math.abs(sw.out - r.amountOut) <= 1e-6 * r.amountOut &&
+    Math.abs(sw.newReserveIn - tgtIn) <= 1e-6 * tgtIn &&
+    Math.abs(sw.newReserveOut - tgtOut) <= 1e-6 * tgtOut &&
+    Math.abs(r.postTradeSpot - pe) <= 1e-9 * pe);
+}
+/* Zero fee: the endpoint is Tool 61's depeg endpoint at the
+   reciprocal price, and the profit is its LP loss sign-flipped. */
+const sarbDepeg = app.stableArbitrage("1000", "1000", "100", String(1 / 0.9), 0);
+const depegRef = app.stableDepegLoss("1000", "1000", "100", "0.9");
+near("SARB depeg endpoint A equals tool 61", sarbDepeg.targetReserveA, depegRef.newReserveA, 1e-3);
+near("SARB depeg endpoint B equals tool 61", sarbDepeg.targetReserveB, depegRef.newReserveB, 1e-3);
+near("SARB zero-fee profit is tool 61 loss flipped (in A)", sarbDepeg.profitInB * 0.9, -depegRef.lossA, 1e-3);
+const sarbMir1 = app.stableArbitrage("1000", "1000", "100", "1.02", 25);
+const sarbMir2 = app.stableArbitrage("1000", "1000", "100", String(1 / 1.02), 25);
+near("SARB mirror net in", sarbMir2.netIn, sarbMir1.netIn, 1e-6);
+near("SARB mirror targets swap A", sarbMir2.targetReserveA, sarbMir1.targetReserveB, 1e-5);
+near("SARB mirror targets swap B", sarbMir2.targetReserveB, sarbMir1.targetReserveA, 1e-5);
+const sarbBig = app.stableArbitrage("10000", "10000", "100", "1.01", 0);
+near("SARB 10x pool admits 10x the trade", sarbBig.netIn / sarb.netIn, 10, 1e-9);
+check("SARB rejects blank and junk",
+  app.stableArbitrage("", "1000", "100", "1.01", 0) === null &&
+  app.stableArbitrage("1000", "1000", "100", "abc", 0) === null);
+check("SARB rejects non-positive inputs",
+  app.stableArbitrage("0", "1000", "100", "1.01", 0) === null &&
+  app.stableArbitrage("1000", "-5", "100", "1.01", 0) === null &&
+  app.stableArbitrage("1000", "1000", "0", "1.01", 0) === null &&
+  app.stableArbitrage("1000", "1000", "100", "0", 0) === null &&
+  app.stableArbitrage("1000", "1000", "100", "-1", 0) === null);
+check("SARB rejects bad fee",
+  app.stableArbitrage("1000", "1000", "100", "1.01", 25.5) === null &&
+  app.stableArbitrage("1000", "1000", "100", "1.01", -1) === null &&
+  app.stableArbitrage("1000", "1000", "100", "1.01", 10000) === null);
+check("SARB rejects an overflowing price", app.stableArbitrage("1000", "1000", "100", "1e309", 0) === null);
+check("SARB handler bisects the spot condition", appSrc.includes("if (mid.spot < pe) hi = mid; else lo = mid;"));
+check("all sarb controls labelled",
+  ["sarb-ra", "sarb-rb", "sarb-amp", "sarb-ext", "sarb-fee", "sarb-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("sarb tool present in index.html", html.includes('id="sarb-calc"') && html.includes('id="sarb-result"'));
+check("sarb honesty: no-live-feed and not-live labels", html.includes("this tool has no live feed and finds no opportunities") && html.includes("not a found opportunity") && html.includes("not financial advice"));
+check("guide covers stableswap arbitrage", guide.includes("Arbitrage on a stable curve is a big trade for a small gap"));
+check("README lists tool 65", readme.includes("65. **Stableswap arbitrage model**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

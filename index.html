@@ -1486,6 +1486,25 @@
         <button type="submit" class="btn primary">Size this weighted trade</button>
         <p id="wis-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="sarb-calc">
+        <h3>65 · Stableswap arbitrage model</h3>
+        <p>Tool 16's question for the stableswap pools of tool 58: why a stable pool's price tracks the wider market. Enter the pool's reserves, its amplification, and an external price <em>you</em> supply (this tool has no live feed and finds no opportunities): the result is the trade that moves the pool's own spot price exactly to that price along the stableswap invariant — direction, size grossed up for the fee, and modelled profit valued in B at your external price. There is no closed form; the target reserves are found numerically on the curve. The honest shape is the amplification: because the curve defends par, even a 1% gap on a balanced 1,000/1,000 pool at A = 100 takes a trade of ≈375 B — over a third of the reserve — to close, and the aligning trade grows with A. A gap smaller than the fee honestly comes out unprofitable. With zero fee the endpoint is exactly tool 61's depeg endpoint at the reciprocal price, and the profit is that tool's LP loss with the sign flipped — the arbitrageur's gain is the LPs' loss. Educational model only — not live pool data, not a live quote, not a found opportunity, not financial advice.</p>
+        <label for="sarb-ra">Pool reserve — token A</label>
+        <input id="sarb-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sarb-rb">Pool reserve — token B</label>
+        <input id="sarb-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sarb-amp">Amplification A (e.g. 100)</label>
+        <input id="sarb-amp" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="sarb-ext">External price (token B per token A — your input, not a live feed)</label>
+        <input id="sarb-ext" inputmode="decimal" placeholder="e.g. 1.01" autocomplete="off">
+        <label for="sarb-fee">Pool fee (bps — 25 = 0.25%)</label>
+        <input id="sarb-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="sarb-out">Modelled profit (token B, at your external price)</label>
+        <input id="sarb-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model the arbitrage trade</button>
+        <p id="sarb-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1513,6 +1532,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=80"></script>
+<script src="app.js?v=81"></script>
 </body>
 </html>
