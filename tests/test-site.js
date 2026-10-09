@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=76"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=77"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists sixty-two tools", readme.includes("sixty-two pool tools") || readme.includes("all sixty-two"));
+check("README lists sixty-three tools", readme.includes("sixty-three pool tools") || readme.includes("all sixty-three"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts sixty-two tools and names the weighted-pool arbitrage model",
-  appSrc.includes("plus sixty-two fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, and a weighted-pool\n   arbitrage model.\n   These are educational MODELS"));
+check("app.js header counts sixty-three tools and names the weighted-pool exact-out swap model",
+  appSrc.includes("plus sixty-three fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, and a weighted-pool exact-out\n   swap model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -3457,6 +3457,75 @@ check("warb tool present in index.html", html.includes('id="warb-calc"') && html
 check("warb honesty: weights inside the spot and not-live labels", html.includes("judge the gap off the raw reserves and you misprice the trade") && html.includes("not a live feed") && html.includes("not financial advice"));
 check("guide covers weighted-pool arbitrage", guide.includes("read the gap off the spot, not the reserves"));
 check("README lists tool 62", readme.includes("62. **Weighted-pool arbitrage model**"));
+
+/* ---------- Tool 63: Weighted-pool exact-out swap model (WXO) ---------- */
+/* headline: balanced 1,000/1,000 at an 80% input weight spots at
+   (1000/0.2)/(1000/0.8) = 4; 100 out forces netIn =
+   1000 x ((1000/900)^0.25 - 1) = 26.690096080340897 (prototype-
+   verified, round-trips through weightedSwap to ~1e-13) */
+const wx1 = app.weightedSwapExactOut("1000", "1000", "80", "100", 0);
+near("WXO headline weighted spot", wx1.spotPrice, 4, 1e-12);
+near("WXO headline net in", wx1.netIn, 26.690096080340897, 1e-9);
+near("WXO headline gross in at zero fee equals net", wx1.amountIn, 26.690096080340897, 1e-9);
+near("WXO headline effective price", wx1.effectivePrice, 3.746708130948128, 1e-9);
+near("WXO headline price impact", wx1.priceImpactPct, 6.332296726296827, 1e-9);
+check("WXO headline post-trade reserves", wx1.newReserveOut === 900 && Math.abs(wx1.newReserveIn - 1026.6900960803409) < 1e-9);
+/* the fee grosses the input up and leaves the net untouched */
+const wx2 = app.weightedSwapExactOut("1000", "1000", "80", "100", 25);
+near("WXO 25bps gross in", wx2.amountIn, 26.756988551720195, 1e-9);
+check("WXO fee leaves net and reserves unchanged", wx2.netIn === wx1.netIn && wx2.newReserveIn === wx1.newReserveIn && wx2.amountIn > wx1.amountIn);
+/* the weight is inside the price: the same target at 20% costs far more */
+const wx3 = app.weightedSwapExactOut("1000", "1000", "20", "100", 25);
+near("WXO 20% gross in", wx3.amountIn, 525.4715817130085, 1e-9);
+near("WXO 20% spot", wx3.spotPrice, 0.25, 1e-12);
+check("WXO heavier input weight = cheaper target", wx2.amountIn < app.weightedSwapExactOut("1000", "1000", "50", "100", 25).amountIn && app.weightedSwapExactOut("1000", "1000", "50", "100", 25).amountIn < wx3.amountIn);
+/* near the ceiling the cost explodes: 900 of 1,000 out at 80% */
+const wxBig = app.weightedSwapExactOut("1000", "1000", "80", "900", 25);
+near("WXO near-ceiling net in", wxBig.netIn, 778.2794100389225, 1e-9);
+near("WXO near-ceiling gross in", wxBig.amountIn, 780.229985001426, 1e-9);
+check("WXO near-ceiling impact is severe", wxBig.priceImpactPct > 70);
+/* 50/50 reduces to Tool 6 exactly, allowing for its 9dp round-up */
+for (const [rin, rout, aout, f] of [["1000", "1000", "100", 25], ["1000", "1000", "100", 0], ["2000", "500", "50", 25], ["500", "5000", "999", 100], ["1000", "1000", "1", 25]]) {
+  const w = app.weightedSwapExactOut(rin, rout, "50", aout, f);
+  const c6 = app.cpSwapExactOut(rin, rout, aout, f);
+  check("WXO 50/50 equals Tool 6 " + rin + "/" + rout + " out " + aout + " @" + f + "bps",
+    w !== null && c6 !== null && Math.abs(w.amountIn - Number(c6.amountIn)) <= Math.max(1e-6, Number(c6.amountIn) * 1e-9) + 1e-9 &&
+    Math.abs(w.netIn - Number(c6.inAfterFee)) <= Math.max(1e-6, Number(c6.inAfterFee) * 1e-9) + 1e-9 &&
+    Math.abs(w.spotPrice - c6.spotPrice) < 1e-12);
+}
+/* composition: Tool 56 swapping the gross input returns the target */
+for (const [rin, rout, wPct, aout, f] of [["1000", "1000", "80", "100", 25], ["1000", "1000", "20", "100", 25], ["800", "200", "80", "50", 25], ["200", "800", "20", "400", 0], ["5000", "1000", "70", "10", 50], ["1000", "4000", "30", "1000", 25], ["1000", "1000", "80", "900", 25]]) {
+  const w = app.weightedSwapExactOut(rin, rout, wPct, aout, f);
+  const sw = app.weightedSwap(rin, rout, wPct, String(w.amountIn), f);
+  check("WXO Tool-56 round-trip " + rin + "/" + rout + " w" + wPct + " out " + aout + " @" + f + "bps",
+    sw !== null && Math.abs(sw.out - Number(aout)) < Math.max(1e-6, Number(aout) * 1e-9));
+}
+/* the weighted invariant holds at the post-trade reserves */
+for (const [rin, rout, wPct, aout] of [[1000, 1000, 80, 100], [1000, 1000, 20, 900], [800, 200, 80, 50], [1000, 4000, 30, 1000]]) {
+  const w = app.weightedSwapExactOut(String(rin), String(rout), String(wPct), String(aout), 0);
+  const wIn = wPct / 100, wOut = 1 - wIn;
+  const k0 = Math.pow(rin, wIn) * Math.pow(rout, wOut);
+  const k1 = Math.pow(w.newReserveIn, wIn) * Math.pow(w.newReserveOut, wOut);
+  check("WXO invariant " + rin + "/" + rout + " w" + wPct + " out " + aout, Math.abs(k1 / k0 - 1) < 1e-12);
+}
+/* token-swap mirror: swapping reserves and complementing the weight
+   prices the reciprocal trade — gross in of one is linked by spot */
+const wxMir = app.weightedSwapExactOut("200", "800", "20", "50", 25);
+const wxFwd = app.weightedSwapExactOut("800", "200", "80", "50", 25);
+check("WXO token-swap mirror spots are reciprocal", Math.abs(wxMir.spotPrice * wxFwd.spotPrice - 1) < 1e-12);
+check("WXO rejects blank and junk", app.weightedSwapExactOut("", "1000", "80", "100", 0) === null && app.weightedSwapExactOut("1000", "1000", "80", "", 0) === null && app.weightedSwapExactOut("abc", "1000", "80", "100", 0) === null && app.weightedSwapExactOut("1000", "1000", "80", "100", "") === null);
+check("WXO rejects non-positive inputs", app.weightedSwapExactOut("0", "1000", "80", "100", 0) === null && app.weightedSwapExactOut("1000", "-5", "80", "100", 0) === null && app.weightedSwapExactOut("1000", "1000", "80", "0", 0) === null && app.weightedSwapExactOut("1000", "1000", "80", "-1", 0) === null);
+check("WXO rejects a target at or above the output reserve", app.weightedSwapExactOut("1000", "1000", "80", "1000", 0) === null && app.weightedSwapExactOut("1000", "1000", "80", "1001", 0) === null);
+check("WXO rejects weight at the edges", app.weightedSwapExactOut("1000", "1000", "0", "100", 0) === null && app.weightedSwapExactOut("1000", "1000", "100", "100", 0) === null && app.weightedSwapExactOut("1000", "1000", "-10", "100", 0) === null);
+check("WXO rejects bad fee", app.weightedSwapExactOut("1000", "1000", "80", "100", 10000) === null && app.weightedSwapExactOut("1000", "1000", "80", "100", -1) === null && app.weightedSwapExactOut("1000", "1000", "80", "100", 25.5) === null);
+check("WXO rejects an overflowing target", app.weightedSwapExactOut("1000", "1000", "80", "1e309", 0) === null);
+check("all wxo controls labelled",
+  ["wxo-rin", "wxo-rout", "wxo-win", "wxo-aout", "wxo-fee", "wxo-ain", "wxo-spot"]
+    .every(id => html.includes(`for="${id}"`)));
+check("wxo tool present in index.html", html.includes('id="wxo-calc"') && html.includes('id="wxo-result"'));
+check("wxo honesty: asymptotic ceiling and not-live labels", html.includes("a target at or above the whole output reserve is impossible on this curve") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers weighted-pool exact-out", guide.includes("the weight sets how fast the cost explodes"));
+check("README lists tool 63", readme.includes("63. **Weighted-pool exact-out swap model**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

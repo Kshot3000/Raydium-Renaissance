@@ -1444,6 +1444,27 @@
         <button type="submit" class="btn primary">Model the arbitrage trade</button>
         <p id="warb-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="wxo-calc">
+        <h3>63 · Weighted-pool exact-out swap model</h3>
+        <p>Tool 56 run backwards, for the trade specified by what must come out — a payment, a debt, a target holding — rather than what goes in. Setting the output reserve to reserveOut − amountOut and holding the weighted invariant reserveIn<sup>wIn</sup> × reserveOut<sup>wOut</sup> constant forces the post-trade input reserve: reserveIn × (reserveOut ÷ (reserveOut − amountOut))<sup>wOut/wIn</sup>; the difference is the net input, grossed back up for the fee exactly as tool 6 grosses up tool 1. At a 50% input weight the exponent is 1 and this is tool 6's constant-product exact-out answer. The honest edges mirror tool 56's: a target at or above the whole output reserve is impossible on this curve, not expensive — it is rejected, not quoted — and near it the cost explodes (900 out of a 1,000 output reserve at an 80% input weight needs ≈778.2794 net in, against a weighted spot of 4 out per in). The maths is floating point, so dust targets carry the float noise floor of the reserve scale. Weighted pools are a generalised design used elsewhere, modelled here for comparison — Raydium's own constant-product pools are the 50/50 case. Educational model only — your reserves, weights and target; not live pool data, not a live quote, not financial advice.</p>
+        <label for="wxo-rin">Reserve in (tokens)</label>
+        <input id="wxo-rin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="wxo-rout">Reserve out (tokens)</label>
+        <input id="wxo-rout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="wxo-win">Weight of the input token (%) — the output token takes the rest</label>
+        <input id="wxo-win" inputmode="decimal" placeholder="e.g. 80 (50 = tool 6's pool)" autocomplete="off">
+        <label for="wxo-aout">Amount out you need (tokens)</label>
+        <input id="wxo-aout" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="wxo-fee">Swap fee (basis points, 25 = 0.25%)</label>
+        <input id="wxo-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="wxo-ain">Amount in required, gross of the fee (model)</label>
+        <input id="wxo-ain" readonly placeholder="—" autocomplete="off">
+        <label for="wxo-spot">Spot price before the trade — out per in, weights included (model)</label>
+        <input id="wxo-spot" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model this exact-out weighted swap</button>
+        <p id="wxo-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1471,6 +1492,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=76"></script>
+<script src="app.js?v=77"></script>
 </body>
 </html>
