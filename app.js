@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus fifty-nine fully
+/* Raydium Renaissance hub logic: project filtering plus sixty fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -34,7 +34,8 @@
    pool seeding / initial-liquidity planner, a CLMM range
    probability calculator, a weighted-pool swap model, a
    CLMM range-order (limit-order) planner, a stableswap
-   swap model, and a stableswap exact-out swap model.
+   swap model, a stableswap exact-out swap model, and a
+   weighted-pool impermanent-loss calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3762,8 +3763,70 @@ function stableSwapExactOut(reserveInStr, reserveOutStr, ampStr, amountOutStr, f
   return result;
 }
 
+/* ---------- 60 · Weighted-pool impermanent-loss calculator ---------- */
+/* Tool 2's question for the weighted pools of tool 56: tool 2 is the
+   50/50 case, but a weighted pool holds a fixed VALUE fraction w in
+   token A and (1 - w) in token B, and rebalancing along the weighted
+   invariant keeps those fractions as the price moves. So when token
+   A's price (in B) moves by a multiple r,
+     lpFactor   = r^w            (the position's value, per unit in)
+     holdFactor = w * r + (1 - w) (holding the starting mix, per unit)
+     IL         = lpFactor / holdFactor - 1,
+   which at w = 0.5 is tool 2's 2 * sqrt(r) / (1 + r) - 1 exactly
+   (asserted in tests against impermanentLoss itself, values and the
+   tool 4 fee hurdle alike). The closed form was also verified in
+   prototyping against the weighted invariant solved numerically:
+   an 800/200 pool at w = 0.8 rebalanced to spot prices 0.25..9 lands
+   on r^0.8 to ~1e-15. The honest shape: the loss is NOT symmetric
+   in the weight — at a 2x move an 80% weight on the token that rose
+   loses ~3.27% while a 20% weight loses ~4.28%, and the two swap
+   exactly when the move reverses (w with 1/r equals 1 - w with r,
+   asserted in tests), because the heavier side tracks holding that
+   token more closely. Weighting toward a token is a bet on it, not
+   a shield: a 10% weight still loses ~11.64% at a 4x move. No fees
+   are included — feesNeeded is exactly the fee total, in the
+   deposit's terms, that would close the gap. Weighted pools are a
+   generalised design used elsewhere (tool 56's label applies);
+   Raydium's own constant-product pools are the 50/50 case tool 2
+   already covers. Educational model only — your weight, price move
+   and deposit inputs, not live pool data, not a live quote, not
+   financial advice. */
+function weightedImpermanentLoss(weightAPctStr, priceRatioStr, depositStr) {
+  var raw = [weightAPctStr, priceRatioStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var weightAPct = Number(weightAPctStr), r = Number(priceRatioStr);
+  if (![weightAPct, r].every(Number.isFinite)) return null;
+  if (weightAPct <= 0 || weightAPct >= 100 || r <= 0) return null;
+  var w = weightAPct / 100;
+  var lpFactor = Math.pow(r, w);
+  var holdFactor = w * r + (1 - w);
+  if (!(lpFactor > 0) || !(holdFactor > 0)) return null;
+  var result = {
+    weightAPct: weightAPct, weightBPct: 100 - weightAPct,
+    priceRatio: r, lpFactor: lpFactor, holdFactor: holdFactor,
+    lpVsHold: lpFactor / holdFactor,
+    ilPct: (lpFactor / holdFactor - 1) * 100
+  };
+  if (depositStr != null && String(depositStr).trim() !== "") {
+    var dep = Number(depositStr);
+    if (!Number.isFinite(dep) || dep < 0) return null;
+    result.deposit = dep;
+    result.holdValue = dep * holdFactor;
+    result.lpValue = dep * lpFactor;
+    result.feesNeeded = result.holdValue - result.lpValue;
+    result.feesNeededPctOfDeposit = dep > 0 ? result.feesNeeded / dep * 100 : 0;
+  }
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (!Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -5574,6 +5637,33 @@ if (typeof document !== "undefined") {
           ", and the price impact against that spot is ≈ " + fmt(res.priceImpactPct, 4) + "%. The cost climbs steeply as the target approaches the whole output reserve — the curve approaches it asymptotically and never pays it all. A stableswap exact-out model, not live pool data — not financial advice.";
         document.getElementById("ssxo-ain").value = fmt(res.amountIn, 6);
         document.getElementById("ssxo-spot").value = fmt(res.spotPrice, 6);
+      }
+    });
+
+    /* --- Weighted-pool impermanent-loss calculator --- */
+    document.getElementById("wil-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = weightedImpermanentLoss(
+        document.getElementById("wil-weight").value,
+        document.getElementById("wil-ratio").value,
+        document.getElementById("wil-deposit").value
+      );
+      var out = document.getElementById("wil-result");
+      if (res === null) {
+        out.textContent = "Enter a token-A weight strictly between 0 and 100 percent and a price multiple above 0 — e.g. 2 if token A doubled against token B, 0.5 if it halved. A deposit value, if given, must be 0 or more.";
+        document.getElementById("wil-lpval").value = "";
+        document.getElementById("wil-holdval").value = "";
+      } else if (res.deposit != null) {
+        out.textContent = "Model output: at a " + fmt(res.priceRatio, 4) + "x price move, a pool weighted ≈ " + fmt(res.weightAPct, 2) + "% to token A has impermanent loss ≈ " + fmt(res.ilPct, 4) +
+          "% vs holding. Holding the starting mix would be worth ≈ $" + fmt(res.holdValue, 2) + "; the LP position would be worth ≈ $" + fmt(res.lpValue, 2) +
+          " (before fees earned), so fees of ≈ $" + fmt(res.feesNeeded, 2) + " would be needed to break even with holding. The loss is not symmetric in the weight — weighting toward a token tracks holding it more closely, which helps if it rises and hurts if it falls. A weighted-pool impermanent-loss model, not live pool data — not financial advice.";
+        document.getElementById("wil-lpval").value = fmt(res.lpValue, 2);
+        document.getElementById("wil-holdval").value = fmt(res.holdValue, 2);
+      } else {
+        out.textContent = "Model output: at a " + fmt(res.priceRatio, 4) + "x price move, a pool weighted ≈ " + fmt(res.weightAPct, 2) + "% to token A has impermanent loss ≈ " + fmt(res.ilPct, 4) +
+          "% vs holding (before fees earned — fees are what compensate for this). At a 50% weight this is exactly the 50/50 calculator's answer. A weighted-pool impermanent-loss model, not live pool data — not financial advice.";
+        document.getElementById("wil-lpval").value = "";
+        document.getElementById("wil-holdval").value = "";
       }
     });
 

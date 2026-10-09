@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=72"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=73"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists fifty-nine tools", readme.includes("fifty-nine pool tools") || readme.includes("all fifty-nine"));
+check("README lists sixty tools", readme.includes("sixty pool tools") || readme.includes("all sixty"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts fifty-nine tools and names the stableswap models",
-  appSrc.includes("plus fifty-nine fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, and a stableswap exact-out swap model.\n   These are educational MODELS"));
+check("app.js header counts sixty tools and names the weighted-pool IL calculator",
+  appSrc.includes("plus sixty fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, and a\n   weighted-pool impermanent-loss calculator.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -3249,6 +3249,64 @@ check("ssxo tool present in index.html", html.includes('id="ssxo-calc"') && html
 check("ssxo honesty: asymptotic reserve and not-live labels", html.includes("a target at or above the whole output reserve is rejected, not quoted") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers stableswap exact-out", guide.includes("Exact-out on a stable curve"));
 check("README lists tool 59", readme.includes("59. **Stableswap exact-out swap model**"));
+
+/* ---------- Tool 60: weighted-pool impermanent-loss calculator ---------- */
+/* closed form: lpFactor = r^w, holdFactor = w*r + (1-w), IL = ratio - 1.
+   Headline vectors from the clean foreground prototype (which also
+   verified the closed form against the weighted invariant solved
+   numerically at w=0.8, spot 0.25..9, to ~1e-15). */
+const wil1 = app.weightedImpermanentLoss("80", "2", "1000");
+near("WIL 80/2 lpFactor", wil1.lpFactor, 1.7411011265922482, 1e-12);
+near("WIL 80/2 holdFactor", wil1.holdFactor, 1.8, 1e-12);
+near("WIL 80/2 ilPct", wil1.ilPct, -3.2721596337639935, 1e-9);
+near("WIL 80/2 lpValue", wil1.lpValue, 1741.1011265922482, 1e-9);
+near("WIL 80/2 holdValue", wil1.holdValue, 1800, 1e-9);
+near("WIL 80/2 feesNeeded", wil1.feesNeeded, 58.89887340775179, 1e-9);
+const wil2 = app.weightedImpermanentLoss("20", "2", "1000");
+near("WIL 20/2 ilPct", wil2.ilPct, -4.275137083580427, 1e-9);
+near("WIL 20/2 feesNeeded", wil2.feesNeeded, 51.30164500296508, 1e-9);
+near("WIL 10/4 ilPct", app.weightedImpermanentLoss("10", "4", "").ilPct, -11.638588077151146, 1e-9);
+near("WIL 90/4 feesNeeded", app.weightedImpermanentLoss("90", "4", "1000").feesNeeded, 217.79774681550367, 1e-9);
+/* at a 50% weight this IS tool 2: values, IL and tool 4's hurdle verbatim */
+for (const [r, dep] of [["2", "1000"], ["0.5", "1000"], ["4", "1000"], ["0.25", "2500"], ["1.5", "777"]]) {
+  const w50 = app.weightedImpermanentLoss("50", r, dep);
+  const t2 = app.impermanentLoss(r, dep);
+  const t4 = app.breakEvenFees(r, dep, "");
+  check("WIL 50/50 equals tool 2 at r=" + r,
+    Math.abs(w50.ilPct - t2.ilPct) < 1e-9 && Math.abs(w50.lpValue - t2.lpValue) < 1e-9 &&
+    Math.abs(w50.holdValue - t2.holdValue) < 1e-9 && Math.abs(w50.feesNeeded - t4.feesNeeded) < 1e-9);
+}
+/* token-swap symmetry: weight w at multiple r == weight 1-w at 1/r */
+for (const [w, r] of [["80", "2"], ["70", "3"], ["20", "0.5"], ["95", "9"], ["35", "0.25"]]) {
+  const a = app.weightedImpermanentLoss(w, r, "");
+  const b = app.weightedImpermanentLoss(String(100 - Number(w)), String(1 / Number(r)), "");
+  check("WIL symmetry " + w + "/" + r, Math.abs(a.ilPct - b.ilPct) < 1e-9);
+}
+/* no move, no loss at any weight; IL never positive; deposit optional */
+check("WIL no move no loss", [5, 25, 50, 75, 95].every(w => app.weightedImpermanentLoss(String(w), "1", "1000").ilPct === 0));
+check("WIL IL never positive sweep",
+  [10, 30, 50, 70, 90].every(w => [0.1, 0.5, 0.9, 1.1, 2, 5, 20].every(r => app.weightedImpermanentLoss(String(w), String(r), "").ilPct <= 1e-12)));
+const wilNoDep = app.weightedImpermanentLoss("80", "2", "");
+check("WIL deposit optional", wilNoDep !== null && wilNoDep.deposit === undefined && wilNoDep.feesNeeded === undefined);
+check("WIL blank deposit treated as omitted", app.weightedImpermanentLoss("80", "2", "  ") !== null);
+check("WIL weightB reported", wil1.weightBPct === 20);
+/* the heavier side tracks holding: at r=2 the 80% weight loses less
+   than 20%, and at r=0.5 the ordering flips exactly */
+check("WIL weight ordering flips with direction",
+  Math.abs(app.weightedImpermanentLoss("80", "2", "").ilPct) < Math.abs(app.weightedImpermanentLoss("20", "2", "").ilPct) &&
+  Math.abs(app.weightedImpermanentLoss("80", "0.5", "").ilPct) > Math.abs(app.weightedImpermanentLoss("20", "0.5", "").ilPct));
+check("WIL rejects weights at or beyond the edges", app.weightedImpermanentLoss("0", "2", "") === null && app.weightedImpermanentLoss("100", "2", "") === null && app.weightedImpermanentLoss("-5", "2", "") === null && app.weightedImpermanentLoss("101", "2", "") === null);
+check("WIL rejects blank and junk", app.weightedImpermanentLoss("", "2", "") === null && app.weightedImpermanentLoss("80", "", "") === null && app.weightedImpermanentLoss("abc", "2", "") === null && app.weightedImpermanentLoss("80", "xyz", "") === null);
+check("WIL rejects non-positive multiples", app.weightedImpermanentLoss("80", "0", "") === null && app.weightedImpermanentLoss("80", "-2", "") === null);
+check("WIL rejects a negative deposit", app.weightedImpermanentLoss("80", "2", "-1") === null);
+check("WIL rejects an overflowing move", app.weightedImpermanentLoss("90", "1e308", "1000") === null);
+check("all wil controls labelled",
+  ["wil-weight", "wil-ratio", "wil-deposit", "wil-lpval", "wil-holdval"]
+    .every(id => html.includes(`for="${id}"`)));
+check("wil tool present in index.html", html.includes('id="wil-calc"') && html.includes('id="wil-result"'));
+check("wil honesty: asymmetry and not-live labels", html.includes("Weighting toward a token is a bet on it, not a shield") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers weighted-pool IL", guide.includes("A weighted pool's impermanent loss is set by the weight"));
+check("README lists tool 60", readme.includes("60. **Weighted-pool impermanent-loss calculator**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

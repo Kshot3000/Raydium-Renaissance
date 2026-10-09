@@ -1389,6 +1389,23 @@
         <button type="submit" class="btn primary">Model this exact-out stableswap trade</button>
         <p id="ssxo-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="wil-calc">
+        <h3>60 · Weighted-pool impermanent-loss calculator</h3>
+        <p>Tool 2's question for the weighted pools of tool 56 — a weighted pool holds a fixed value share in each token, not 50/50, so its impermanent loss is r^w ÷ (w·r + (1 − w)) − 1, where w is token A's value weight and r the price multiple. At a 50% weight that is tool 2's answer exactly. The honest shape is the asymmetry: at a 2x move an 80% weight on the token that rose loses ≈3.27% while a 20% weight loses ≈4.28% — and the two swap exactly when the move reverses, because the heavier side tracks holding that token more closely. Weighting toward a token is a bet on it, not a shield: a 10% weight still loses ≈11.64% at a 4x move. Weighted pools are a generalised design used elsewhere — Raydium's own constant-product pools are the 50/50 case tool 2 covers. Educational model only — your weight, price-move and deposit inputs; not live pool data, not a live quote, not financial advice.</p>
+        <label for="wil-weight">Token A weight (percent of position value, strictly between 0 and 100)</label>
+        <input id="wil-weight" inputmode="decimal" placeholder="e.g. 80" autocomplete="off">
+        <label for="wil-ratio">Price multiple for token A (2 = doubled, 0.5 = halved)</label>
+        <input id="wil-ratio" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="wil-deposit">Deposit value in $ (optional)</label>
+        <input id="wil-deposit" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="wil-lpval">LP position value in $ (model)</label>
+        <input id="wil-lpval" readonly placeholder="—" autocomplete="off">
+        <label for="wil-holdval">Holding value in $ (model)</label>
+        <input id="wil-holdval" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Calculate weighted-pool IL</button>
+        <p id="wil-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1416,6 +1433,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=72"></script>
+<script src="app.js?v=73"></script>
 </body>
 </html>
