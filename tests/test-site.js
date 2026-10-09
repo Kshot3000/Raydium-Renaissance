@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=77"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=78"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -3519,6 +3519,20 @@ check("WXO rejects a target at or above the output reserve", app.weightedSwapExa
 check("WXO rejects weight at the edges", app.weightedSwapExactOut("1000", "1000", "0", "100", 0) === null && app.weightedSwapExactOut("1000", "1000", "100", "100", 0) === null && app.weightedSwapExactOut("1000", "1000", "-10", "100", 0) === null);
 check("WXO rejects bad fee", app.weightedSwapExactOut("1000", "1000", "80", "100", 10000) === null && app.weightedSwapExactOut("1000", "1000", "80", "100", -1) === null && app.weightedSwapExactOut("1000", "1000", "80", "100", 25.5) === null);
 check("WXO rejects an overflowing target", app.weightedSwapExactOut("1000", "1000", "80", "1e309", 0) === null);
+/* near the ceiling the log term must come from the exact remainder
+   (reserveOut - amountOut, Sterbenz-exact), not from the rounded
+   ratio amountOut/reserveOut: at a 1e-9 remainder fraction the
+   ratio form put the 50/50 net at 1000000027281.9312 against the
+   true 1000000001524.7573 (~2.6e-5 relative off; 50-digit oracle) */
+const wxCeil = app.weightedSwapExactOut("1000", "1000", "50", "999.999999", 9999);
+near("WXO near-ceiling net in uses the exact remainder", wxCeil.netIn, 1000000001524.7573, 1);
+near("WXO near-ceiling gross in at max fee", wxCeil.amountIn, 10000000015247566, 1e7);
+const wxCeil80 = app.weightedSwapExactOut("1000", "1000", "80", "999.999999", 25);
+near("WXO near-ceiling w80 net in", wxCeil80.netIn, 176827.94111613513, 0.01);
+/* the dust side keeps the log1p form and its exactness */
+const wxDust = app.weightedSwapExactOut("1000", "1000", "80", "0.001", 0);
+near("WXO dust target net in", wxDust.netIn, 0.0002500001562501172, 1e-15);
+check("WXO handler uses the branched log form", appSrc.includes("Math.log(reserveOut / newReserveOut)") && appSrc.includes("-Math.log1p(-amountOut / reserveOut)"));
 check("all wxo controls labelled",
   ["wxo-rin", "wxo-rout", "wxo-win", "wxo-aout", "wxo-fee", "wxo-ain", "wxo-spot"]
     .every(id => html.includes(`for="${id}"`)));

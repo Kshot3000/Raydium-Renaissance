@@ -3558,7 +3558,21 @@ function weightedSwapExactOut(reserveInStr, reserveOutStr, weightInPctStr, amoun
   if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
   var wIn = weightInPct / 100, wOut = 1 - wIn;
   var exponent = wOut / wIn;
-  var netIn = reserveIn * Math.expm1(exponent * -Math.log1p(-amountOut / reserveOut));
+  var newReserveOut = reserveOut - amountOut;
+  /* The log term is ln(reserveOut / newReserveOut), evaluated in
+     whichever form keeps it exact at this target's scale. For a
+     small target -log1p(-amountOut/reserveOut) is the accurate form
+     (Tool 56's); near the ceiling the ratio amountOut/reserveOut
+     rounds to a double whose complement 1 - ratio carries that
+     rounding amplified by 1/(1 - ratio) — at a 1e-9 remainder
+     fraction the net input was off by ~2.6e-5 relative at 50/50 —
+     while reserveOut - amountOut is exact there (Sterbenz) and the
+     ratio formed from it is large, so its rounding is harmless in
+     the log. Branch at half the reserve; both forms agree there. */
+  var logRatio = amountOut <= reserveOut / 2
+    ? -Math.log1p(-amountOut / reserveOut)
+    : Math.log(reserveOut / newReserveOut);
+  var netIn = reserveIn * Math.expm1(exponent * logRatio);
   if (!(netIn > 0)) return null;
   var amountIn = netIn / (1 - fee / 10000);
   if (!(amountIn > 0)) return null;
@@ -3571,7 +3585,7 @@ function weightedSwapExactOut(reserveInStr, reserveOutStr, weightInPctStr, amoun
     netIn: netIn, amountIn: amountIn,
     spotPrice: spotPrice, effectivePrice: effectivePrice,
     priceImpactPct: (1 - effectivePrice / spotPrice) * 100,
-    newReserveIn: reserveIn + netIn, newReserveOut: reserveOut - amountOut
+    newReserveIn: reserveIn + netIn, newReserveOut: newReserveOut
   };
   var fields = Object.keys(result);
   for (var j = 0; j < fields.length; j++) {
