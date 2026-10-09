@@ -1425,6 +1425,25 @@
         <button type="submit" class="btn primary">Calculate depeg loss</button>
         <p id="depeg-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="warb-calc">
+        <h3>62 · Weighted-pool arbitrage model</h3>
+        <p>Tool 16's question for the weighted pools of tool 56: why a weighted pool's price tracks the wider market. Its spot price carries the weights inside it — spot = (reserve B ÷ weight B) ÷ (reserve A ÷ weight A) — so an 80/20 pool holding 800 A / 200 B spots at exactly 1 B per A, not at the naive reserve ratio of 0.25; judge the gap off the raw reserves and you misprice the trade. Enter the pool's reserves, token A's weight, and an external price <em>you</em> supply (this tool has no live feed and finds no opportunities): the result is the trade that moves the pool's weighted spot exactly to that price along the weighted invariant — direction, size grossed up for the fee, and modelled profit valued in B at your external price. At a 50% weight every figure is exactly tool 16's constant-product answer. A gap smaller than the fee honestly comes out unprofitable. Weighted pools are a generalised design used elsewhere, modelled here for comparison — Raydium's own constant-product pools are the 50/50 case. Educational model only — not live quotes, not a found opportunity, not financial advice.</p>
+        <label for="warb-ra">Pool reserve — token A</label>
+        <input id="warb-ra" inputmode="decimal" placeholder="e.g. 800" autocomplete="off">
+        <label for="warb-rb">Pool reserve — token B</label>
+        <input id="warb-rb" inputmode="decimal" placeholder="e.g. 200" autocomplete="off">
+        <label for="warb-wa">Token A weight % (e.g. 80 for an 80/20 pool)</label>
+        <input id="warb-wa" inputmode="decimal" placeholder="e.g. 80" autocomplete="off">
+        <label for="warb-ext">External price (token B per token A — your input, not a live feed)</label>
+        <input id="warb-ext" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="warb-fee">Pool fee (bps — 25 = 0.25%)</label>
+        <input id="warb-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="warb-out">Modelled profit (token B, at your external price)</label>
+        <input id="warb-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model the arbitrage trade</button>
+        <p id="warb-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1452,6 +1471,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=75"></script>
+<script src="app.js?v=76"></script>
 </body>
 </html>

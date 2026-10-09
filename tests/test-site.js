@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=75"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=76"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists sixty-one tools", readme.includes("sixty-one pool tools") || readme.includes("all sixty-one"));
+check("README lists sixty-two tools", readme.includes("sixty-two pool tools") || readme.includes("all sixty-two"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts sixty-one tools and names the stableswap depeg-loss calculator",
-  appSrc.includes("plus sixty-one fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, and a\n   stableswap depeg-loss calculator.\n   These are educational MODELS"));
+check("app.js header counts sixty-two tools and names the weighted-pool arbitrage model",
+  appSrc.includes("plus sixty-two fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, and a weighted-pool\n   arbitrage model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -3375,6 +3375,88 @@ check("depeg honesty: amplification danger and not-live labels", html.includes("
 check("depeg zero loss renders as 0, not -0 (handler negates via 0 - loss)", appSrc.includes("fmt(0 - res.lossA, 6)") && appSrc.includes("fmt(0 - res.lossPct, 4)") && !appSrc.includes("fmt(-res.lossA"));
 check("guide covers stableswap depeg loss", guide.includes("On a depeg, a higher amplification loses more, not less"));
 check("README lists tool 61", readme.includes("61. **Stableswap depeg-loss calculator**"));
+
+/* ---------- Tool 62: Weighted-pool arbitrage model (WARB) ---------- */
+/* headline: 800 A / 200 B at an 80% A weight spots at exactly
+   (200/0.2)/(800/0.8) = 1 — NOT the naive reserve ratio 0.25.
+   External 2, zero fee: targets are forced by the invariant and
+   the spot condition: A' = k/(2*0.25)^0.2 = 696.4404506368993,
+   B' = 348.2202253184496; pay 148.2202253184496 B, take
+   103.5595493631007 A, profit 58.89887340775181 B (prototype-verified) */
+const wa1 = app.weightedArbitrage("800", "200", "80", "2", 0);
+near("WARB headline weighted spot is 1, not the reserve ratio", wa1.spotPrice, 1, 1e-12);
+check("WARB headline direction", wa1.direction === "buy-a" && wa1.inToken === "B" && wa1.outToken === "A");
+near("WARB headline target A", wa1.targetReserveA, 696.4404506368993, 1e-9);
+near("WARB headline target B", wa1.targetReserveB, 348.2202253184496, 1e-9);
+near("WARB headline net in", wa1.netIn, 148.2202253184496, 1e-9);
+near("WARB headline amount out", wa1.amountOut, 103.5595493631007, 1e-9);
+near("WARB headline profit", wa1.profitInB, 58.89887340775181, 1e-9);
+near("WARB headline gap pct", wa1.priceGapPct, 100, 1e-9);
+/* mirror direction: external 0.5 against the same spot of 1 */
+const wa2 = app.weightedArbitrage("800", "200", "80", "0.5", 0);
+check("WARB mirror direction", wa2.direction === "sell-a" && wa2.inToken === "A" && wa2.outToken === "B");
+near("WARB mirror net in", wa2.netIn, 118.95868399762787, 1e-9);
+near("WARB mirror amount out", wa2.amountOut, 85.13016450029654, 1e-9);
+near("WARB mirror profit", wa2.profitInB, 25.650822501482608, 1e-9);
+/* the fee grosses the input up and lowers the profit, targets unchanged */
+const wa3 = app.weightedArbitrage("800", "200", "80", "2", 25);
+near("WARB 25bps gross in", wa3.grossIn, 148.59170457989933, 1e-9);
+near("WARB 25bps profit", wa3.profitInB, 58.52739414630207, 1e-9);
+check("WARB fee leaves targets and net unchanged", wa3.targetReserveA === wa1.targetReserveA && wa3.netIn === wa1.netIn && wa3.profitInB < wa1.profitInB);
+/* at the weighted spot there is no trade: equal reserves at 80% spot
+   at exactly 4, so external 4 is "none" even though the ratio is 1 */
+const waNone = app.weightedArbitrage("1000", "1000", "80", "4", 25);
+near("WARB equal reserves at 80% spot at 4", waNone.spotPrice, 4, 1e-12);
+check("WARB at weighted spot is none", waNone.direction === "none" && waNone.profitInB === 0 && waNone.amountOut === 0 && waNone.grossIn === 0);
+/* 50/50 reduces to Tool 16 exactly — every field that matters */
+for (const [ra, rb, pe, f] of [["1000", "1000", "4", 0], ["1000", "1000", "0.25", 25], ["2000", "500", "0.5", 25], ["1000", "1000", "2", 100]]) {
+  const w = app.weightedArbitrage(ra, rb, "50", pe, f);
+  const c16 = app.cpArbitrage(ra, rb, pe, f);
+  check("WARB 50/50 equals Tool 16 " + ra + "/" + rb + " Pe " + pe + " @" + f + "bps",
+    w !== null && c16 !== null && w.direction === c16.direction &&
+    Math.abs(w.spotPrice - c16.spotPrice) < 1e-9 &&
+    Math.abs(w.netIn - c16.netIn) < 1e-6 && Math.abs(w.amountOut - c16.amountOut) < 1e-6 &&
+    Math.abs(w.profitInB - c16.profitInB) < 1e-6);
+}
+/* the invariant holds at the target reserves and their spot is Pe */
+for (const [ra, rb, wa, pe] of [[800, 200, 80, 2], [1000, 1000, 20, 3], [5000, 1000, 70, 0.2], [1000, 4000, 30, 9]]) {
+  const w = app.weightedArbitrage(String(ra), String(rb), String(wa), String(pe), 0);
+  const wA = wa / 100, wB = 1 - wA;
+  const k0 = Math.pow(ra, wA) * Math.pow(rb, wB);
+  const k1 = Math.pow(w.targetReserveA, wA) * Math.pow(w.targetReserveB, wB);
+  const postSpot = (w.targetReserveB / wB) / (w.targetReserveA / wA);
+  check("WARB invariant + post-trade spot " + ra + "/" + rb + " w" + wa + " Pe " + pe,
+    Math.abs(k1 / k0 - 1) < 1e-12 && Math.abs(postSpot - pe) < 1e-9);
+}
+/* composition: Tool 56 swapping the gross input returns the output */
+for (const [ra, rb, wa, pe, f] of [["800", "200", "80", "2", 0], ["800", "200", "80", "0.5", 25], ["1000", "1000", "20", "3", 25], ["5000", "1000", "70", "0.2", 50], ["1000", "4000", "30", "9", 0]]) {
+  const w = app.weightedArbitrage(ra, rb, wa, pe, f);
+  const inB = w.inToken === "B";
+  const sw = app.weightedSwap(inB ? rb : ra, inB ? ra : rb, inB ? String(100 - Number(wa)) : wa, String(w.grossIn), f);
+  check("WARB Tool-56 composition " + ra + "/" + rb + " w" + wa + " Pe " + pe + " @" + f + "bps",
+    sw !== null && Math.abs(sw.out - w.amountOut) < Math.max(1e-6, w.amountOut * 1e-9));
+}
+/* token-swap mirror: swapping the tokens, complementing the weight
+   and inverting the price models the same trade — profits agree
+   once valued in the same token (mirror profit is in A; x Pe) */
+const waMir = app.weightedArbitrage("200", "800", "20", "0.5", 0);
+near("WARB token-swap mirror profit", waMir.profitInB * 2, wa1.profitInB, 1e-9);
+/* a gap smaller than the fee is honestly unprofitable */
+check("WARB tiny gap eaten by fee", app.weightedArbitrage("1000", "1000", "50", "1.001", 25).profitInB < 0);
+check("WARB tiny gap profitable at zero fee", app.weightedArbitrage("1000", "1000", "50", "1.001", 0).profitInB > 0);
+check("WARB larger gap = larger profit", app.weightedArbitrage("800", "200", "80", "4", 25).profitInB > wa3.profitInB);
+check("WARB rejects blank and junk", app.weightedArbitrage("", "200", "80", "2", 0) === null && app.weightedArbitrage("800", "200", "80", "", 0) === null && app.weightedArbitrage("abc", "200", "80", "2", 0) === null && app.weightedArbitrage("800", "200", "80", "2", "") === null);
+check("WARB rejects non-positive inputs", app.weightedArbitrage("0", "200", "80", "2", 0) === null && app.weightedArbitrage("800", "-5", "80", "2", 0) === null && app.weightedArbitrage("800", "200", "80", "0", 0) === null && app.weightedArbitrage("800", "200", "80", "-2", 0) === null);
+check("WARB rejects weight at the edges", app.weightedArbitrage("800", "200", "0", "2", 0) === null && app.weightedArbitrage("800", "200", "100", "2", 0) === null && app.weightedArbitrage("800", "200", "-10", "2", 0) === null);
+check("WARB rejects bad fee", app.weightedArbitrage("800", "200", "80", "2", 10000) === null && app.weightedArbitrage("800", "200", "80", "2", -1) === null && app.weightedArbitrage("800", "200", "80", "2", 25.5) === null);
+check("WARB rejects an overflowing external price", app.weightedArbitrage("1000", "1000", "80", "1e309", 0) === null);
+check("all warb controls labelled",
+  ["warb-ra", "warb-rb", "warb-wa", "warb-ext", "warb-fee", "warb-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("warb tool present in index.html", html.includes('id="warb-calc"') && html.includes('id="warb-result"'));
+check("warb honesty: weights inside the spot and not-live labels", html.includes("judge the gap off the raw reserves and you misprice the trade") && html.includes("not a live feed") && html.includes("not financial advice"));
+check("guide covers weighted-pool arbitrage", guide.includes("read the gap off the spot, not the reserves"));
+check("README lists tool 62", readme.includes("62. **Weighted-pool arbitrage model**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

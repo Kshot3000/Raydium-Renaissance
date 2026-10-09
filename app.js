@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus sixty-one fully
+/* Raydium Renaissance hub logic: project filtering plus sixty-two fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -35,8 +35,9 @@
    probability calculator, a weighted-pool swap model, a
    CLMM range-order (limit-order) planner, a stableswap
    swap model, a stableswap exact-out swap model, a
-   weighted-pool impermanent-loss calculator, and a
-   stableswap depeg-loss calculator.
+   weighted-pool impermanent-loss calculator, a
+   stableswap depeg-loss calculator, and a weighted-pool
+   arbitrage model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3931,8 +3932,87 @@ function stableDepegLoss(reserveAStr, reserveBStr, ampStr, priceBStr) {
   return result;
 }
 
+/* ---------- 62 · Weighted-pool arbitrage model ---------- */
+/* Tool 16's question for the weighted pools of Tool 56: if a
+   weighted pool's spot price — spot = (reserveB / wB) /
+   (reserveA / wA), the weights inside the quote — differs from a
+   price elsewhere, a trade that moves the pool's spot exactly to
+   that external price Pe is the textbook arbitrage, and making
+   it is what pulls the pool back into line. The reserves at Pe
+   are forced by the weighted invariant reserveA^wA x
+   reserveB^wB = k together with the spot condition
+   reserveB' = Pe x (wB / wA) x reserveA':
+     reserveA' = k / (Pe x wB / wA)^wB,  reserveB' = Pe x (wB/wA) x reserveA'
+   Pe above spot: A is cheap in the pool — pay B in (net
+   reserveB' - reserveB), take A out (reserveA - reserveA').
+   Pe below spot: the mirror. The fee comes off the input before
+   it reaches the pool (Tool 56's convention), so the gross input
+   is net / (1 - fee) and the modelled profit, valued in B at the
+   external price, is outValueInB - grossInValueInB. At a 50%
+   weight every figure reduces to Tool 16's exactly (asserted in
+   tests), and swapping the modelled gross input through Tool 56
+   itself returns the modelled output and lands the pool's spot
+   on Pe (also asserted). A gap smaller than the fee honestly
+   comes out unprofitable at the price-aligning size. The honest
+   edges: the weights move the starting spot itself — an 80/20
+   pool holding 800/200 spots at exactly 1, not at the naive
+   reserve ratio 0.25 — so judging the gap off raw reserves
+   misprices the trade; weighted pools are a generalised design
+   used elsewhere, modelled for comparison (Raydium's own
+   constant-product pools are the 50/50 case); the maths is
+   floating point; and the external price is YOUR input, not a
+   live feed — this sizes a textbook trade against a price you
+   supply, it does not find one. Model only — no routing, no
+   other venues' depth or fees, no transaction costs, not
+   financial advice. */
+function weightedArbitrage(reserveAStr, reserveBStr, weightAPctStr, externalPriceStr, feeBps) {
+  var raw = [reserveAStr, reserveBStr, weightAPctStr, externalPriceStr, feeBps];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var reserveA = Number(reserveAStr), reserveB = Number(reserveBStr);
+  var weightAPct = Number(weightAPctStr), pe = Number(externalPriceStr);
+  var fee = Number(feeBps);
+  if (![reserveA, reserveB, weightAPct, pe, fee].every(Number.isFinite)) return null;
+  if (reserveA <= 0 || reserveB <= 0 || pe <= 0) return null;
+  if (weightAPct <= 0 || weightAPct >= 100) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var wA = weightAPct / 100, wB = 1 - wA;
+  var spot = (reserveB / wB) / (reserveA / wA);
+  var k = Math.pow(reserveA, wA) * Math.pow(reserveB, wB);
+  var c = pe * (wB / wA);
+  var targetA = k / Math.pow(c, wB);
+  var targetB = c * targetA;
+  if (!(targetA > 0) || !(targetB > 0)) return null;
+  var base = { reserveA: reserveA, reserveB: reserveB,
+    weightAPct: weightAPct, weightBPct: 100 - weightAPct,
+    spotPrice: spot, externalPrice: pe,
+    priceGapPct: (pe / spot - 1) * 100, feeBps: fee,
+    postTradeSpot: pe, targetReserveA: targetA, targetReserveB: targetB };
+  var result;
+  if (Math.abs(pe - spot) / spot < 1e-12) {
+    result = Object.assign(base, { direction: "none", inToken: null, netIn: 0, grossIn: 0, amountOut: 0, outToken: null, profitInB: 0 });
+  } else if (pe > spot) {
+    var netInB = targetB - reserveB, outA = reserveA - targetA;
+    if (!(netInB > 0) || !(outA > 0)) return null;
+    var grossInB = netInB / (1 - fee / 10000);
+    result = Object.assign(base, { direction: "buy-a", inToken: "B", netIn: netInB, grossIn: grossInB, amountOut: outA, outToken: "A", profitInB: outA * pe - grossInB });
+  } else {
+    var netInA = targetA - reserveA, outB = reserveB - targetB;
+    if (!(netInA > 0) || !(outB > 0)) return null;
+    var grossInA = netInA / (1 - fee / 10000);
+    result = Object.assign(base, { direction: "sell-a", inToken: "A", netIn: netInA, grossIn: grossInA, amountOut: outB, outToken: "B", profitInB: outB - grossInA * pe });
+  }
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    var v = result[fields[j]];
+    if (typeof v === "number" && !Number.isFinite(v)) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -5797,6 +5877,38 @@ if (typeof document !== "undefined") {
           "% vs holding, before any fees earned). The loss grows with the amplification, because a higher A defends par longer. A stableswap depeg-loss model, not live pool data — not financial advice.";
         document.getElementById("depeg-lpval").value = fmt(res.lpValueA, 6);
         document.getElementById("depeg-holdval").value = fmt(res.holdValueA, 6);
+      }
+    });
+
+    /* --- Weighted-pool arbitrage model --- */
+    document.getElementById("warb-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = weightedArbitrage(
+        document.getElementById("warb-ra").value,
+        document.getElementById("warb-rb").value,
+        document.getElementById("warb-wa").value,
+        document.getElementById("warb-ext").value,
+        document.getElementById("warb-fee").value
+      );
+      var out = document.getElementById("warb-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, a token-A weight between 0 and 100 (exclusive), an external price above 0 and a fee tier in whole basis points (0–9999). An external price so extreme the target reserves overflow is rejected, not extrapolated.";
+        document.getElementById("warb-out").value = "";
+      } else if (res.direction === "none") {
+        out.textContent = "Model output: the pool's weighted spot price is already ≈ " + fmt(res.spotPrice, 6) + " B per A — the weights are inside that quote — so there is no price-aligning trade to size at your external price. A weighted-pool arbitrage model, not live pool data — not financial advice.";
+        document.getElementById("warb-out").value = fmt(0, 6);
+      } else {
+        var dirText = res.direction === "buy-a"
+          ? "token A is cheap in the pool: pay token B in and take token A out"
+          : "token A is expensive in the pool: pay token A in and take token B out";
+        out.textContent = "Model output: the pool's weighted spot price is ≈ " + fmt(res.spotPrice, 6) +
+          " B per A against your external price of ≈ " + fmt(res.externalPrice, 6) + " (a gap of ≈ " + fmt(res.priceGapPct, 4) + "%) — " + dirText +
+          ". The price-aligning trade pays ≈ " + fmt(res.grossIn, 6) + " of token " + res.inToken + " in (≈ " + fmt(res.netIn, 6) +
+          " after the fee reaches the pool) and takes ≈ " + fmt(res.amountOut, 6) + " of token " + res.outToken +
+          " out, leaving the pool at ≈ " + fmt(res.targetReserveA, 6) + " A / ≈ " + fmt(res.targetReserveB, 6) +
+          " B with its spot on your price. Modelled profit valued in B at your external price: ≈ " + fmt(res.profitInB, 6) +
+          " B — a gap smaller than the fee honestly comes out negative. At a 50% weight this is exactly the constant-product arbitrage model's answer. A weighted-pool arbitrage model over a price you typed — not a live feed, not a found opportunity, not financial advice.";
+        document.getElementById("warb-out").value = fmt(res.profitInB, 6);
       }
     });
 
