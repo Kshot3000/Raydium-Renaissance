@@ -1406,6 +1406,25 @@
         <button type="submit" class="btn primary">Calculate weighted-pool IL</button>
         <p id="wil-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="depeg-calc">
+        <h3>61 · Stableswap depeg-loss calculator</h3>
+        <p>Tools 58 and 59 keep warning that on a depeg the stableswap curve keeps offering close to par and the good side drains first — this prices that warning. Give a pegged pool's reserves and amplification, and the external price of token B in token A (1 while the peg holds, e.g. 0.90 if B trades at 0.90 A elsewhere): arbitrage trades against the pool until its own marginal price of B matches that price, the invariant held constant with no fees (live arbitrage pays the swap fee, which slows the drain slightly, so this is the gross shape). The honest shape is the amplification: at a 0.90 depeg of a balanced 1,000/1,000 pool the loss vs holding grows with A — ≈0.28% at A = 1, ≈3.38% at A = 100, ≈4.95% at A = 5,000 — because a higher A defends par longer, and in the limit the pool simply swaps its whole A side for B at par and loses the full depeg on it. A higher amplification is more dangerous on a depeg, not safer. A price above the pool's starting spot runs the drain the other way: B is then the expensive side and A accumulates instead. Educational model only — your reserves, amplification and depeg price inputs; not live pool data, not a live quote, not financial advice.</p>
+        <label for="depeg-ra">Reserve of token A</label>
+        <input id="depeg-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="depeg-rb">Reserve of token B</label>
+        <input id="depeg-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="depeg-amp">Amplification A (pool property, above 0)</label>
+        <input id="depeg-amp" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="depeg-price">External price of token B, in token A (1 = peg holds)</label>
+        <input id="depeg-price" inputmode="decimal" placeholder="e.g. 0.9" autocomplete="off">
+        <label for="depeg-lpval">LP position value in A at that price (model)</label>
+        <input id="depeg-lpval" readonly placeholder="—" autocomplete="off">
+        <label for="depeg-holdval">Holding value in A at that price (model)</label>
+        <input id="depeg-holdval" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Calculate depeg loss</button>
+        <p id="depeg-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1433,6 +1452,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=73"></script>
+<script src="app.js?v=74"></script>
 </body>
 </html>

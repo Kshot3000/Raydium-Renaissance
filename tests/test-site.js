@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=73"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=74"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists sixty tools", readme.includes("sixty pool tools") || readme.includes("all sixty"));
+check("README lists sixty-one tools", readme.includes("sixty-one pool tools") || readme.includes("all sixty-one"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts sixty tools and names the weighted-pool IL calculator",
-  appSrc.includes("plus sixty fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, and a\n   weighted-pool impermanent-loss calculator.\n   These are educational MODELS"));
+check("app.js header counts sixty-one tools and names the stableswap depeg-loss calculator",
+  appSrc.includes("plus sixty-one fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, and a\n   stableswap depeg-loss calculator.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -3307,6 +3307,73 @@ check("wil tool present in index.html", html.includes('id="wil-calc"') && html.i
 check("wil honesty: asymmetry and not-live labels", html.includes("Weighting toward a token is a bet on it, not a shield") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers weighted-pool IL", guide.includes("A weighted pool's impermanent loss is set by the weight"));
 check("README lists tool 60", readme.includes("60. **Weighted-pool impermanent-loss calculator**"));
+
+/* --- Tool 61: stableswap depeg-loss calculator --- */
+const dg1 = app.stableDepegLoss("1000", "1000", "100", "0.9");
+near("DEPEG headline newReserveA", dg1.newReserveA, 208.329500135332, 1e-6);
+near("DEPEG headline newReserveB", dg1.newReserveB, 1808.21648241263, 1e-6);
+near("DEPEG headline endSpotB", dg1.endSpotB, 0.9, 1e-9);
+near("DEPEG headline holdValueA", dg1.holdValueA, 1900, 1e-9);
+near("DEPEG headline lpValueA", dg1.lpValueA, 1835.7243343067, 1e-6);
+near("DEPEG headline lossPct", dg1.lossPct, -3.38292977333147, 1e-9);
+near("DEPEG p0.98 lossPct", app.stableDepegLoss("1000", "1000", "100", "0.98").lossPct, -0.343753659400448, 1e-9);
+near("DEPEG p0.5 lossPct", app.stableDepegLoss("1000", "1000", "100", "0.5").lossPct, -28.9437762279243, 1e-9);
+near("DEPEG p1.1 lossPct", app.stableDepegLoss("1000", "1000", "100", "1.1").lossPct, -2.98484391305921, 1e-9);
+near("DEPEG A1 lossPct", app.stableDepegLoss("1000", "1000", "1", "0.9").lossPct, -0.27643935460242, 1e-9);
+near("DEPEG A5 lossPct", app.stableDepegLoss("1000", "1000", "5", "0.9").lossPct, -0.783709272428446, 1e-9);
+near("DEPEG A5000 lossPct", app.stableDepegLoss("1000", "1000", "5000", "0.9").lossPct, -4.95469633867565, 1e-9);
+check("DEPEG loss grows with amplification",
+  Math.abs(app.stableDepegLoss("1000", "1000", "1", "0.9").lossPct) <
+  Math.abs(app.stableDepegLoss("1000", "1000", "5", "0.9").lossPct) &&
+  Math.abs(app.stableDepegLoss("1000", "1000", "5", "0.9").lossPct) <
+  Math.abs(dg1.lossPct) &&
+  Math.abs(dg1.lossPct) <
+  Math.abs(app.stableDepegLoss("1000", "1000", "5000", "0.9").lossPct));
+const dgPeg = app.stableDepegLoss("1000", "1000", "100", "1");
+check("DEPEG peg holds means no move, no loss", dgPeg.lossPct === 0 && dgPeg.aChange === 0 && dgPeg.bChange === 0 && dgPeg.newReserveA === 1000);
+const dgLop = app.stableDepegLoss("1000", "500", "100", "0.9");
+near("DEPEG lopsided startSpotB", dgLop.startSpotB, 1.00835153922505, 1e-9);
+near("DEPEG lopsided lossPct", dgLop.lossPct, -5.10739002356635, 1e-9);
+const dgOwnSpot = app.stableDepegLoss("1000", "500", "100", "1.0083515392250515");
+check("DEPEG price at the pool's own spot is the identity", dgOwnSpot !== null && dgOwnSpot.lossPct === 0 && dgOwnSpot.aChange === 0);
+/* The rebalanced reserves satisfy tool 58/59's invariant equation itself. */
+function depegInvariantResidual(r, amp) {
+  const Ann = 2 * amp, D = r.invariantD;
+  return Math.abs(Ann * (r.newReserveA + r.newReserveB) + D - (Ann * D + Math.pow(D, 3) / (4 * r.newReserveA * r.newReserveB)));
+}
+check("DEPEG invariant equation holds at the rebalanced reserves",
+  [[dg1, 100], [dgLop, 100], [app.stableDepegLoss("1000", "1000", "5", "0.5"), 5], [app.stableDepegLoss("2000", "800", "1000", "1.3"), 1000]]
+    .every(([r, a]) => depegInvariantResidual(r, a) < 1e-6 * r.invariantD));
+/* Selling the accumulated B through tool 58 returns exactly the A drained. */
+const dgSwap = app.stableSwap("1000", "1000", "100", String(dg1.bChange), 0);
+near("DEPEG tool 58 composition: B sold returns the A drained", dgSwap.out, -dg1.aChange, 1e-6);
+const dgUp = app.stableDepegLoss("1000", "1000", "100", "1.1");
+const dgSwapUp = app.stableSwap("1000", "1000", "100", String(dgUp.aChange), 0);
+near("DEPEG tool 58 composition, up direction", dgSwapUp.out, -dgUp.bChange, 1e-6);
+/* Token-swap mirror: swapped reserves at the reciprocal price mirror the reserves. */
+const dgMirror = app.stableDepegLoss("1000", "1000", "100", String(1 / 0.9));
+near("DEPEG mirror newReserveA", dgMirror.newReserveA, dg1.newReserveB, 1e-6);
+near("DEPEG mirror newReserveB", dgMirror.newReserveB, dg1.newReserveA, 1e-6);
+check("DEPEG loss never positive, end spot lands on the price (sweep)",
+  [1, 5, 100, 1000].every(a => [0.5, 0.8, 0.9, 0.99, 1.01, 1.1, 1.5, 2].every(p => {
+    const q = app.stableDepegLoss("1000", "1000", String(a), String(p));
+    return q !== null && q.lossPct <= 1e-9 && Math.abs(q.endSpotB - p) <= Math.max(1e-6, p * 1e-6);
+  })));
+check("DEPEG deeper depeg loses more",
+  Math.abs(app.stableDepegLoss("1000", "1000", "100", "0.98").lossPct) <
+  Math.abs(dg1.lossPct) &&
+  Math.abs(dg1.lossPct) <
+  Math.abs(app.stableDepegLoss("1000", "1000", "100", "0.5").lossPct));
+check("DEPEG rejects blank and junk", app.stableDepegLoss("", "1000", "100", "0.9") === null && app.stableDepegLoss("1000", "1000", "100", "") === null && app.stableDepegLoss("abc", "1000", "100", "0.9") === null && app.stableDepegLoss("1000", "1000", "100", "xyz") === null);
+check("DEPEG rejects non-positive inputs", app.stableDepegLoss("0", "1000", "100", "0.9") === null && app.stableDepegLoss("1000", "-5", "100", "0.9") === null && app.stableDepegLoss("1000", "1000", "0", "0.9") === null && app.stableDepegLoss("1000", "1000", "100", "0") === null && app.stableDepegLoss("1000", "1000", "100", "-0.9") === null);
+check("DEPEG rejects an overflowing price", app.stableDepegLoss("1000", "1000", "100", "1e309") === null);
+check("all depeg controls labelled",
+  ["depeg-ra", "depeg-rb", "depeg-amp", "depeg-price", "depeg-lpval", "depeg-holdval"]
+    .every(id => html.includes(`for="${id}"`)));
+check("depeg tool present in index.html", html.includes('id="depeg-calc"') && html.includes('id="depeg-result"'));
+check("depeg honesty: amplification danger and not-live labels", html.includes("A higher amplification is more dangerous on a depeg, not safer") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers stableswap depeg loss", guide.includes("On a depeg, a higher amplification loses more, not less"));
+check("README lists tool 61", readme.includes("61. **Stableswap depeg-loss calculator**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

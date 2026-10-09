@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus sixty fully
+/* Raydium Renaissance hub logic: project filtering plus sixty-one fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -34,8 +34,9 @@
    pool seeding / initial-liquidity planner, a CLMM range
    probability calculator, a weighted-pool swap model, a
    CLMM range-order (limit-order) planner, a stableswap
-   swap model, a stableswap exact-out swap model, and a
-   weighted-pool impermanent-loss calculator.
+   swap model, a stableswap exact-out swap model, a
+   weighted-pool impermanent-loss calculator, and a
+   stableswap depeg-loss calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3825,8 +3826,113 @@ function weightedImpermanentLoss(weightAPctStr, priceRatioStr, depositStr) {
   return result;
 }
 
+/* ---------- 61 · Stableswap depeg-loss calculator ---------- */
+/* Tools 58 and 59 keep warning that on a depeg the stableswap curve
+   keeps offering close to par and the good side drains first; this
+   tool prices that warning. Token B's external price is given in
+   token A (1 while the peg holds). Arbitrage trades against the
+   pool until the pool's own marginal price of B — the tool 58 spot
+   formula with B as the input side — equals that external price,
+   with the invariant D held constant (no fees: live arbitrage pays
+   the swap fee, which slows the drain slightly and sends part of
+   it to LPs, so the gross figure here is the honest upper shape).
+   The rebalanced reserves are found by geometric bisection on
+   reserve A: the other reserve comes from tool 58's own
+   stableSolveY at the same D, and the spot is strictly increasing
+   in reserve A along the curve. The loss is then plain accounting
+   at the external price: LP value (A + price × B after) against
+   holding the starting reserves (A + price × B before). Verified
+   in prototyping BEFORE the tests were written, and asserted in
+   tests: the rebalanced reserves satisfy the invariant equation
+   itself, and selling the accumulated B through tool 58 returns
+   exactly the A drained. The honest shape is the amplification:
+   at a 0.90 depeg of a balanced 1,000/1,000 pool the loss grows
+   with A — ≈0.28% at A = 1, ≈3.38% at A = 100, ≈4.95% at
+   A = 5,000 — because a higher A defends par longer, and in the
+   limit the pool simply swaps its whole A side for B at par and
+   loses the full depeg on it. A price above the pool's starting
+   spot runs the drain the other way (B is then the expensive side
+   and A accumulates). A price the bisection cannot bracket on the
+   curve is rejected, not extrapolated. Educational model only —
+   your reserves, amplification and depeg price, not live pool
+   data, not a live quote, not financial advice. */
+function stableSpotBInA(reserveA, reserveB, amp, D) {
+  var Ann = 2 * amp, K = Math.pow(D, 3) / 4;
+  return (K / (reserveB * reserveB * reserveA) + Ann) /
+    (Ann + K / (reserveB * reserveA * reserveA));
+}
+function stableDepegLoss(reserveAStr, reserveBStr, ampStr, priceBStr) {
+  var raw = [reserveAStr, reserveBStr, ampStr, priceBStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var reserveA = Number(reserveAStr), reserveB = Number(reserveBStr);
+  var amp = Number(ampStr), priceB = Number(priceBStr);
+  if (![reserveA, reserveB, amp, priceB].every(Number.isFinite)) return null;
+  if (reserveA <= 0 || reserveB <= 0 || amp <= 0 || priceB <= 0) return null;
+  var D = stableInvariantD(reserveA, reserveB, amp);
+  if (D === null || !(D > 0)) return null;
+  var startSpotB = stableSpotBInA(reserveA, reserveB, amp, D);
+  if (!Number.isFinite(startSpotB) || !(startSpotB > 0)) return null;
+  function at(x) {
+    var y = stableSolveY(x, reserveB, amp, D);
+    if (!(y > 0) || !Number.isFinite(y)) return null;
+    var s = stableSpotBInA(x, y, amp, D);
+    if (!Number.isFinite(s) || !(s > 0)) return null;
+    return { x: x, y: y, spot: s };
+  }
+  var end = null;
+  if (priceB === startSpotB) {
+    end = { x: reserveA, y: reserveB, spot: startSpotB };
+  } else {
+    var lo = null, hi = null, k;
+    if (priceB < startSpotB) {
+      hi = { x: reserveA, y: reserveB, spot: startSpotB };
+      var xd = reserveA;
+      for (k = 0; k < 200 && lo === null; k++) {
+        xd /= 1.5;
+        var ad = at(xd);
+        if (ad !== null && ad.spot <= priceB) lo = ad;
+      }
+    } else {
+      lo = { x: reserveA, y: reserveB, spot: startSpotB };
+      var xu = reserveA;
+      for (k = 0; k < 200 && hi === null; k++) {
+        xu *= 1.5;
+        var au = at(xu);
+        if (au !== null && au.spot >= priceB) hi = au;
+      }
+    }
+    if (lo === null || hi === null) return null;
+    for (var b = 0; b < 200; b++) {
+      var mid = at(Math.sqrt(lo.x * hi.x));
+      if (mid === null) return null;
+      if (mid.spot < priceB) lo = mid; else hi = mid;
+      if (hi.x / lo.x - 1 < 1e-12) break;
+    }
+    end = at(Math.sqrt(lo.x * hi.x));
+    if (end === null) return null;
+  }
+  var holdValueA = reserveA + priceB * reserveB;
+  var lpValueA = end.x + priceB * end.y;
+  var result = {
+    reserveA: reserveA, reserveB: reserveB, amp: amp, priceB: priceB,
+    invariantD: D, startSpotB: startSpotB, endSpotB: end.spot,
+    newReserveA: end.x, newReserveB: end.y,
+    aChange: end.x - reserveA, bChange: end.y - reserveB,
+    holdValueA: holdValueA, lpValueA: lpValueA,
+    lossA: lpValueA - holdValueA,
+    lossPct: (lpValueA / holdValueA - 1) * 100
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (!Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -5664,6 +5770,31 @@ if (typeof document !== "undefined") {
           "% vs holding (before fees earned — fees are what compensate for this). At a 50% weight this is exactly the 50/50 calculator's answer. A weighted-pool impermanent-loss model, not live pool data — not financial advice.";
         document.getElementById("wil-lpval").value = "";
         document.getElementById("wil-holdval").value = "";
+      }
+    });
+
+    /* --- Stableswap depeg-loss calculator --- */
+    document.getElementById("depeg-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = stableDepegLoss(
+        document.getElementById("depeg-ra").value,
+        document.getElementById("depeg-rb").value,
+        document.getElementById("depeg-amp").value,
+        document.getElementById("depeg-price").value
+      );
+      var out = document.getElementById("depeg-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, an amplification above 0 and an external price for token B (in token A) above 0 — e.g. 0.90 if token B trades at 0.90 A on the open market. A price the curve cannot reach is rejected, not extrapolated.";
+        document.getElementById("depeg-lpval").value = "";
+        document.getElementById("depeg-holdval").value = "";
+      } else {
+        out.textContent = "Model output: arbitrage rebalances the pool until its own price of token B matches ≈ " + fmt(res.priceB, 6) +
+          " A, leaving ≈ " + fmt(res.newReserveA, 6) + " A and ≈ " + fmt(res.newReserveB, 6) + " B (token A changes by ≈ " + fmt(res.aChange, 6) +
+          ", token B by ≈ " + fmt(res.bChange, 6) + "). Valued at that external price, holding the starting reserves would be worth ≈ " + fmt(res.holdValueA, 6) +
+          " A; the LP position is worth ≈ " + fmt(res.lpValueA, 6) + " A — a depeg loss of ≈ " + fmt(-res.lossA, 6) + " A (≈ " + fmt(-res.lossPct, 4) +
+          "% vs holding, before any fees earned). The loss grows with the amplification, because a higher A defends par longer. A stableswap depeg-loss model, not live pool data — not financial advice.";
+        document.getElementById("depeg-lpval").value = fmt(res.lpValueA, 6);
+        document.getElementById("depeg-holdval").value = fmt(res.holdValueA, 6);
       }
     });
 
