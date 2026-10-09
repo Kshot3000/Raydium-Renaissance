@@ -3335,7 +3335,12 @@ function lvrRoundTrip(reserveAStr, reserveBStr, movePctStr, cyclesStr) {
    it against the seed in the first trades (Tool 16 sizes that trade
    on an existing pool). Program-specific minimum-liquidity locks or
    burns are NOT modelled — a live program may keep a small part of
-   the mint unwithdrawable; no number is invented for it.
+   the mint unwithdrawable; no number is invented for it. The
+   above/below/aligned call against the reference carries the hub's
+   usual 1e-12 relative tolerance (tools 44/45): the spot is a float
+   quotient, so a mathematically aligned seed like 0.1/0.3 against a
+   reference of 3 lands one ulp off — without the tolerance it would
+   be reported as mispriced over a ~1e-14% gap.
    Educational model only — your seed amounts, not live pool data,
    not a live quote, not financial advice. */
 function isqrtBigInt(n) {
@@ -3365,7 +3370,7 @@ function poolSeedPlan(amountAStr, amountBStr, referencePriceStr) {
     totalValueInB: 2 * bNum, perLpA: aNum / lpNum, perLpB: bNum / lpNum,
     referencePrice: ref,
     spotGapPct: ref === null ? null : (spot / ref - 1) * 100,
-    refDirection: ref === null ? null : (spot < ref ? "below" : (spot > ref ? "above" : "aligned"))
+    refDirection: ref === null ? null : (Math.abs(spot / ref - 1) <= 1e-12 ? "aligned" : (spot < ref ? "below" : "above"))
   };
   var fields = Object.keys(result);
   for (var i = 0; i < fields.length; i++) {

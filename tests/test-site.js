@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=64"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=65"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -2868,6 +2868,14 @@ near("SEED seed below reference gap", seedBelow.spotGapPct, -20, 1e-9);
 check("SEED seed below reference direction", seedBelow.refDirection === "below" && seedBelow.referencePrice === 1.25);
 const seedAligned = app.poolSeedPlan("100", "400", "4");
 check("SEED aligned reference", seedAligned.refDirection === "aligned" && seedAligned.spotGapPct === 0);
+/* the direction call carries a 1e-12 relative tolerance: a seed whose
+   ratio IS the reference can land one float ulp off it (0.1/0.3 vs 3,
+   0.07/0.49 vs 7) and must read aligned, not mispriced; a real gap —
+   even 1e-6 relative — must still classify */
+check("SEED float-noise-aligned seed reads aligned (0.1/0.3 vs 3)", app.poolSeedPlan("0.1", "0.3", "3").refDirection === "aligned");
+check("SEED float-noise-aligned seed reads aligned (0.07/0.49 vs 7)", app.poolSeedPlan("0.07", "0.49", "7").refDirection === "aligned");
+check("SEED float-noise-aligned seed reads aligned (0.3/0.1 vs 1/3)", app.poolSeedPlan("0.3", "0.1", "0.3333333333333333").refDirection === "aligned");
+check("SEED 1e-6-relative gap still classifies below", app.poolSeedPlan("100", "400", "4.000004").refDirection === "below");
 const seedAbove = app.poolSeedPlan("100", "400", "2");
 near("SEED seed above reference gap", seedAbove.spotGapPct, 100, 1e-9);
 check("SEED seed above reference direction", seedAbove.refDirection === "above");
