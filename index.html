@@ -1161,6 +1161,29 @@
         <button type="submit" class="btn primary">Plan my zap from B</button>
         <p id="czapb-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="czob-calc">
+        <h3>49 · CLMM single-sided zap-out planner to token B</h3>
+        <p>Tool 34's exit mirror. Tool 34 closes a CLMM position into token A alone, but a wallet that wants to leave holding only token B — the stablecoin side of the pair, say — needs the reverse. Enter the position you are closing in full (its model liquidity L from Tool 8, its range, and the exit price) and the constant-product pool you'd swap in (its reserves and fee tier): the planner takes the position's holdings from Tool 9's own maths and runs the A leg through Tool 1's swap model, then prices the consolidation honestly the way Tool 34 does — against what the withdrawn pair would be worth in B if the A leg filled at the swap pool's spot price with no fee and no impact. At or above the upper edge the position is entirely token B already, so no swap is needed and the cost is zero; at or below the bottom it is entirely token A, so everything is swapped. The swap pool and the CLMM position are modelled separately — in practice the swap routes wherever the price is best. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="czob-ra">Swap pool reserve — token A</label>
+        <input id="czob-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="czob-rb">Swap pool reserve — token B</label>
+        <input id="czob-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="czob-bps">Swap pool fee tier (bps — 25 = 0.25%)</label>
+        <input id="czob-bps" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="czob-l">Position liquidity L (model, from Tool 8)</label>
+        <input id="czob-l" inputmode="decimal" placeholder="e.g. 947.21" autocomplete="off">
+        <label for="czob-lower">Range lower price (B per A)</label>
+        <input id="czob-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="czob-upper">Range upper price (B per A)</label>
+        <input id="czob-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="czob-cur">Exit price (token B per token A)</label>
+        <input id="czob-cur" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="czob-out">You end holding — token B in total (model)</label>
+        <input id="czob-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan my zap-out to B</button>
+        <p id="czob-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1188,6 +1211,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=56"></script>
+<script src="app.js?v=57"></script>
 </body>
 </html>

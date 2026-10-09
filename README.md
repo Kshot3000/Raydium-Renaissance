@@ -90,7 +90,7 @@ Ecosystem:
 node tests/test-site.js
 ```
 
-Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all forty-eight pool tools (known-value vectors, edge and rejection cases).
+Covers attribution on every surface, catalogue links and counts, cache keys, and the maths of all forty-nine pool tools (known-value vectors, edge and rejection cases).
 
 ## Support
 

@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=56"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=57"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists forty-eight tools", readme.includes("forty-eight pool tools") || readme.includes("all forty-eight"));
+check("README lists forty-nine tools", readme.includes("forty-nine pool tools") || readme.includes("all forty-nine"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts forty-eight tools and names the CLMM single-sided zap-in planner from token B",
-  appSrc.includes("plus forty-eight fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B.\n   These are educational MODELS"));
+check("app.js header counts forty-nine tools and names the CLMM single-sided zap-out planner to token B",
+  appSrc.includes("plus forty-nine fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, and a CLMM single-sided zap-out\n   planner to token B.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -2527,6 +2527,66 @@ near("CZA 1e6-ratio split is the stable root", czaRatio.swapIn, 0.00010025, 1e-1
 check("CZA 1e6-ratio leaves no B leftover (was 22 of 100)", czaRatio.leftoverB === 0 && czaRatio.depositB > 99.99);
 const czaDeep = app.clmmZapIn("1000000000000", "1000000000000", "1", "0.8", "1.25", "0.001", 25);
 near("CZA deep-pool tiny-holding split is the stable root", czaDeep.swapIn, 0.000500625, 1e-12);
+
+/* ---------- Tool 49: CLMM single-sided zap-out planner to token B (CZOB) ---------- */
+const czob1 = app.clmmZapOutB("1000", "1000", L34, "0.8", "1.25", "1", 25);
+check("CZOB headline in range", czob1.status === "in" && czob1.inRange === true);
+near("CZOB headline withdraw A = Tool 9 amount", czob1.withdrawA, 100, 1e-9);
+near("CZOB headline withdraw B = Tool 9 amount", czob1.withdrawB, 100, 1e-9);
+near("CZOB headline swap in is the whole A leg", czob1.swapIn, 100, 1e-12);
+near("CZOB headline swap return", czob1.swapOut, 90.70243237, 1e-9);
+near("CZOB headline total B", czob1.totalB, 190.70243237, 1e-9);
+near("CZOB headline value at spot", czob1.valueAtSpotB, 200, 1e-9);
+near("CZOB headline consolidation cost", czob1.consolidationCostB, 9.29756763, 1e-6);
+near("CZOB headline consolidation cost %", czob1.consolidationCostPct, 4.648783815, 1e-6);
+/* the symmetric headline is Tool 34's own numbers mirrored exactly */
+check("CZOB headline mirrors Tool 34 exactly", czob1.totalB === czo1.totalA && czob1.swapOut === czo1.swapOut && czob1.consolidationCostPct === czo1.consolidationCostPct);
+/* both legs are the source tools verbatim */
+check("CZOB withdrawal = Tool 9 verbatim", czob1.withdrawA === czoPos.amountA && czob1.withdrawB === czoPos.amountB);
+check("CZOB swap leg = Tool 1 on the floored A leg", Number(app.cpSwap("1000", "1000", czob1.swapIn.toFixed(9), 25).out) === czob1.swapOut);
+near("CZOB accounting: total = kept B + swap return", czob1.withdrawB + czob1.swapOut, czob1.totalB, 1e-12);
+near("CZOB accounting: cost = value at spot - total", czob1.valueAtSpotB - czob1.totalB, czob1.consolidationCostB, 1e-12);
+/* zero fee: swap returns 1000*100/1100, cost is impact only */
+const czob0 = app.clmmZapOutB("1000", "1000", L34, "0.8", "1.25", "1", 0);
+near("CZOB zero-fee swap return", czob0.swapOut, 90.909090909, 1e-9);
+near("CZOB zero-fee total B", czob0.totalB, 190.909090909, 1e-9);
+near("CZOB zero-fee cost %", czob0.consolidationCostPct, 4.5454545455, 1e-6);
+/* a higher swap fee costs more; a deeper swap pool costs less */
+const czob100 = app.clmmZapOutB("1000", "1000", L34, "0.8", "1.25", "1", 100);
+check("CZOB higher fee costs more", czob100.consolidationCostPct > czob1.consolidationCostPct && czob100.totalB < czob1.totalB);
+const czobDeep = app.clmmZapOutB("10000", "10000", L34, "0.8", "1.25", "1", 25);
+check("CZOB deeper swap pool costs less", czobDeep.consolidationCostPct < czob1.consolidationCostPct && czobDeep.consolidationCostPct > 0);
+/* composition sweep: withdrawal is Tool 9, swap is Tool 1, total never beats spot value */
+for (const [liq, lo, hi, cur, ra, rb, bps] of [[L34, "0.8", "1.25", "1.2", "1000", "1000", 25], ["500", "0.5", "2", "1.5", "2000", "500", 25], ["2000", "2", "8", "3", "100", "4000", 100], ["100", "0.9", "1.1", "1.05", "5000", "5000", 5]]) {
+  const z = app.clmmZapOutB(ra, rb, liq, lo, hi, cur, bps);
+  const p = app.clmmPositionAtPrice(liq, lo, hi, cur);
+  check("CZOB sweep settles at price " + cur + " in " + ra + "/" + rb, z !== null && z.withdrawA === p.amountA && z.withdrawB === p.amountB && z.totalB <= z.valueAtSpotB + 1e-9 && z.consolidationCostB >= -1e-12);
+  check("CZOB sweep swap = Tool 1 at price " + cur + " in " + ra + "/" + rb, z.swapOut === Number(app.cpSwap(ra, rb, z.swapIn.toFixed(9), bps).out));
+  near("CZOB sweep total = kept B + swap return at price " + cur + " in " + ra + "/" + rb, z.withdrawB + z.swapOut, z.totalB, 1e-9);
+}
+/* range edges: above needs no swap; below swaps everything and cost % = impact */
+const czobAbove = app.clmmZapOutB("1000", "1000", L34, "0.8", "1.25", "2", 25);
+check("CZOB above range swaps nothing", czobAbove.status === "above" && czobAbove.swapIn === 0 && czobAbove.swapOut === 0 && czobAbove.consolidationCostB === 0 && czobAbove.consolidationCostPct === 0);
+near("CZOB above range total is the whole B holding", czobAbove.totalB, 211.80339887, 1e-6);
+near("CZOB above range total = Tool 9 amount", czobAbove.totalB, app.clmmPositionAtPrice(L34, "0.8", "1.25", "2").amountB, 1e-12);
+const czobAtUp = app.clmmZapOutB("1000", "1000", L34, "0.8", "1.25", "1.25", 25);
+check("CZOB at the upper edge is the above case", czobAtUp.status === "above" && czobAtUp.swapIn === 0);
+const czobBelow = app.clmmZapOutB("1000", "1000", L34, "0.8", "1.25", "0.5", 25);
+check("CZOB below range is entirely A", czobBelow.status === "below" && czobBelow.withdrawB === 0 && czobBelow.swapIn > 0);
+near("CZOB below range withdraw A", czobBelow.withdrawA, 211.80339887, 1e-6);
+near("CZOB below range swap return", czobBelow.swapOut, 174.422888212, 1e-6);
+near("CZOB below range cost % = swap price impact", czobBelow.consolidationCostPct, czobBelow.swapPriceImpactPct, 1e-6);
+const czobAtLow = app.clmmZapOutB("1000", "1000", L34, "0.8", "1.25", "0.8", 25);
+check("CZOB at the lower edge is the below case", czobAtLow.status === "below" && czobAtLow.withdrawB === 0);
+/* rejections */
+check("CZOB rejects blank fields", app.clmmZapOutB("", "1000", L34, "0.8", "1.25", "1", 25) === null && app.clmmZapOutB("1000", "1000", "", "0.8", "1.25", "1", 25) === null && app.clmmZapOutB("1000", "1000", L34, "0.8", "1.25", "1", "") === null);
+check("CZOB rejects non-positive reserves, liquidity or price", app.clmmZapOutB("0", "1000", L34, "0.8", "1.25", "1", 25) === null && app.clmmZapOutB("1000", "1000", "0", "0.8", "1.25", "1", 25) === null && app.clmmZapOutB("1000", "1000", L34, "0.8", "1.25", "0", 25) === null);
+check("CZOB rejects inverted range and bad fee tiers", app.clmmZapOutB("1000", "1000", L34, "1.25", "0.8", "1", 25) === null && app.clmmZapOutB("1000", "1000", L34, "0.8", "1.25", "1", 10000) === null && app.clmmZapOutB("1000", "1000", L34, "0.8", "1.25", "1", "25.5") === null);
+check("CZOB rejects an A leg too small to swap at 9 dp", app.clmmZapOutB("1000", "1000", "0.000000001", "0.8", "1.25", "1", 25) === null);
+check("all czob controls labelled", ["czob-ra", "czob-rb", "czob-bps", "czob-l", "czob-lower", "czob-upper", "czob-cur", "czob-out"].every(id => html.includes(`for="${id}"`)));
+check("czob tool present in index.html", html.includes('id="czob-calc"') && html.includes('id="czob-result"'));
+check("czob honesty: separate models and not-live labels", html.includes("Tool 34's exit mirror") && html.includes("modelled separately") && html.includes("not live pool state") && html.includes("not financial advice"));
+check("guide covers CLMM zap-out to token B", guide.includes("Leaving a CLMM position into token B"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

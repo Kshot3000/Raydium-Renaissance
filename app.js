@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus forty-eight fully
+/* Raydium Renaissance hub logic: project filtering plus forty-nine fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -25,8 +25,9 @@
    CLMM two-range swap model, a CLMM single-range exact-out
    swap model, a CLMM two-range exact-out swap model, a
    CLMM three-range swap model, a CLMM three-range
-   exact-out swap model, and a CLMM single-sided zap-in
-   planner from token B.
+   exact-out swap model, a CLMM single-sided zap-in
+   planner from token B, and a CLMM single-sided zap-out
+   planner to token B.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -2036,6 +2037,76 @@ function clmmZapOut(reserveAStr, reserveBStr, liquidityStr, lowerStr, upperStr, 
   });
 }
 
+/* ---------- 49 · CLMM single-sided zap-out planner to token B ---------- */
+/* Tool 34's exit mirror. Tool 34 closes a CLMM position into token A
+   alone, swapping the token-B leg away; a wallet that wants to leave
+   holding only token B (the stablecoin side of the pair, say) needs
+   the reverse. Closing the position pays Tool 9's own
+   clmmPositionAtPrice amounts for the position's liquidity L and
+   range, and the token-A leg is swapped away in a constant-product
+   pool the user describes (reserves Ra/Rb, fee tier) under Tool 1's
+   own cpSwap, with the A leg floored to 9 dp first (Tool 1's
+   precision — the sub-billionth remainder stays inside the
+   value-at-spot comparison below, it is not hidden). The
+   consolidation is priced honestly the way Tool 34 prices it:
+   valueAtSpotB is what the withdrawn pair would be worth in B if
+   the A leg filled at the swap pool's spot price with no fee and
+   no impact, and consolidationCostB / consolidationCostPct are
+   the difference — the swap fee plus its price impact. Two edges
+   need no swap maths at all: at or above the upper edge the
+   position is entirely token B already (no swap, zero cost), and
+   at or below the lower edge it is entirely token A, so everything
+   is swapped and the cost percentage equals the swap's price
+   impact (to the 9 dp flooring dust). An A leg too small to swap
+   at 9 dp is rejected rather than given a made-up fill. Model
+   only — the position is closed in full (L is the whole position
+   being exited), the swap pool and the CLMM position are modelled
+   separately (in practice the swap would route wherever the price
+   is best, possibly the CLMM pool itself), no routing, no price
+   movement between the withdrawal and the swap, no withdrawal fee
+   modelled. Not a live quote, not financial advice. */
+function clmmZapOutB(reserveAStr, reserveBStr, liquidityStr, lowerStr, upperStr, currentStr, feeBps) {
+  var required = [reserveAStr, reserveBStr, liquidityStr, lowerStr, upperStr, currentStr, feeBps];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var ra = Number(reserveAStr), rb = Number(reserveBStr), fee = Number(feeBps);
+  if (![ra, rb, fee].every(Number.isFinite)) return null;
+  if (ra <= 0 || rb <= 0) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var pos = clmmPositionAtPrice(liquidityStr, lowerStr, upperStr, currentStr);
+  if (pos === null) return null;
+  var spot = rb / ra;
+  var base = {
+    status: pos.status, inRange: pos.inRange,
+    reserveA: ra, reserveB: rb,
+    liquidity: pos.liquidity, lowerPrice: pos.lowerPrice, upperPrice: pos.upperPrice,
+    currentPrice: pos.price, feeBps: fee,
+    withdrawA: pos.amountA, withdrawB: pos.amountB,
+    swapSpotPrice: spot
+  };
+  if (pos.amountA <= 0) {
+    return Object.assign(base, {
+      swapIn: 0, swapOut: 0, swapPriceImpactPct: 0,
+      totalB: pos.amountB, valueAtSpotB: pos.amountB,
+      consolidationCostB: 0, consolidationCostPct: 0
+    });
+  }
+  var flooredA = Math.floor(pos.amountA * 1e9) / 1e9;
+  if (flooredA <= 0) return null;
+  var swap = cpSwap(reserveAStr, reserveBStr, flooredA.toFixed(9), feeBps);
+  if (swap === null) return null;
+  var totalB = pos.amountB + Number(swap.out);
+  var valueAtSpotB = pos.amountB + pos.amountA * spot;
+  return Object.assign(base, {
+    swapIn: flooredA, swapOut: Number(swap.out),
+    swapPriceImpactPct: swap.priceImpactPct,
+    totalB: totalB, valueAtSpotB: valueAtSpotB,
+    consolidationCostB: valueAtSpotB - totalB,
+    consolidationCostPct: (valueAtSpotB - totalB) / valueAtSpotB * 100
+  });
+}
+
 /* ---------- 35 · CLMM token-B deposit planner ---------- */
 /* Tool 8 plans a CLMM deposit from the token-A side: given an A amount,
    the matching B. Wallets holding the B side first (a stablecoin, say)
@@ -2980,7 +3051,7 @@ function clmmTripleSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amou
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -3963,6 +4034,42 @@ if (typeof document !== "undefined") {
           " A in total. Consolidation cost ≈ " + fmt(res.consolidationCostA, 4) + " A — " + fmt(res.consolidationCostPct, 2) +
           "% of the pair's value at the swap pool's spot price. The swap pool and the CLMM position are modelled separately. A CLMM zap-out model — not a live quote, not financial advice.";
         document.getElementById("czout-out").value = fmt(res.totalA, 4);
+      }
+    });
+
+    document.getElementById("czob-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmZapOutB(
+        document.getElementById("czob-ra").value,
+        document.getElementById("czob-rb").value,
+        document.getElementById("czob-l").value,
+        document.getElementById("czob-lower").value,
+        document.getElementById("czob-upper").value,
+        document.getElementById("czob-cur").value,
+        document.getElementById("czob-bps").value
+      );
+      var out = document.getElementById("czob-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for the swap pool, a positive model liquidity L for the position you are closing, a range with lower below upper, a positive exit price, and a fee tier between 0 and 9999 bps. A token-A leg too small to swap at 9-decimal precision cannot be priced.";
+        document.getElementById("czob-out").value = "";
+      } else if (res.status === "above") {
+        out.textContent = "Model output: at an exit price of " + fmt(res.currentPrice, 4) + " B per A, at or above your range's upper edge of " + fmt(res.upperPrice, 4) +
+          ", the position is entirely token B — closing it returns ≈ " + fmt(res.withdrawB, 4) + " B and no swap is needed, so the consolidation cost is 0. A CLMM zap-out-to-B model — not a live quote, not financial advice.";
+        document.getElementById("czob-out").value = fmt(res.totalB, 4);
+      } else if (res.status === "below") {
+        out.textContent = "Model output: at an exit price of " + fmt(res.currentPrice, 4) + " B per A, at or below your range's lower edge of " + fmt(res.lowerPrice, 4) +
+          ", the position is entirely token A — closing it returns ≈ " + fmt(res.withdrawA, 4) + " A, and swapping all of it in the swap pool at a " + fmt(res.feeBps, 0) +
+          " bps tier returns ≈ " + fmt(res.swapOut, 4) + " B (price impact ≈ " + fmt(res.swapPriceImpactPct, 2) +
+          "%). Consolidation cost ≈ " + fmt(res.consolidationCostB, 4) + " B — " + fmt(res.consolidationCostPct, 2) +
+          "% of the pair's value at the swap pool's spot price. A CLMM zap-out-to-B model — not a live quote, not financial advice.";
+        document.getElementById("czob-out").value = fmt(res.totalB, 4);
+      } else {
+        out.textContent = "Model output: closing the position at " + fmt(res.currentPrice, 4) + " B per A returns ≈ " + fmt(res.withdrawA, 4) + " A and ≈ " + fmt(res.withdrawB, 4) +
+          " B. Keep the B and swap the A in the swap pool at a " + fmt(res.feeBps, 0) + " bps tier for ≈ " + fmt(res.swapOut, 4) +
+          " B (price impact ≈ " + fmt(res.swapPriceImpactPct, 2) + "%), ending with ≈ " + fmt(res.totalB, 4) +
+          " B in total. Consolidation cost ≈ " + fmt(res.consolidationCostB, 4) + " B — " + fmt(res.consolidationCostPct, 2) +
+          "% of the pair's value at the swap pool's spot price. The swap pool and the CLMM position are modelled separately. A CLMM zap-out-to-B model — not a live quote, not financial advice.";
+        document.getElementById("czob-out").value = fmt(res.totalB, 4);
       }
     });
 
