@@ -3212,7 +3212,7 @@ function feeCompounding(depositStr, aprPctStr, compoundsStr, yearsStr) {
   if (!Number.isFinite(factor)) return null;
   var finalValue = dep * factor;
   var simpleFinal = dep * (1 + r * yrs);
-  return {
+  var result = {
     deposit: dep, aprPct: apr, compoundsPerYear: n, years: yrs,
     periods: n * yrs, periodicRatePct: (r / n) * 100,
     apyPct: (Math.pow(1 + r / n, n) - 1) * 100,
@@ -3221,6 +3221,18 @@ function feeCompounding(depositStr, aprPctStr, compoundsStr, yearsStr) {
     compoundingGain: finalValue - simpleFinal,
     growthPct: (finalValue / dep - 1) * 100
   };
+  /* The factor check above is not enough on its own: the APY
+     annualises a full year, so at a horizon under a year a huge APR
+     can leave the final value finite while the APY overflows, and a
+     huge deposit can overflow the final value (and turn the gain
+     into Infinity - Infinity = NaN) behind a perfectly finite
+     factor of 2. Every figure the tool reports must be finite, or
+     the input is rejected like any other unusable one. */
+  var fields = Object.keys(result);
+  for (var k = 0; k < fields.length; k++) {
+    if (!Number.isFinite(result[fields[k]])) return null;
+  }
+  return result;
 }
 
 if (typeof module !== "undefined" && module.exports) {

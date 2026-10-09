@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=60"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=61"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -2745,6 +2745,18 @@ check("CMP rejects blank / junk", app.feeCompounding("", "25", "12", "1") === nu
 check("CMP rejects non-positive deposit / negative APR", app.feeCompounding("0", "25", "12", "1") === null && app.feeCompounding("-5", "25", "12", "1") === null && app.feeCompounding("1000", "-1", "12", "1") === null);
 check("CMP rejects bad frequency", app.feeCompounding("1000", "25", "0", "1") === null && app.feeCompounding("1000", "25", "2.5", "1") === null && app.feeCompounding("1000", "25", "36501", "1") === null);
 check("CMP rejects bad horizon", app.feeCompounding("1000", "25", "12", "0") === null && app.feeCompounding("1000", "25", "12", "-1") === null && app.feeCompounding("1000", "25", "12", "101") === null);
+/* every reported figure must be finite: the APY annualises a full year, so a
+   huge APR at a sub-year horizon overflows the APY behind a finite final
+   value, and a huge deposit overflows the final behind a finite factor */
+check("CMP rejects an overflowing APY behind a finite final", app.feeCompounding("1000", "100000", "36500", "0.01") === null && app.feeCompounding("1000", "500000", "365", "0.1") === null);
+check("CMP rejects an overflowing final behind a finite factor", app.feeCompounding("1.5e308", "100", "1", "1") === null);
+/* gain sign law: (1 + r/n)^(n*t) vs the simple line 1 + r*t flips at exactly
+   one full period — negative gain inside the first period is the closed
+   form's concavity, not a bug; it is exactly zero at one period */
+const cmpSubPeriod = app.feeCompounding("1000", "25", "4", "0.1");
+check("CMP sub-period gain is negative (concavity)", cmpSubPeriod.compoundingGain < 0);
+check("CMP one-period gain is exactly zero", app.feeCompounding("1000", "25", "4", "0.25").compoundingGain === 0);
+check("CMP past-one-period gain is positive", app.feeCompounding("1000", "25", "4", "1").compoundingGain > 0);
 check("all cmp controls labelled", ["cmp-dep", "cmp-apr", "cmp-n", "cmp-years", "cmp-apy", "cmp-final"].every(id => html.includes(`for="${id}"`)));
 check("cmp tool present in index.html", html.includes('id="cmp-calc"') && html.includes('id="cmp-result"'));
 check("cmp honesty: APR held constant and not-live labels", html.includes("the APR is held constant on a growing balance") && html.includes("not a live yield") && html.includes("not financial advice"));
