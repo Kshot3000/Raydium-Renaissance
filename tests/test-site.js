@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=84"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=85"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1357,7 +1357,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists sixty-seven tools", readme.includes("sixty-seven pool tools") || readme.includes("all sixty-seven"));
+check("README lists sixty-eight tools", readme.includes("sixty-eight pool tools") || readme.includes("all sixty-eight"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2000,8 +2000,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts sixty-seven tools and names the curve comparison model",
-  appSrc.includes("plus sixty-seven fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, and a curve\n   comparison model.\n   These are educational MODELS"));
+check("app.js header counts sixty-eight tools and names the weighted-pool net return calculator",
+  appSrc.includes("plus sixty-eight fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, and a weighted-pool net\n   return calculator.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -3929,6 +3929,69 @@ check("curve handler wired to its own form", appSrc.includes('getElementById("cu
 check("cmp honesty: own-spot and not-live labels", html.includes("each curve sets its own spot") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers curve comparison", guide.includes("Compare curves by their impact, not their payout"));
 check("README lists tool 67", readme.includes("67. **Curve comparison model**"));
+
+/* ---------- Tool 68: Weighted-pool net return calculator (WNET) ---------- */
+const wn80 = app.weightedNetReturn("80", "2", "1000", "0");
+near("WNET w80 hold value = Tool 60 verbatim", wn80.holdValue, 1800, 1e-9);
+near("WNET w80 LP value = Tool 60 verbatim", wn80.lpValue, 1741.1011265922482, 1e-9);
+near("WNET w80 hurdle", wn80.feesNeeded, 58.89887340775181, 1e-9);
+near("WNET w80 IL pct = Tool 60", wn80.ilPct, -3.2721596337639935, 1e-9);
+near("WNET w80 no-fees net vs hold", wn80.netVsHold, -58.89887340775181, 1e-9);
+near("WNET w80 net vs hold pct", wn80.netVsHoldPct, -3.2721596337639896, 1e-9);
+near("WNET w80 up on deposit yet behind holding", wn80.netReturnPct, 74.11011265922481, 1e-9);
+check("WNET w80 verdict behind, coverage 0", wn80.verdict === "behind" && wn80.feesCoveragePct === 0 && wn80.netReturnPct > 0);
+const wn20 = app.weightedNetReturn("20", "2", "1000", "0");
+near("WNET w20 hurdle", wn20.feesNeeded, 51.30164500296519, 1e-9);
+near("WNET w20 IL pct", wn20.ilPct, -4.275137083580427, 1e-9);
+const wn10 = app.weightedNetReturn("10", "4", "1000", "0");
+near("WNET w10 4x hurdle", wn10.feesNeeded, 151.30164500296496, 1e-9);
+near("WNET w10 4x hold value", wn10.holdValue, 1300, 1e-9);
+const wnMirror = app.weightedNetReturn("20", "0.5", "1000", "0");
+near("WNET mirror move carries the identical IL", wnMirror.ilPct, wn80.ilPct, 1e-12);
+const wnHur = app.weightedImpermanentLoss("80", "2", "1000");
+const wnEven = app.weightedNetReturn("80", "2", "1000", String(wnHur.feesNeeded));
+check("WNET fees = Tool 60 hurdle settles even", wnEven.verdict === "even" && Math.abs(wnEven.netVsHold) < 1e-6);
+near("WNET even coverage is 100%", wnEven.feesCoveragePct, 100, 1e-6);
+const wn2x = app.weightedNetReturn("80", "2", "1000", String(2 * wnHur.feesNeeded));
+near("WNET double-hurdle coverage is 200%", wn2x.feesCoveragePct, 200, 1e-6);
+near("WNET double-hurdle net vs hold is the hurdle", wn2x.netVsHold, wnHur.feesNeeded, 1e-6);
+check("WNET double-hurdle verdict ahead", wn2x.verdict === "ahead");
+const wnFlat0 = app.weightedNetReturn("80", "1", "1000", "0");
+check("WNET flat move, no fees: even, coverage null", wnFlat0.verdict === "even" && wnFlat0.feesNeeded === 0 && wnFlat0.feesCoveragePct === null);
+const wnFlat = app.weightedNetReturn("80", "1", "1000", "50");
+check("WNET flat move, $50 fees: ahead by the fees", wnFlat.verdict === "ahead" && wnFlat.netVsHold === 50 && wnFlat.netReturnPct === 5);
+/* at a 50% weight the settlement is Tool 24's exactly */
+[[2, 0], [2, 200], [4, 500], [0.5, 10], [1, 50], [0.25, 0]].forEach(function (pair) {
+  const w = app.weightedNetReturn("50", String(pair[0]), "1000", String(pair[1]));
+  const n = app.netLpReturn(pair[0], "1000", String(pair[1]));
+  check("WNET at 50% equals Tool 24 @" + pair[0] + "x fees " + pair[1],
+    w !== null && n !== null && w.holdValue === n.holdValue && w.lpValue === n.lpValue &&
+    w.feesNeeded === n.feesNeeded && w.netVsHold === n.netVsHold && w.verdict === n.verdict);
+});
+/* composition: every WNET figure must equal Tool 60's own values */
+[["80", "2"], ["20", "2"], ["10", "4"], ["65", "0.4"], ["35", "3"]].forEach(function (pair) {
+  const w = app.weightedNetReturn(pair[0], pair[1], "1000", "7.5");
+  const wil = app.weightedImpermanentLoss(pair[0], pair[1], "1000");
+  check("WNET composes Tool 60 @" + pair[0] + "% " + pair[1] + "x",
+    w !== null && wil !== null && w.holdValue === wil.holdValue && w.lpValue === wil.lpValue &&
+    w.feesNeeded === wil.feesNeeded && w.ilPct === wil.ilPct && Math.abs(w.netVsHold - (7.5 - wil.feesNeeded)) < 1e-9);
+});
+const wnMore = app.weightedNetReturn("80", "2", "1000", "100000");
+check("WNET fees don't move hold/LP/hurdle", wnMore.holdValue === wn80.holdValue && wnMore.lpValue === wn80.lpValue && wnMore.feesNeeded === wn80.feesNeeded && wnMore.verdict === "ahead");
+check("WNET rejects weight at the edges", app.weightedNetReturn("0", "2", "1000", "10") === null && app.weightedNetReturn("100", "2", "1000", "10") === null && app.weightedNetReturn("-5", "2", "1000", "10") === null);
+check("WNET rejects bad price multiple", app.weightedNetReturn("80", "0", "1000", "10") === null && app.weightedNetReturn("80", "-2", "1000", "10") === null && app.weightedNetReturn("80", "x", "1000", "10") === null);
+check("WNET rejects bad deposit", app.weightedNetReturn("80", "2", "0", "10") === null && app.weightedNetReturn("80", "2", "", "10") === null && app.weightedNetReturn("80", "2", "abc", "10") === null && app.weightedNetReturn("80", "2", null, "10") === null);
+check("WNET rejects bad fees", app.weightedNetReturn("80", "2", "1000", "-1") === null && app.weightedNetReturn("80", "2", "1000", "xyz") === null && app.weightedNetReturn("80", "2", "1000", "") === null && app.weightedNetReturn("80", "2", "1000", null) === null);
+check("WNET rejects blank weight and ratio", app.weightedNetReturn("", "2", "1000", "10") === null && app.weightedNetReturn("80", " ", "1000", "10") === null);
+check("WNET settles via tool 60 in source", appSrc.includes("var wil = weightedImpermanentLoss("));
+check("all wnet controls labelled",
+  ["wnet-weight", "wnet-ratio", "wnet-deposit", "wnet-fees", "wnet-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("wnet tool present in index.html", html.includes('id="wnet-calc"') && html.includes('id="wnet-result"'));
+check("wnet handler wired to its own form", appSrc.includes('getElementById("wnet-calc")') && appSrc.includes('getElementById("wnet-result")'));
+check("wnet honesty: bet-not-shield and not-live labels", html.includes("it is a bet, not a shield") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers weighted net return", guide.includes("Settle a weighted position against holding, not against its deposit"));
+check("README lists tool 68", readme.includes("68. **Weighted-pool net return calculator**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

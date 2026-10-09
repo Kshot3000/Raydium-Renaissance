@@ -1547,6 +1547,23 @@
         <button type="submit" class="btn primary">Compare the three curves</button>
         <p id="curve-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="wnet-calc">
+        <h3>68 · Weighted-pool net return calculator</h3>
+        <p>Tools 24 and 29 settle a position — its value plus the fees actually earned, against simply holding — for a 50/50 constant-product pool and for a CLMM position; this settles the weighted pools of tool 56 the same way, built on tool 60's own impermanent loss so the halves cannot drift. The weight moves both bottom lines: at an 80% weight on the token that doubled, a $1,000 deposit is worth ≈$1,741.10 as an LP — up ≈74.11% on the deposit — yet still ≈$58.90 behind holding, because holding kept more of the token that rose. At a 50% weight this is tool 24's answer exactly, and the mirror move (a 20% weight on a halving) carries the identical ≈−3.27% impermanent loss. Weighting toward a token shrinks the hurdle on moves in its favour, but it is a bet, not a shield: a 10% weight still needs ≈$151.30 of fees per $1,000 at a 4x move. Weighted pools are a generalised design used elsewhere — Raydium's own constant-product pools are the 50/50 case tool 24 covers. Educational model only — your weight, price-move, deposit and fee inputs; not live pool data, not a live quote, not financial advice.</p>
+        <label for="wnet-weight">Token A weight (percent of position value, strictly between 0 and 100)</label>
+        <input id="wnet-weight" inputmode="decimal" placeholder="e.g. 80" autocomplete="off">
+        <label for="wnet-ratio">Price multiple for token A (2 = doubled, 0.5 = halved)</label>
+        <input id="wnet-ratio" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="wnet-deposit">Deposit value in $</label>
+        <input id="wnet-deposit" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="wnet-fees">Fees earned in $ (counted outside the position)</label>
+        <input id="wnet-fees" inputmode="decimal" placeholder="e.g. 50" autocomplete="off">
+        <label for="wnet-out">Net vs holding in $ (model, negative = behind)</label>
+        <input id="wnet-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Settle the weighted position</button>
+        <p id="wnet-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1574,6 +1591,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=84"></script>
+<script src="app.js?v=85"></script>
 </body>
 </html>

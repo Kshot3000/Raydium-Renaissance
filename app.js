@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus sixty-seven fully
+/* Raydium Renaissance hub logic: project filtering plus sixty-eight fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -40,8 +40,9 @@
    arbitrage model, a weighted-pool exact-out
    swap model, a weighted-pool price-impact
    sizer, a stableswap arbitrage model, a
-   stableswap price-impact sizer, and a curve
-   comparison model.
+   stableswap price-impact sizer, a curve
+   comparison model, and a weighted-pool net
+   return calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -4467,8 +4468,57 @@ function curveCompare(reserveInStr, reserveOutStr, weightInPctStr, ampStr, amoun
   };
 }
 
+/* ---------- 68 · Weighted-pool net return calculator ---------- */
+/* Tools 24 and 29 settle a position — LP value plus the fees actually
+   earned, against simply holding — for a 50/50 constant-product pool
+   and for a CLMM position. This is the same settlement for the
+   weighted pools of tool 56, built entirely on tool 60's own
+   weightedImpermanentLoss: net = lpValue + fees, and the verdict is
+   fees minus tool 60's hurdle, so the settlement can never drift
+   from the IL tool it settles. At a 50% weight it is tool 24's
+   answer exactly (asserted in tests), because at 50/50 the weighted
+   curve is the product curve. The honest shape is what the weight
+   does to the two bottom lines: at an 80% weight on the token that
+   doubled, a $1,000 deposit is worth $1,741.10 as an LP — up
+   74.11% on the deposit — yet still $58.90 behind holding, because
+   holding kept more of the token that rose. Weighting toward a
+   token shrinks the hurdle on moves in that token's favour (the
+   mirror move, a 20% weight on a halving, carries the identical
+   −3.27% IL) but it is a bet, not a shield: a 10% weight still
+   needs ≈$151.30 of fees per $1,000 at a 4x move. At no price move
+   the hurdle is $0 and coverage is honestly null (nothing to
+   cover), not a made-up percentage. Model only — fees counted in
+   $ terms outside the position, no compounding, no rebalancing of
+   the weights modelled. Weighted pools are a generalised design
+   used elsewhere; Raydium's own constant-product pools are the
+   50/50 case tool 24 covers. Not financial advice. */
+function weightedNetReturn(weightAPctStr, priceRatioStr, depositStr, feesStr) {
+  if (feesStr == null || String(feesStr).trim() === "") return null;
+  if (depositStr == null || String(depositStr).trim() === "") return null;
+  var wil = weightedImpermanentLoss(weightAPctStr, priceRatioStr, depositStr);
+  if (wil === null || wil.deposit == null || !(wil.deposit > 0)) return null;
+  var fees = Number(feesStr);
+  if (!Number.isFinite(fees) || fees < 0) return null;
+  var feesNeeded = wil.holdValue - wil.lpValue;
+  var netLpValue = wil.lpValue + fees;
+  var netVsHold = netLpValue - wil.holdValue;
+  var tol = 1e-9 * Math.max(1, wil.holdValue);
+  return {
+    weightAPct: wil.weightAPct, weightBPct: wil.weightBPct,
+    priceRatio: wil.priceRatio, deposit: wil.deposit, ilPct: wil.ilPct,
+    lpVsHold: wil.lpVsHold,
+    holdValue: wil.holdValue, lpValue: wil.lpValue,
+    feesEarned: fees, feesNeeded: feesNeeded,
+    feesCoveragePct: feesNeeded > 1e-9 ? fees / feesNeeded * 100 : null,
+    netLpValue: netLpValue, netVsHold: netVsHold,
+    netVsHoldPct: wil.holdValue > 0 ? netVsHold / wil.holdValue * 100 : 0,
+    netReturnPct: (netLpValue - wil.deposit) / wil.deposit * 100,
+    verdict: Math.abs(netVsHold) <= tol ? "even" : (netVsHold > 0 ? "ahead" : "behind")
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, weightedNetReturn, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -6505,6 +6555,35 @@ if (typeof document !== "undefined") {
           " out on a stableswap curve at A = " + fmt(res.amp, 4) + " (spot ≈ " + fmt(res.stableswap.spotPrice, 6) + ", impact ≈ " + fmt(res.stableswap.priceImpactPct, 4) + "%). Most out: the " + names[res.bestOut] +
           " curve; lowest impact against its own spot: the " + names[res.lowestImpact] + " curve. Read the spots before ranking the payouts: each curve sets its own spot from the same reserves — the weighted spot carries the weight and the stable spot sits near par only while reserves are balanced — so the biggest payout can simply be the curve that priced the token cheapest before the trade. Impact, measured against each curve's own spot, is the shape comparison. A curve comparison model — not live pool data, not a live quote, not financial advice.";
         document.getElementById("cmp-out").value = fmt(res.bestOutAmount, 6);
+      }
+    });
+
+    document.getElementById("wnet-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = weightedNetReturn(
+        document.getElementById("wnet-weight").value,
+        document.getElementById("wnet-ratio").value,
+        document.getElementById("wnet-deposit").value,
+        document.getElementById("wnet-fees").value
+      );
+      var out = document.getElementById("wnet-result");
+      if (res === null) {
+        out.textContent = "Enter a token A weight above 0% and below 100%, a price multiple above 0, a deposit above $0, and the fees you've earned ($0 or more).";
+        document.getElementById("wnet-out").value = "";
+      } else {
+        var verdictText = res.verdict === "ahead"
+          ? "≈ $" + fmt(res.netVsHold, 2) + " ahead of holding (" + fmt(res.netVsHoldPct, 2) + "%)"
+          : res.verdict === "behind"
+            ? "≈ $" + fmt(-res.netVsHold, 2) + " behind holding (" + fmt(res.netVsHoldPct, 2) + "%)"
+            : "exactly even with holding ($0 either way)";
+        out.textContent = "Model output: at a " + fmt(res.weightAPct, 4) + "% token A weight and a " + res.priceRatio + "x price move, holding would be $" + fmt(res.holdValue, 2) +
+          " and the weighted LP position $" + fmt(res.lpValue, 2) + " — impermanent loss " + fmt(res.ilPct, 2) + "% (tool 60), so $" +
+          fmt(res.feesNeeded, 2) + " in fees breaks even. Adding your $" + fmt(res.feesEarned, 2) +
+          " in fees" + (res.feesCoveragePct !== null ? " (" + fmt(res.feesCoveragePct, 2) + "% of that hurdle)" : "") +
+          " brings the position to $" + fmt(res.netLpValue, 2) + " — " + verdictText +
+          ". Against the $" + fmt(res.deposit, 2) + " deposit itself that is a net return of " + fmt(res.netReturnPct, 2) +
+          "% — a different bottom line: weighting toward the token that rose shrinks the hurdle but never removes it, and a position can be well up on its deposit and still behind holding. At a 50% weight this is tool 24's constant-product settlement exactly. A weighted-pool net-return model, not a live Raydium quote — fees are counted in $ terms outside the pool, with no compounding modelled. Weighted pools are a generalised design used elsewhere; Raydium's own pools are the 50/50 case. Not financial advice.";
+        document.getElementById("wnet-out").value = fmt(res.netVsHold, 2);
       }
     });
 
