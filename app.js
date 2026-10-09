@@ -6483,7 +6483,7 @@ if (typeof document !== "undefined") {
       }
     });
 
-    document.getElementById("cmp-calc").addEventListener("submit", function (ev) {
+    document.getElementById("curve-calc").addEventListener("submit", function (ev) {
       ev.preventDefault();
       var res = curveCompare(
         document.getElementById("cmp-rin").value,
@@ -6493,7 +6493,7 @@ if (typeof document !== "undefined") {
         document.getElementById("cmp-ain").value,
         document.getElementById("cmp-fee").value
       );
-      var out = document.getElementById("cmp-result");
+      var out = document.getElementById("curve-result");
       if (res === null) {
         out.textContent = "Enter positive reserves for both tokens, an input weight above 0% and below 100%, an amplification above 0, a positive amount in as a plain decimal (up to 9 decimal places), and a fee tier in whole basis points (0–9999). If one curve rejects the trade, the comparison rejects it too.";
         document.getElementById("cmp-out").value = "";

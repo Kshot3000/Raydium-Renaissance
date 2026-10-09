@@ -56,7 +56,9 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=83"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=84"));
+check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
+  (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -3922,7 +3924,8 @@ check("CMP legs priced by the source tools", appSrc.includes("var cp = cpSwap(")
 check("all cmp controls labelled",
   ["cmp-rin", "cmp-rout", "cmp-weight", "cmp-amp", "cmp-ain", "cmp-fee", "cmp-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cmp tool present in index.html", html.includes('id="cmp-calc"') && html.includes('id="cmp-result"'));
+check("cmp tool present in index.html", html.includes('id="curve-calc"') && html.includes('id="curve-result"'));
+check("curve handler wired to its own form", appSrc.includes('getElementById("curve-calc")') && appSrc.includes('getElementById("curve-result")'));
 check("cmp honesty: own-spot and not-live labels", html.includes("each curve sets its own spot") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers curve comparison", guide.includes("Compare curves by their impact, not their payout"));
 check("README lists tool 67", readme.includes("67. **Curve comparison model**"));
