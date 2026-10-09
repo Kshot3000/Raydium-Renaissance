@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus seventy fully
+/* Raydium Renaissance hub logic: project filtering plus seventy-one fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -43,7 +43,8 @@
    stableswap price-impact sizer, a curve
    comparison model, a weighted-pool net
    return calculator, a stableswap net
-   return calculator, and a weighted-pool
+   return calculator, a weighted-pool
+   required-volume planner, and a stableswap
    required-volume planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
@@ -4671,8 +4672,100 @@ function weightedRequiredVolume(weightAPctStr, priceRatioStr, depositStr, yourSt
   });
 }
 
+/* ---------- 71 · Stableswap required-volume planner (Tools 61/69 + 3 inverted) ---------- */
+/* Tools 31, 32 and 70 ask "how much volume per day covers the
+   break-even hurdle?" for a CLMM position, a 50/50 constant-product
+   pool and a weighted pool; a stableswap LP asks the same, and here
+   the amplification sets the hurdle before volume enters it. The
+   hurdle is Tool 69's own feesNeeded — your share of Tool 61's
+   depeg shortfall (hold value minus LP value after arbitrage has
+   rebalanced the pool to your external price of token B, both in
+   token A terms): on balanced 1,000/1,000 reserves at A = 100 with
+   B at 0.90, a 10% share owes ≈6.4276 A, and the same depeg at
+   A = 1 owes only ≈0.5252 A while A = 5,000 owes ≈9.4139 A,
+   because a higher A defends par longer and drains further. The
+   fee side is Tool 3's formula run in reverse with the share
+   taken directly, the way Tool 69 takes it:
+     your fees per day = volume * (feeBps / 10000) * share
+     required volume   = (hurdle / days) / that product
+   One honest consequence of that shape: the required POOL volume
+   does not depend on your share at all — a bigger share owes a
+   bigger slice of the hurdle but takes the same bigger slice of
+   every fee, so the two cancel (the tests assert the volume is
+   identical at 5%, 10%, 25% and 100% shares while the fees you
+   must personally earn scale with the share). What the share
+   cannot cancel is the amplification's bill. Validation rides on
+   the source tools: the hurdle comes from stableDepegLoss itself
+   (non-positive reserves, amplification or price are rejected
+   exactly as Tool 61 rejects them, and an unbracketable price is
+   rejected there too), the share must lie in (0, 100] exactly as
+   Tool 69 requires, and the fee tier must be an integer
+   0..10000 bps exactly as Tool 3 requires. The tests feed the
+   reported volume's fees straight into Tool 69 and assert the
+   position settles exactly even with holding, so the inverse can
+   never drift from the forwards tools. Two honest edges,
+   mirroring Tools 32/70: if the peg holds at your price there is
+   no shortfall, so the required volume is honestly 0 — not a
+   small number — even at a zero fee tier (a hurdle at or below
+   Tool 69's own verdict tolerance counts as none); and with a
+   real hurdle but a zero fee tier, no volume earns a fee, so the
+   answer is reported as not feasible with an infinite required
+   volume rather than a made-up figure. Volume is a pool-wide
+   total per day in token A terms, at a fee rate, share, price
+   and amplification assumed to hold still — in a live pool none
+   of them will. Stableswap pools are a generalised design used
+   elsewhere for pegged pairs, modelled for comparison.
+   Model only — not a live quote, not a volume forecast,
+   not financial advice. */
+function stableRequiredVolume(reserveAStr, reserveBStr, ampStr, priceBStr, sharePctStr, feeBps, daysStr) {
+  var raw = [reserveAStr, reserveBStr, ampStr, priceBStr, sharePctStr, feeBps, daysStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var days = Number(daysStr), sharePct = Number(sharePctStr), fee = Number(feeBps);
+  if (!Number.isFinite(days) || days <= 0) return null;
+  if (!Number.isFinite(sharePct) || sharePct <= 0 || sharePct > 100) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 10000) return null;
+  var dep = stableDepegLoss(reserveAStr, reserveBStr, ampStr, priceBStr);
+  if (dep === null) return null;
+  var share = sharePct / 100;
+  var holdValueA = share * dep.holdValueA;
+  var lpValueA = share * dep.lpValueA;
+  var feesNeeded = holdValueA - lpValueA;
+  var requiredFeesPerDay = feesNeeded / days;
+  var base = {
+    reserveA: dep.reserveA, reserveB: dep.reserveB, amp: dep.amp, priceB: dep.priceB,
+    startSpotB: dep.startSpotB, endSpotB: dep.endSpotB,
+    newReserveA: dep.newReserveA, newReserveB: dep.newReserveB,
+    sharePct: sharePct,
+    depositValueA: share * (dep.reserveA + dep.startSpotB * dep.reserveB),
+    holdValueA: holdValueA, lpValueA: lpValueA, lossPct: dep.lossPct,
+    feesNeeded: feesNeeded, feesNeededPctOfDeposit: 0,
+    days: days, feeBps: fee, feePct: fee / 100,
+    requiredFeesPerDay: requiredFeesPerDay
+  };
+  base.feesNeededPctOfDeposit = base.depositValueA > 0 ? feesNeeded / base.depositValueA * 100 : 0;
+  if (feesNeeded <= 1e-9 * Math.max(1, holdValueA)) {
+    return Object.assign(base, {
+      feasible: true, requiredPoolFeesPerDay: 0, requiredVolumePerDay: 0
+    });
+  }
+  if (fee <= 0) {
+    return Object.assign(base, {
+      feasible: false,
+      requiredPoolFeesPerDay: requiredFeesPerDay / share,
+      requiredVolumePerDay: Infinity
+    });
+  }
+  return Object.assign(base, {
+    feasible: true,
+    requiredPoolFeesPerDay: requiredFeesPerDay / share,
+    requiredVolumePerDay: requiredFeesPerDay / (fee / 10000 * share)
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, weightedNetReturn, stableNetReturn, weightedRequiredVolume, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -6799,6 +6892,33 @@ if (typeof document !== "undefined") {
       } else {
         out.textContent = "Model output: at a " + fmt(res.weightAPct, 2) + "% weight on token A and a price multiple of " + fmt(res.priceRatio, 4) + ", the position is ≈ $" + fmt(res.feesNeeded, 4) + " behind holding (impermanent loss " + fmt(res.ilPct, 2) + "%). To earn that in " + fmt(res.days, 0) + " days at a " + fmt(res.feeBps, 0) + " bps tier with your " + fmt(res.sharePct, 4) + "% share of the pool, the pool needs ≈ $" + fmt(res.requiredPoolFeesPerDay, 4) + " of fees a day — ≈ $" + fmt(res.requiredVolumePerDay, 2) + " of volume a day, of which your share is ≈ $" + fmt(res.requiredFeesPerDay, 4) + " a day. The weight moves the hurdle before volume enters it, and not monotonically: the hurdle is hold minus LP, both of which move with the weight, so at some moves the worst of it sits near an interior weight rather than at 50% — run your own weight, not the 50/50 answer. A weighted-pool required-volume model, not a live Raydium quote and not a volume forecast — it assumes the volume, tier, share and price all hold still. Not financial advice.";
         document.getElementById("wrv-out").value = fmt(res.requiredVolumePerDay, 2);
+      }
+    });
+
+    document.getElementById("srv-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = stableRequiredVolume(
+        document.getElementById("srv-ra").value,
+        document.getElementById("srv-rb").value,
+        document.getElementById("srv-amp").value,
+        document.getElementById("srv-price").value,
+        document.getElementById("srv-share").value,
+        document.getElementById("srv-fee").value,
+        document.getElementById("srv-days").value
+      );
+      var out = document.getElementById("srv-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, an amplification above 0, an external price for token B above 0, your share of the pool (above 0 and at most 100%), a fee tier from 0 to 10,000 bps, and a number of days above 0.";
+        document.getElementById("srv-out").value = "";
+      } else if (!res.feasible) {
+        out.textContent = "Model output: the depeg leaves your share ≈ " + fmt(res.feesNeeded, 4) + " A behind holding (depeg loss " + fmt(res.lossPct, 2) + "% on the pool), which needs ≈ " + fmt(res.requiredFeesPerDay, 4) + " A of fees a day for " + fmt(res.days, 0) + " days — but at a 0 bps fee tier no volume earns any fee at all, so no required volume exists. A stableswap required-volume model, not a live Raydium quote and not a volume forecast. Not financial advice.";
+        document.getElementById("srv-out").value = "no volume suffices at 0 bps";
+      } else if (res.requiredVolumePerDay === 0) {
+        out.textContent = "Model output: at an external price of " + fmt(res.priceB, 4) + " A per B the peg holds against the pool's own starting spot of " + fmt(res.startSpotB, 4) + ", so there is no depeg shortfall to cover and the required volume is honestly 0 a day — not a small number. A stableswap required-volume model, not a live Raydium quote and not a volume forecast. Not financial advice.";
+        document.getElementById("srv-out").value = "0";
+      } else {
+        out.textContent = "Model output: with token B at " + fmt(res.priceB, 4) + " A, your " + fmt(res.sharePct, 2) + "% share is ≈ " + fmt(res.feesNeeded, 4) + " A behind holding (depeg loss " + fmt(res.lossPct, 2) + "% on the pool). To earn that in " + fmt(res.days, 0) + " days at a " + fmt(res.feeBps, 0) + " bps tier, the pool needs ≈ " + fmt(res.requiredPoolFeesPerDay, 4) + " A of fees a day — ≈ " + fmt(res.requiredVolumePerDay, 2) + " A of volume a day, of which your share is ≈ " + fmt(res.requiredFeesPerDay, 4) + " A a day. Amplification sets the hurdle before volume enters it, and one honest shape: the required pool volume does not depend on your share — a bigger share owes a bigger slice of the hurdle but takes the same bigger slice of every fee, so the two cancel; your share only changes the fees you must personally earn each day. A stableswap required-volume model, not a live Raydium quote and not a volume forecast — it assumes the volume, tier, share, price and amplification all hold still. Not financial advice.";
+        document.getElementById("srv-out").value = fmt(res.requiredVolumePerDay, 2);
       }
     });
 

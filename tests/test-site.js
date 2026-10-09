@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=88"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=89"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1357,7 +1357,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists seventy tools", readme.includes("seventy pool tools") || readme.includes("all seventy"));
+check("README lists seventy-one tools", readme.includes("seventy-one pool tools") || readme.includes("all seventy-one"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2000,8 +2000,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts seventy tools and names the weighted-pool required-volume planner",
-  appSrc.includes("plus seventy fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, and a weighted-pool\n   required-volume planner.\n   These are educational MODELS"));
+check("app.js header counts seventy-one tools and names the stableswap required-volume planner",
+  appSrc.includes("plus seventy-one fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, and a stableswap\n   required-volume planner.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -4157,6 +4157,91 @@ check("wrv handler wired to its own form", appSrc.includes('getElementById("wrv-
 check("wrv honesty: bet-not-shield and not-live labels", html.includes("Weighting is a bet, not a shield") && html.includes("not a volume forecast, not financial advice"));
 check("guide covers weighted required volume", guide.includes("the weight sets the hurdle before volume enters it"));
 check("README lists tool 70", readme.includes("70. **Weighted-pool required-volume planner**"));
+
+/* ---------- 71 · Stableswap required-volume planner ---------- */
+const srv = app.stableRequiredVolume("1000", "1000", "100", "0.9", "10", 25, "30");
+check("SRV headline feasible", srv !== null && srv.feasible === true);
+near("SRV headline hurdle (Tool 69's figure)", srv.feesNeeded, 6.42756656932977, 1e-9);
+near("SRV headline hold value", srv.holdValueA, 190, 1e-9);
+near("SRV headline LP value", srv.lpValueA, 183.57243343067023, 1e-9);
+near("SRV headline deposit value", srv.depositValueA, 200, 1e-9);
+near("SRV headline loss % (Tool 61's figure)", srv.lossPct, -3.3829297733314667, 1e-9);
+near("SRV headline required volume per day", srv.requiredVolumePerDay, 857.0088759106359, 1e-6);
+near("SRV headline required pool fees per day", srv.requiredPoolFeesPerDay, 2.1425221897765896, 1e-9);
+near("SRV headline your fees per day", srv.requiredFeesPerDay, 0.21425221897765898, 1e-12);
+/* Composition: the hurdle is Tools 61/69 verbatim, and Tool 69 fed the
+   reported volume's fees settles exactly even with holding */
+{
+  const combos = [
+    ["1000", "1000", "100", "0.9", "10", 25, "30"],
+    ["1000", "1000", "1", "0.9", "10", 25, "30"],
+    ["1000", "1000", "5000", "0.9", "25", 100, "7"],
+    ["1000", "500", "100", "0.9", "10", 25, "30"],
+    ["2000", "1000", "50", "1.05", "40", 5, "90"],
+    ["500", "2000", "200", "0.95", "5", 250, "365"]
+  ];
+  for (const [ra, rb, A, p, s, fee, d] of combos) {
+    const r = app.stableRequiredVolume(ra, rb, A, p, s, fee, d);
+    const dep = app.stableDepegLoss(ra, rb, A, p);
+    const snet = app.stableNetReturn(ra, rb, A, p, s, "0");
+    check("SRV hurdle = Tool 69 verbatim @A" + A + "/p" + p + "/s" + s, r !== null && snet !== null && r.feesNeeded === snet.feesNeeded);
+    near("SRV hurdle = share x Tool 61 @A" + A + "/p" + p + "/s" + s, r.feesNeeded, (Number(s) / 100) * (dep.holdValueA - dep.lpValueA), 1e-9);
+    const earned = r.requiredVolumePerDay * (fee / 10000) * (Number(s) / 100) * Number(d);
+    near("SRV reported volume earns the hurdle @A" + A + "/p" + p + "/s" + s, earned, r.feesNeeded, 1e-6);
+    const settle = app.stableNetReturn(ra, rb, A, p, s, String(earned));
+    check("SRV Tool 69 settles even on the reported volume @A" + A + "/p" + p + "/s" + s, settle !== null && settle.verdict === "even" && Math.abs(settle.netVsHoldA) <= 1e-9 * Math.max(1, settle.holdValueA));
+  }
+}
+/* Amplification ordering: a higher A defends par longer, so the hurdle
+   — and with it the required volume — grows with A */
+near("SRV volume at A=1", app.stableRequiredVolume("1000", "1000", "1", "0.9", "10", 25, "30").requiredVolumePerDay, 70.03130316594479, 1e-6);
+near("SRV volume at A=5000", app.stableRequiredVolume("1000", "1000", "5000", "0.9", "10", 25, "30").requiredVolumePerDay, 1255.1897391311625, 1e-6);
+check("SRV required volume grows with amplification",
+  app.stableRequiredVolume("1000", "1000", "1", "0.9", "10", 25, "30").requiredVolumePerDay <
+  srv.requiredVolumePerDay &&
+  srv.requiredVolumePerDay <
+  app.stableRequiredVolume("1000", "1000", "5000", "0.9", "10", 25, "30").requiredVolumePerDay);
+/* Share invariance: the required POOL volume does not depend on your
+   share — the hurdle slice and the fee slice scale together — while
+   the fees you must personally earn scale with the share */
+{
+  const vols = ["5", "10", "25", "100"].map(s => app.stableRequiredVolume("1000", "1000", "100", "0.9", s, 25, "30").requiredVolumePerDay);
+  check("SRV required pool volume is share-invariant", vols.every(v => Math.abs(v - vols[1]) <= 1e-6));
+  near("SRV your fees per day scale with share (100% = 10x 10%)",
+    app.stableRequiredVolume("1000", "1000", "100", "0.9", "100", 25, "30").requiredFeesPerDay,
+    srv.requiredFeesPerDay * 10, 1e-9);
+}
+/* A price above the starting spot drains the other way, same shape */
+near("SRV up-move hurdle (Tool 69's figure)", app.stableRequiredVolume("1000", "1000", "100", "1.1", "10", 25, "30").feesNeeded, 6.268172217424308, 1e-9);
+near("SRV up-move volume", app.stableRequiredVolume("1000", "1000", "100", "1.1", "10", 25, "30").requiredVolumePerDay, 835.7562956565744, 1e-6);
+near("SRV lopsided-pool volume", app.stableRequiredVolume("1000", "500", "100", "0.9", "10", 25, "30").requiredVolumePerDay, 987.4287378894943, 1e-6);
+/* Honest edges: peg holds -> honestly 0, even at a zero fee tier;
+   hurdle at zero fee tier -> not feasible */
+{
+  const peg = app.stableRequiredVolume("1000", "1000", "100", "1", "10", 25, "30");
+  check("SRV peg holds needs no volume", peg.feasible === true && peg.requiredVolumePerDay === 0 && peg.requiredPoolFeesPerDay === 0 && peg.feesNeeded <= 1e-9);
+  const peg0 = app.stableRequiredVolume("1000", "1000", "100", "1", "10", 0, "30");
+  check("SRV peg holds at zero fee tier still honestly 0", peg0.feasible === true && peg0.requiredVolumePerDay === 0);
+  const zf = app.stableRequiredVolume("1000", "1000", "100", "0.9", "10", 0, "30");
+  check("SRV zero fee tier with a hurdle is not feasible", zf.feasible === false && zf.requiredVolumePerDay === Infinity && Math.abs(zf.requiredPoolFeesPerDay - 2.1425221897765896) < 1e-9);
+}
+/* Days scale the required volume inversely */
+near("SRV doubling the days halves the volume",
+  app.stableRequiredVolume("1000", "1000", "100", "0.9", "10", 25, "60").requiredVolumePerDay * 2,
+  srv.requiredVolumePerDay, 1e-6);
+check("SRV rejects bad reserves/amp/price via Tool 61", app.stableRequiredVolume("0", "1000", "100", "0.9", "10", 25, "30") === null && app.stableRequiredVolume("1000", "", "100", "0.9", "10", 25, "30") === null && app.stableRequiredVolume("1000", "1000", "0", "0.9", "10", 25, "30") === null && app.stableRequiredVolume("1000", "1000", "100", "0", "10", 25, "30") === null && app.stableRequiredVolume("1000", "1000", "100", "-0.9", "10", 25, "30") === null);
+check("SRV rejects bad share", app.stableRequiredVolume("1000", "1000", "100", "0.9", "0", 25, "30") === null && app.stableRequiredVolume("1000", "1000", "100", "0.9", "101", 25, "30") === null && app.stableRequiredVolume("1000", "1000", "100", "0.9", "", 25, "30") === null && app.stableRequiredVolume("1000", "1000", "100", "0.9", "abc", 25, "30") === null);
+check("SRV rejects bad fee tier", app.stableRequiredVolume("1000", "1000", "100", "0.9", "10", 2.5, "30") === null && app.stableRequiredVolume("1000", "1000", "100", "0.9", "10", -1, "30") === null && app.stableRequiredVolume("1000", "1000", "100", "0.9", "10", 10001, "30") === null && app.stableRequiredVolume("1000", "1000", "100", "0.9", "10", "", "30") === null);
+check("SRV rejects bad days", app.stableRequiredVolume("1000", "1000", "100", "0.9", "10", 25, "") === null && app.stableRequiredVolume("1000", "1000", "100", "0.9", "10", 25, "0") === null && app.stableRequiredVolume("1000", "1000", "100", "0.9", "10", 25, "-3") === null && app.stableRequiredVolume("1000", "1000", "100", "0.9", "10", 25, null) === null);
+check("SRV composes Tool 61 in source", appSrc.includes("var dep = stableDepegLoss(reserveAStr, reserveBStr, ampStr, priceBStr);"));
+check("all srv controls labelled",
+  ["srv-ra", "srv-rb", "srv-amp", "srv-price", "srv-share", "srv-fee", "srv-days", "srv-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("srv tool present in index.html", html.includes('id="srv-calc"') && html.includes('id="srv-result"'));
+check("srv handler wired to its own form", appSrc.includes('getElementById("srv-calc")') && appSrc.includes('getElementById("srv-result")'));
+check("srv honesty: amplification-hurdle and not-live labels", html.includes("amplification sets the hurdle before volume enters it") && html.includes("not a volume forecast, not financial advice"));
+check("guide covers stableswap required volume", guide.includes("the amplification sets the hurdle before volume enters it"));
+check("README lists tool 71", readme.includes("71. **Stableswap required-volume planner**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

@@ -1608,6 +1608,29 @@
         <button type="submit" class="btn primary">Plan the required volume</button>
         <p id="wrv-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="srv-calc">
+        <h3>71 · Stableswap required-volume planner</h3>
+        <p>Tools 31, 32 and 70 ask how much volume a pool needs per day for its fees to cover the break-even hurdle a price move opens — for a CLMM position, a 50/50 constant-product pool and a weighted pool; this asks it for the stableswap pools of tool 58, and here amplification sets the hurdle before volume enters it. The hurdle is tool 69's own — your share of tool 61's depeg shortfall: on balanced 1,000/1,000 reserves at A = 100 with token B at 0.90, a 10% share is ≈6.4276 A behind holding, needing ≈857.01 A of pool volume a day for 30 days at a 25 bps tier; the same depeg at A = 1 needs only ≈70.03 A a day, and at A = 5,000 ≈1,255.19 A a day, because a higher A defends par longer and drains further. One honest shape: the required pool volume does not depend on your share — a bigger share owes a bigger slice of the hurdle but takes the same bigger slice of every fee, so the two cancel. If the peg holds there is no shortfall and the required volume is honestly 0; at a 0 bps tier no volume suffices. Stableswap pools are a generalised design used elsewhere for pegged pairs. Educational model only — your reserves, amplification, depeg price, share, fee-tier and day inputs, with volume in token A terms; not live pool data, not a live quote, not a volume forecast, not financial advice.</p>
+        <label for="srv-ra">Reserve of token A</label>
+        <input id="srv-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="srv-rb">Reserve of token B</label>
+        <input id="srv-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="srv-amp">Amplification A (pool property, above 0)</label>
+        <input id="srv-amp" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="srv-price">External price of token B, in token A (1 = peg holds)</label>
+        <input id="srv-price" inputmode="decimal" placeholder="e.g. 0.9" autocomplete="off">
+        <label for="srv-share">Your share of the pool (percent, above 0 and at most 100)</label>
+        <input id="srv-share" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="srv-fee">Swap fee (basis points, 25 = 0.25%)</label>
+        <input id="srv-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="srv-days">Days to break even within</label>
+        <input id="srv-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="srv-out">Required pool volume per day in token A (model)</label>
+        <input id="srv-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan the required volume</button>
+        <p id="srv-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1635,6 +1658,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=88"></script>
+<script src="app.js?v=89"></script>
 </body>
 </html>
