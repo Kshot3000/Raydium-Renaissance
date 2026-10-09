@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=54"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=55"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists forty-seven tools", readme.includes("forty-seven pool tools") || readme.includes("all forty-seven"));
+check("README lists forty-eight tools", readme.includes("forty-eight pool tools") || readme.includes("all forty-eight"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts forty-seven tools and names the CLMM three-range exact-out swap model",
-  appSrc.includes("plus forty-seven fully") && appSrc.includes("CLMM three-range\n   exact-out swap model.\n   These are educational MODELS"));
+check("app.js header counts forty-eight tools and names the CLMM single-sided zap-in planner from token B",
+  appSrc.includes("plus forty-eight fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -2438,6 +2438,77 @@ check("all txo controls labelled", ["txo-liq", "txo-lower", "txo-upper", "txo-pr
 check("txo tool present in index.html", html.includes('id="txo-calc"') && html.includes('id="txo-result"'));
 check("txo honesty: third ceiling and not-live labels", html.includes("supply that third range too") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("does not invent either"));
 check("guide covers CLMM three-range exact-out swap", guide.includes("Exact-out keeps going past the second wall too"));
+
+/* ---------- Tool 48: CLMM single-sided zap-in planner from token B (CZB) ---------- */
+const czb1 = app.clmmZapInB("1000", "1000", "1", "0.8", "1.25", "100", 25);
+check("CZB headline settles in range", czb1 !== null && czb1.status === "in" && czb1.inRange === true);
+near("CZB headline swap in (B)", czb1.swapIn, 51.310156586, 1e-9);
+near("CZB headline swap out (A)", czb1.swapOut, 48.689843413, 1e-9);
+near("CZB headline deposit A", czb1.depositA, 48.689843413, 1e-9);
+near("CZB headline deposit B", czb1.depositB, 48.689843413, 1e-9);
+near("CZB headline liquidity = tool 33's L", czb1.liquidity, 461.19681643557664, 1e-9);
+check("CZB headline limiting side is A (tool 33's mirror)", czb1.limiting === "A" && czb1.leftoverA === 0 && czb1.leftoverB > 0 && czb1.leftoverB < 1e-6);
+near("CZB headline ratio B per A at centre = price", czb1.ratioBperA, 1, 1e-12);
+const cza1 = app.clmmZapIn("1000", "1000", "1", "0.8", "1.25", "100", 25);
+check("CZB headline is tool 33's plan mirrored exactly", czb1.swapIn === cza1.swapIn && czb1.swapOut === cza1.swapOut && czb1.depositA === cza1.depositB && czb1.depositB === cza1.depositA && czb1.liquidity === cza1.liquidity);
+const czb0 = app.clmmZapInB("1000", "1000", "1", "0.8", "1.25", "100", 0);
+near("CZB zero-fee split = closed form", czb0.swapIn, 51.249219725039325, 1e-9);
+near("CZB zero-fee deposit each side", czb0.depositB, 48.750780274, 1e-9);
+const czbC2 = app.clmmZapInB("1000", "1000", "2", "1.6", "2.5", "100", 25);
+near("CZB centred range ratio = price (2)", czbC2.ratioBperA, 2, 1e-12);
+near("CZB centred range deposit B = 2 x deposit A", czbC2.depositB / czbC2.depositA, 2, 1e-9);
+const czbC4 = app.clmmZapInB("500", "2000", "4", "3.2", "5", "200", 25);
+near("CZB centred range ratio = price (4)", czbC4.ratioBperA, 4, 1e-12);
+near("CZB centred range 4 deposit B = 4 x deposit A", czbC4.depositB / czbC4.depositA, 4, 1e-9);
+const czbTop = app.clmmZapInB("1000", "1000", "1.24", "0.8", "1.25", "100", 25);
+check("CZB near the top edge swaps only a sliver", czbTop !== null && czbTop.swapIn > 0 && czbTop.swapIn < 2);
+near("CZB near-top swap in", czbTop.swapIn, 1.622601457, 1e-9);
+const czbLow = app.clmmZapInB("1000", "1000", "0.81", "0.8", "1.25", "100", 25);
+check("CZB near the lower edge swaps almost everything", czbLow !== null && czbLow.swapIn > 97);
+near("CZB near-lower swap in", czbLow.swapIn, 97.715811388, 1e-9);
+const czbBelow = app.clmmZapInB("1000", "1000", "0.7", "0.8", "1.25", "100", 25);
+check("CZB below range swaps everything", czbBelow !== null && czbBelow.status === "below" && czbBelow.swapIn === 100 && czbBelow.depositB === 0);
+near("CZB below swap out = tool 1 B->A fill", czbBelow.swapOut, 90.70243237, 1e-9);
+check("CZB below deposit is the swap out alone", czbBelow.depositA === czbBelow.swapOut && czbBelow.leftoverA === 0 && czbBelow.leftoverB === 0);
+const czbAtLower = app.clmmZapInB("1000", "1000", "0.8", "0.8", "1.25", "100", 25);
+check("CZB at the lower edge is the below case", czbAtLower !== null && czbAtLower.status === "below" && czbAtLower.swapOut === czbBelow.swapOut);
+const czbAbove = app.clmmZapInB("1000", "1000", "1.3", "0.8", "1.25", "100", 25);
+check("CZB above range needs no swap", czbAbove !== null && czbAbove.status === "above" && czbAbove.swapIn === 0 && czbAbove.swapOut === 0 && czbAbove.depositA === 0 && czbAbove.depositB === 100);
+near("CZB above liquidity", czbAbove.liquidity, 447.2135955, 1e-7);
+check("CZB above limiting side is B", czbAbove.limiting === "B");
+const czbAtUpper = app.clmmZapInB("1000", "1000", "1.25", "0.8", "1.25", "100", 25);
+check("CZB at the upper edge is the above case", czbAtUpper !== null && czbAtUpper.status === "above" && czbAtUpper.liquidity === czbAbove.liquidity);
+const czb35 = app.clmmRangePlanB("1", "0.8", "1.25", String(czb1.depositB));
+near("CZB headline deposit feeds tool 35 back the same A", czb35.requiredA, czb1.depositA, 1e-9);
+near("CZB headline deposit feeds tool 35 back the same L", czb35.liquidity, czb1.liquidity, 1e-9);
+for (const [ra, rb, px, lo, hi, y, fee] of [
+  ["2000", "500", "0.25", "0.2", "0.3125", "50", 30],
+  ["1234", "9876", "8", "6.4", "10", "777", 5],
+  ["10000", "10000", "1", "0.5", "2", "5000", 100],
+  ["750", "3000", "3.9", "3.2", "5", "42.5", 0],
+  ["1000", "1000", "1.1", "0.9", "1.21", "250", 25]
+]) {
+  const r = app.clmmZapInB(ra, rb, px, lo, hi, y, fee);
+  const tag = "CZB sweep " + [ra, rb, px, lo, hi, y, fee].join("/");
+  check(tag + " settles in range", r !== null && r.status === "in");
+  if (r === null) continue;
+  const sw = app.cpSwap(rb, ra, r.swapIn.toFixed(9), fee);
+  check(tag + " swap leg is tool 1 verbatim", sw !== null && Number(sw.out) === r.swapOut && sw.priceImpactPct === r.swapPriceImpactPct);
+  const plan = app.clmmWalletPlan(px, lo, hi, sw.out, String(Number(y) - r.swapIn));
+  check(tag + " deposit is tool 14 verbatim", plan !== null && plan.usedA === r.depositA && plan.usedB === r.depositB && plan.liquidity === r.liquidity && plan.limiting === r.limiting);
+  check(tag + " B is conserved", Math.abs(r.swapIn + r.depositB + r.leftoverB - Number(y)) <= 1e-6);
+  check(tag + " A is conserved", Math.abs(r.depositA + r.leftoverA - r.swapOut) <= 1e-9);
+  check(tag + " deposit lands at the range ratio", Math.abs(r.depositB / r.depositA - r.ratioBperA) <= 1e-6);
+}
+check("CZB rejects blank fields", app.clmmZapInB("", "1000", "1", "0.8", "1.25", "100", 25) === null && app.clmmZapInB("1000", "1000", "1", "0.8", "1.25", "", 25) === null);
+check("CZB rejects zero or negative amounts and reserves", app.clmmZapInB("1000", "1000", "1", "0.8", "1.25", "0", 25) === null && app.clmmZapInB("1000", "1000", "1", "0.8", "1.25", "-5", 25) === null && app.clmmZapInB("0", "1000", "1", "0.8", "1.25", "100", 25) === null);
+check("CZB rejects inverted or degenerate ranges", app.clmmZapInB("1000", "1000", "1", "1.25", "0.8", "100", 25) === null && app.clmmZapInB("1000", "1000", "1", "1", "1", "100", 25) === null);
+check("CZB rejects bad fee tiers", app.clmmZapInB("1000", "1000", "1", "0.8", "1.25", "100", 10000) === null && app.clmmZapInB("1000", "1000", "1", "0.8", "1.25", "100", 2.5) === null && app.clmmZapInB("1000", "1000", "1", "0.8", "1.25", "100", -1) === null);
+check("CZB rejects non-numeric input", app.clmmZapInB("abc", "1000", "1", "0.8", "1.25", "100", 25) === null && app.clmmZapInB("1000", "1000", "1", "0.8", "1.25", "xyz", 25) === null);
+check("all czapb controls labelled", ["czapb-ra", "czapb-rb", "czapb-bps", "czapb-cur", "czapb-lower", "czapb-upper", "czapb-amt", "czapb-out"].every(id => html.includes(`for="${id}"`)));
+check("czapb tool present in index.html", html.includes('id="czapb-calc"') && html.includes('id="czapb-result"'));
+check("czapb honesty: B-side entry and not-live labels", html.includes("wallet holding only token B") && html.includes("not live pool state") && html.includes("not financial advice"));
+check("guide covers CLMM zap-in from token B", guide.includes("Entering a CLMM range from the B side"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

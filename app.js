@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus forty-seven fully
+/* Raydium Renaissance hub logic: project filtering plus forty-eight fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -24,8 +24,9 @@
    exact-out swap model, a CLMM single-range swap model, a
    CLMM two-range swap model, a CLMM single-range exact-out
    swap model, a CLMM two-range exact-out swap model, a
-   CLMM three-range swap model, and a CLMM three-range
-   exact-out swap model.
+   CLMM three-range swap model, a CLMM three-range
+   exact-out swap model, and a CLMM single-sided zap-in
+   planner from token B.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -1856,6 +1857,103 @@ function clmmZapIn(reserveAStr, reserveBStr, currentStr, lowerStr, upperStr, amo
   };
 }
 
+/* ---------- 48 · CLMM single-sided zap-in planner from token B ---------- */
+/* Tool 33's entry mirror. Tool 33 zaps into a CLMM position from a
+   wallet holding only token A; a wallet holding only token B (the
+   stablecoin side of the pair, say) needs the same entry run the
+   other way: swap part of the B for A, then deposit the B that
+   remains alongside the A the swap returned. The deposit ratio is
+   the same one Tool 33 uses — set by where the current price P sits
+   in the chosen range, not by the swap pool's ratio:
+     rho = B required per A deposited = (s - sa) / (1/s - 1/sb)
+   The swap leg runs in a constant-product pool the user describes
+   (reserves Ra/Rb, fee tier), under Tool 1's model with the tokens
+   swapped: paying t of B returns Ra * k*t / (Rb + k*t) of A,
+   k = 1 - fee. The split is the t whose return exactly funds the
+   deposit of what remains:
+     Y - t = rho * Ra * k*t / (Rb + k*t)
+   which clears to a quadratic in t:
+     k*t^2 + (Rb + rho*Ra*k - Y*k)*t - Y*Rb = 0
+   Its one root in (0, Y) is the split (at the range's geometric
+   centre rho = P and the deposit is value-balanced; near the lower
+   edge rho collapses and nearly everything is swapped, near the top
+   edge nearly nothing is). The swap itself is executed by Tool 1's
+   own cpSwap on the split floored to 9 dp, and the deposit is
+   settled by Tool 14's own clmmWalletPlan on what the swap actually
+   returned, so both legs are those tools' numbers verbatim and the
+   tests assert so. Because Tool 1 floors its fee and output at
+   9 dp, the A returned can fall a hair short of the unfloored
+   split's promise: token A is then the limiting side and a dust of
+   token B (about 1e-9 on the headline vector) is honestly reported
+   as leftover rather than silently absorbed — the exact mirror of
+   Tool 33's dust. The range edges need no swap maths at all: at or
+   below the lower edge the position is entirely token A (swap
+   everything, Tool 14's below case), and at or above the upper edge
+   it is entirely token B (no swap, Tool 14's above case). Model
+   only — the swap pool and the CLMM position are modelled
+   separately (in practice the swap would route wherever the price
+   is best, possibly the CLMM pool itself), no routing, no
+   tick-spacing snapping, no price movement between the swap and
+   the deposit. Not a live quote, not financial advice. */
+function clmmZapInB(reserveAStr, reserveBStr, currentStr, lowerStr, upperStr, amountBStr, feeBps) {
+  var required = [reserveAStr, reserveBStr, currentStr, lowerStr, upperStr, amountBStr, feeBps];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var ra = Number(reserveAStr), rb = Number(reserveBStr);
+  var current = Number(currentStr), lower = Number(lowerStr), upper = Number(upperStr);
+  var y = Number(amountBStr), fee = Number(feeBps);
+  if (![ra, rb, current, lower, upper, y, fee].every(Number.isFinite)) return null;
+  if (ra <= 0 || rb <= 0 || current <= 0 || lower <= 0 || upper <= 0 || y <= 0) return null;
+  if (lower >= upper) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var status, swapIn = 0, swapOut = 0, swapImpactPct = 0, ratio = null, plan;
+  if (current >= upper) {
+    status = "above";
+    plan = clmmWalletPlan(currentStr, lowerStr, upperStr, "0", amountBStr);
+    if (plan === null) return null;
+  } else if (current <= lower) {
+    status = "below";
+    var swapAll = cpSwap(reserveBStr, reserveAStr, amountBStr, feeBps);
+    if (swapAll === null) return null;
+    swapIn = y;
+    swapOut = Number(swapAll.out);
+    swapImpactPct = swapAll.priceImpactPct;
+    plan = clmmWalletPlan(currentStr, lowerStr, upperStr, swapAll.out, "0");
+    if (plan === null) return null;
+  } else {
+    status = "in";
+    var s = Math.sqrt(current), sa = Math.sqrt(lower), sb = Math.sqrt(upper);
+    ratio = (s - sa) / (1 / s - 1 / sb);
+    var k = 1 - fee / 10000;
+    var qa = k, qb = rb + ratio * ra * k - y * k, qc = -y * rb;
+    var root = (-qb + Math.sqrt(qb * qb - 4 * qa * qc)) / (2 * qa);
+    if (!(root > 0 && root < y)) return null;
+    var split = Math.floor(root * 1e9) / 1e9;
+    if (split <= 0) return null;
+    var swap = cpSwap(reserveBStr, reserveAStr, split.toFixed(9), feeBps);
+    if (swap === null) return null;
+    swapIn = split;
+    swapOut = Number(swap.out);
+    swapImpactPct = swap.priceImpactPct;
+    plan = clmmWalletPlan(currentStr, lowerStr, upperStr, swap.out, String(y - split));
+    if (plan === null) return null;
+  }
+  return {
+    status: status,
+    inRange: status === "in",
+    reserveA: ra, reserveB: rb,
+    currentPrice: current, lowerPrice: lower, upperPrice: upper,
+    amountB: y, feeBps: fee,
+    ratioBperA: ratio,
+    swapIn: swapIn, swapOut: swapOut,
+    swapSpotPrice: rb / ra, swapPriceImpactPct: swapImpactPct,
+    depositA: plan.usedA, depositB: plan.usedB,
+    leftoverA: plan.leftoverA, leftoverB: plan.leftoverB,
+    liquidity: plan.liquidity, limiting: plan.limiting
+  };
+}
+
 /* ---------- 34 · CLMM single-sided zap-out planner ---------- */
 /* Tool 33's exit mirror, and Tool 20's question for a concentrated
    position. Closing a CLMM position pays whatever the position holds
@@ -2870,7 +2968,7 @@ function clmmTripleSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amou
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapOut, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -3781,6 +3879,42 @@ if (typeof document !== "undefined") {
           " your range needs ≈ " + fmt(res.ratioBperA, 4) + " B per A deposited. Model liquidity ≈ " + fmt(res.liquidity, 4) +
           "; ≈ " + fmt(res.leftoverA, 6) + " A is left over as dust because the swap leg rounds at 9 decimals. The swap pool and the CLMM position are modelled separately. A CLMM zap-in model — not a live quote, not financial advice.";
         document.getElementById("czap-out").value = fmt(res.liquidity, 4);
+      }
+    });
+
+    document.getElementById("czapb-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmZapInB(
+        document.getElementById("czapb-ra").value,
+        document.getElementById("czapb-rb").value,
+        document.getElementById("czapb-cur").value,
+        document.getElementById("czapb-lower").value,
+        document.getElementById("czapb-upper").value,
+        document.getElementById("czapb-amt").value,
+        document.getElementById("czapb-bps").value
+      );
+      var out = document.getElementById("czapb-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for the swap pool, a positive amount of token B held, a fee tier between 0 and 9999 bps, and a CLMM range (lower below upper) at a positive current price. A holding too small for the swap leg to return anything at 9-decimal precision cannot fund a position.";
+        document.getElementById("czapb-out").value = "";
+      } else if (res.status === "above") {
+        out.textContent = "Model output: at a current price of " + fmt(res.currentPrice, 4) + " B per A, at or above your range's upper edge of " + fmt(res.upperPrice, 4) +
+          ", the position is entirely token B — no swap is needed. Deposit all " + fmt(res.depositB, 4) + " B for model liquidity ≈ " + fmt(res.liquidity, 4) +
+          "; it earns nothing until the price falls back into the range. A CLMM zap-in-from-B model — not a live quote, not financial advice.";
+        document.getElementById("czapb-out").value = fmt(res.liquidity, 4);
+      } else if (res.status === "below") {
+        out.textContent = "Model output: at a current price of " + fmt(res.currentPrice, 4) + " B per A, at or below your range's lower edge of " + fmt(res.lowerPrice, 4) +
+          ", the position is entirely token A — swap all " + fmt(res.swapIn, 4) + " B in the swap pool for ≈ " + fmt(res.swapOut, 4) +
+          " A (price impact ≈ " + fmt(res.swapPriceImpactPct, 2) + "%), then deposit the A alone for model liquidity ≈ " + fmt(res.liquidity, 4) +
+          ". It earns nothing until the price rises back into the range. A CLMM zap-in-from-B model — not a live quote, not financial advice.";
+        document.getElementById("czapb-out").value = fmt(res.liquidity, 4);
+      } else {
+        out.textContent = "Model output: swap ≈ " + fmt(res.swapIn, 4) + " of your " + fmt(res.amountB, 4) + " B in the swap pool at a " + fmt(res.feeBps, 0) +
+          " bps tier for ≈ " + fmt(res.swapOut, 4) + " A (price impact ≈ " + fmt(res.swapPriceImpactPct, 2) +
+          "%), then deposit all of that A with the remaining ≈ " + fmt(res.depositB + res.leftoverB, 4) + " B — at a price of " + fmt(res.currentPrice, 4) +
+          " your range needs ≈ " + fmt(res.ratioBperA, 4) + " B per A deposited. Model liquidity ≈ " + fmt(res.liquidity, 4) +
+          "; ≈ " + fmt(res.leftoverB, 6) + " B is left over as dust because the swap leg rounds at 9 decimals. The swap pool and the CLMM position are modelled separately. A CLMM zap-in-from-B model — not a live quote, not financial advice.";
+        document.getElementById("czapb-out").value = fmt(res.liquidity, 4);
       }
     });
 

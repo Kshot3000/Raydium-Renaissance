@@ -1138,6 +1138,29 @@
         <button type="submit" class="btn primary">Price this three-range exact-out CLMM swap</button>
         <p id="txo-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="czapb-calc">
+        <h3>48 · CLMM single-sided zap-in planner from token B</h3>
+        <p>Tool 33 zaps into a CLMM position from a wallet holding only token A; this is the same entry for a wallet holding only token B — the stablecoin side of the pair, say. Enter the constant-product pool you'd swap in (its reserves and fee tier), the CLMM side (current price and the range you want), and the token B you hold: the planner solves for the one swap whose return in token A exactly funds the deposit of the B that remains, at the B-per-A ratio the range's own maths (Tool 8) requires at the current price — then runs the swap through Tool 1's model and settles the deposit through Tool 14's, so both legs are those tools' numbers. At the range's geometric centre the deposit is value-balanced; near the lower edge almost everything must be swapped, and near the top edge almost nothing. If the price sits at or above your range's top, no swap is needed at all — the position is entirely token B; at or below the bottom, everything is swapped and the position is entirely token A. Because the swap leg rounds at 9 decimals, a dust of token B (about a billionth on a 100-token entry) can be left over, and it is reported rather than hidden. The swap pool and the CLMM position are modelled separately — in practice the swap routes wherever the price is best — and no tick-spacing snapping or price movement between the steps is modelled. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="czapb-ra">Swap pool reserve — token A</label>
+        <input id="czapb-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="czapb-rb">Swap pool reserve — token B</label>
+        <input id="czapb-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="czapb-bps">Swap pool fee tier (bps — 25 = 0.25%)</label>
+        <input id="czapb-bps" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="czapb-cur">CLMM current price (token B per token A)</label>
+        <input id="czapb-cur" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="czapb-lower">Range lower price (B per A)</label>
+        <input id="czapb-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="czapb-upper">Range upper price (B per A)</label>
+        <input id="czapb-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="czapb-amt">Token B you hold (all of it goes in)</label>
+        <input id="czapb-amt" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="czapb-out">Model liquidity of the position (model)</label>
+        <input id="czapb-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan my zap from B</button>
+        <p id="czapb-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1165,6 +1188,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=54"></script>
+<script src="app.js?v=55"></script>
 </body>
 </html>
