@@ -1585,6 +1585,29 @@
         <button type="submit" class="btn primary">Settle the stableswap position</button>
         <p id="snet-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="wrv-calc">
+        <h3>70 · Weighted-pool required-volume planner</h3>
+        <p>Tools 31 and 32 ask how much volume a pool needs per day for its fees to cover the break-even hurdle a price move opens — for a CLMM position and for a 50/50 constant-product pool; this asks it for the weighted pools of tool 56, and the weight changes the answer before volume enters it at all. The hurdle is tool 60's own: at an 80% weight on the token that doubled, a $1,000 deposit is only ≈$58.90 behind holding, not the 50/50 pool's ≈$85.79 — and at a 50% weight this is tool 32's answer exactly. Run backwards from tool 3's fee formula, that headline hurdle needs ≈$7,853.18 of pool volume a day for 30 days at a 25 bps tier and a 10% share. Weighting is a bet, not a shield: a 10% weight at a 4x move needs ≈$151.30 of fees per $1,000. At no price move the required volume is honestly $0, and at a 0 bps tier no volume suffices. Weighted pools are a generalised design used elsewhere — Raydium's own constant-product pools are the 50/50 case tool 32 covers. Educational model only — your weight, price-move, deposit, share, fee-tier and day inputs; not live pool data, not a live quote, not a volume forecast, not financial advice.</p>
+        <label for="wrv-weight">Token A weight (percent of position value, strictly between 0 and 100)</label>
+        <input id="wrv-weight" inputmode="decimal" placeholder="e.g. 80" autocomplete="off">
+        <label for="wrv-ratio">Price multiple for token A (2 = doubled, 0.5 = halved)</label>
+        <input id="wrv-ratio" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="wrv-deposit">Deposit value in $</label>
+        <input id="wrv-deposit" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="wrv-your">Your liquidity in $ (no larger than the TVL)</label>
+        <input id="wrv-your" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="wrv-tvl">Pool TVL in $</label>
+        <input id="wrv-tvl" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="wrv-fee">Swap fee (basis points, 25 = 0.25%)</label>
+        <input id="wrv-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="wrv-days">Days to break even within</label>
+        <input id="wrv-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="wrv-out">Required pool volume per day in $ (model)</label>
+        <input id="wrv-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan the required volume</button>
+        <p id="wrv-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1612,6 +1635,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=86"></script>
+<script src="app.js?v=87"></script>
 </body>
 </html>

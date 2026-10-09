@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=86"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=87"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1357,7 +1357,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists sixty-nine tools", readme.includes("sixty-nine pool tools") || readme.includes("all sixty-nine"));
+check("README lists seventy tools", readme.includes("seventy pool tools") || readme.includes("all seventy"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2000,8 +2000,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts sixty-nine tools and names the stableswap net return calculator",
-  appSrc.includes("plus sixty-nine fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, and a stableswap net\n   return calculator.\n   These are educational MODELS"));
+check("app.js header counts seventy tools and names the weighted-pool required-volume planner",
+  appSrc.includes("plus seventy fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, and a weighted-pool\n   required-volume planner.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -4053,6 +4053,100 @@ check("snet handler wired to its own form", appSrc.includes('getElementById("sne
 check("snet honesty: split baselines and not-live labels", html.includes("fees that cover the hurdle still leave it down against the deposit") && html.includes("not live pool data, not a live quote, not financial advice"));
 check("guide covers stableswap net return", guide.includes("Settle a stable position against holding AND against its deposit"));
 check("README lists tool 69", readme.includes("69. **Stableswap net return calculator**"));
+
+/* ---------- 70 · Weighted-pool required-volume planner (WREQ) ---------- */
+const wrv = app.weightedRequiredVolume("80", "2", "1000", "1000", "10000", 25, "30");
+check("WREQ headline exists", wrv !== null && wrv.feasible === true);
+near("WREQ headline hurdle is Tool 60's (80% weight, 2x)", wrv.feesNeeded, 58.898873, 1e-6);
+near("WREQ headline hurdle matches Tool 68's $58.90", wrv.feesNeeded, app.weightedNetReturn("80", "2", "1000", "0").feesNeeded, 1e-12);
+near("WREQ headline IL", wrv.ilPct, -3.27216, 1e-5);
+near("WREQ headline required fees/day", wrv.requiredFeesPerDay, 1.963296, 1e-6);
+near("WREQ headline required pool fees/day", wrv.requiredPoolFeesPerDay, 19.632958, 1e-6);
+near("WREQ headline required volume/day", wrv.requiredVolumePerDay, 7853.183121, 1e-4);
+near("WREQ share is Tool 3's", wrv.sharePct, app.lpFees("1", 25, "1000", "10000").sharePct, 1e-12);
+/* Round-trip: Tool 3 at the reported volume earns the hurdle in exactly the days allowed */
+{
+  const rt = app.lpFees(String(wrv.requiredVolumePerDay), 25, "1000", "10000");
+  near("WREQ round-trip via Tool 3 earns hurdle in the days", rt.dailyFees * 30, wrv.feesNeeded, 1e-6);
+}
+/* At a 50% weight this IS Tool 32 verbatim on every shared field */
+{
+  const w50 = app.weightedRequiredVolume("50", "2", "1000", "1000", "10000", 25, "30");
+  const c32 = app.cpRequiredVolume("2", "1000", "1000", "10000", 25, "30");
+  check("WREQ at 50% weight equals Tool 32 verbatim",
+    w50.feesNeeded === c32.feesNeeded && w50.ilPct === c32.ilPct && w50.holdValue === c32.holdValue &&
+    w50.lpValue === c32.lpValue && w50.sharePct === c32.sharePct && w50.requiredFeesPerDay === c32.requiredFeesPerDay &&
+    w50.requiredPoolFeesPerDay === c32.requiredPoolFeesPerDay && w50.requiredVolumePerDay === c32.requiredVolumePerDay &&
+    w50.feasible === c32.feasible);
+}
+/* Composition sweep: hurdle is Tool 60 verbatim; Tool 3 at reported volume earns it in the days */
+for (const [w, r, dep, your, tvl, fee, days] of [
+  ["80", "2", "1000", "1000", "10000", 25, "30"],
+  ["20", "0.5", "1000", "1000", "10000", 25, "30"],
+  ["10", "4", "1000", "500", "10000", 25, "10"],
+  ["90", "1.5", "2500", "250", "50000", 100, "7"],
+  ["35", "0.25", "750", "750", "3000", 5, "90"],
+  ["65", "3", "10000", "2000", "8000", 30, "14"]
+]) {
+  const x = app.weightedRequiredVolume(w, r, dep, your, tvl, fee, days);
+  const wil = app.weightedImpermanentLoss(w, r, dep);
+  const est = app.lpFees(String(x.requiredVolumePerDay), fee, your, tvl);
+  check(`WREQ sweep w${w} r${r} composes Tools 60+3`,
+    x !== null && x.feasible === true &&
+    Math.abs(x.feesNeeded - wil.feesNeeded) < 1e-9 &&
+    Math.abs(x.holdValue - wil.holdValue) < 1e-9 &&
+    Math.abs(est.dailyFees * Number(days) - x.feesNeeded) < 1e-6 &&
+    Math.abs(x.requiredPoolFeesPerDay - x.requiredFeesPerDay / (x.sharePct / 100)) < 1e-9);
+}
+/* The hurdle is NOT monotonic in the weight (hold minus LP, both move with w):
+   at 2x it peaks at 50% among round weights; at 4x the worst IL% sits near 30% */
+{
+  const h = (w, r) => app.weightedRequiredVolume(w, r, "1000", "1000", "10000", 25, "30");
+  near("WREQ hurdle at 10% weight, 2x", h("10", "2").feesNeeded, 28.2265, 1e-4);
+  near("WREQ hurdle at 90% weight, 2x", h("90", "2").feesNeeded, 33.9340, 1e-4);
+  check("WREQ hurdle at 2x is higher at 50% than at either edge weight",
+    h("50", "2").feesNeeded > h("10", "2").feesNeeded && h("50", "2").feesNeeded > h("90", "2").feesNeeded);
+  near("WREQ 10% weight at 4x needs $151.3016 per $1,000 (Tool 68's figure)", h("10", "4").feesNeeded, 151.301645, 1e-6);
+  near("WREQ hurdle at 90% weight, 4x", h("90", "4").feesNeeded, 217.7977, 1e-4);
+  check("WREQ worst IL% at 4x sits near a 30% weight, not at 50%",
+    h("30", "4").ilPct < h("50", "4").ilPct && Math.abs(h("30", "4").ilPct - -20.2254) < 1e-3);
+}
+/* Mirror symmetry: (w, r) and (100-w, 1/r) carry the same IL% and the same
+   hurdle as a share of hold value — the $ hurdle itself scales with hold value */
+{
+  const a = app.weightedRequiredVolume("80", "0.5", "1000", "1000", "10000", 25, "30");
+  const b = app.weightedRequiredVolume("20", "2", "1000", "1000", "10000", 25, "30");
+  near("WREQ mirror IL", a.ilPct, b.ilPct, 1e-9);
+  near("WREQ mirror hurdle per hold value", a.feesNeeded / a.holdValue, b.feesNeeded / b.holdValue, 1e-12);
+  near("WREQ mirror $ hurdle scales with hold value", a.feesNeeded * b.holdValue, b.feesNeeded * a.holdValue, 1e-6);
+  near("WREQ down-move hurdle (80%, 0.5x)", app.weightedRequiredVolume("80", "0.5", "1000", "1000", "10000", 25, "30").feesNeeded, 25.650823, 1e-6);
+}
+/* Honest edges: no move -> honestly 0, even at a zero fee tier; hurdle at zero fee tier -> not feasible */
+{
+  const nm = app.weightedRequiredVolume("80", "1", "1000", "1000", "10000", 25, "30");
+  check("WREQ no move needs no volume", nm.feasible === true && nm.requiredVolumePerDay === 0 && nm.requiredPoolFeesPerDay === 0 && nm.feesNeeded <= 1e-12);
+  const nm0 = app.weightedRequiredVolume("80", "1", "1000", "1000", "10000", 0, "30");
+  check("WREQ no move at zero fee tier still honestly 0", nm0.feasible === true && nm0.requiredVolumePerDay === 0);
+  const zf = app.weightedRequiredVolume("80", "2", "1000", "1000", "10000", 0, "30");
+  check("WREQ zero fee tier with a hurdle is not feasible", zf.feasible === false && zf.requiredVolumePerDay === Infinity && Math.abs(zf.requiredPoolFeesPerDay - 19.632958) < 1e-6);
+}
+/* Days scale the required volume inversely */
+near("WREQ doubling the days halves the volume",
+  app.weightedRequiredVolume("80", "2", "1000", "1000", "10000", 25, "60").requiredVolumePerDay * 2,
+  wrv.requiredVolumePerDay, 1e-6);
+check("WREQ rejects bad weights via Tool 60", app.weightedRequiredVolume("0", "2", "1000", "1000", "10000", 25, "30") === null && app.weightedRequiredVolume("100", "2", "1000", "1000", "10000", 25, "30") === null && app.weightedRequiredVolume("", "2", "1000", "1000", "10000", 25, "30") === null && app.weightedRequiredVolume("abc", "2", "1000", "1000", "10000", 25, "30") === null);
+check("WREQ rejects bad ratio/deposit", app.weightedRequiredVolume("80", "0", "1000", "1000", "10000", 25, "30") === null && app.weightedRequiredVolume("80", "-2", "1000", "1000", "10000", 25, "30") === null && app.weightedRequiredVolume("80", "2", "0", "1000", "10000", 25, "30") === null && app.weightedRequiredVolume("80", "2", "", "1000", "10000", 25, "30") === null && app.weightedRequiredVolume("80", "2", null, "1000", "10000", 25, "30") === null);
+check("WREQ rejects bad share/fee via Tool 3", app.weightedRequiredVolume("80", "2", "1000", "20000", "10000", 25, "30") === null && app.weightedRequiredVolume("80", "2", "1000", "0", "10000", 25, "30") === null && app.weightedRequiredVolume("80", "2", "1000", "1000", "10000", 10001, "30") === null && app.weightedRequiredVolume("80", "2", "1000", "1000", "10000", 2.5, "30") === null);
+check("WREQ rejects bad days", app.weightedRequiredVolume("80", "2", "1000", "1000", "10000", 25, "") === null && app.weightedRequiredVolume("80", "2", "1000", "1000", "10000", 25, "0") === null && app.weightedRequiredVolume("80", "2", "1000", "1000", "10000", 25, "-3") === null && app.weightedRequiredVolume("80", "2", "1000", "1000", "10000", 25, null) === null);
+check("WREQ composes Tools 60+3 in source", appSrc.includes("var wil = weightedImpermanentLoss(") && appSrc.includes("var est = lpFees(\"1\", feeBps, yourStr, tvlStr);"));
+check("all wrv controls labelled",
+  ["wrv-weight", "wrv-ratio", "wrv-deposit", "wrv-your", "wrv-tvl", "wrv-fee", "wrv-days", "wrv-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("wrv tool present in index.html", html.includes('id="wrv-calc"') && html.includes('id="wrv-result"'));
+check("wrv handler wired to its own form", appSrc.includes('getElementById("wrv-calc")') && appSrc.includes('getElementById("wrv-result")'));
+check("wrv honesty: bet-not-shield and not-live labels", html.includes("Weighting is a bet, not a shield") && html.includes("not a volume forecast, not financial advice"));
+check("guide covers weighted required volume", guide.includes("the weight sets the hurdle before volume enters it"));
+check("README lists tool 70", readme.includes("70. **Weighted-pool required-volume planner**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
