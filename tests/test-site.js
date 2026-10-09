@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=70"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=71"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -3166,6 +3166,10 @@ near("SSWAP asym spot", ssA.spotPrice, 0.9528284929981158, 1e-9);
 near("SSWAP asym impact", ssA.priceImpactPct, 1.7688862796294669, 1e-9);
 /* dust trade still prices */
 near("SSWAP dust out", app.stableSwap("1000", "1000", "100", "0.000001", 0).out, 9.99999883788405e-7, 1e-13);
+/* dust-POOL accuracy: Newton convergence is relative-only — an absolute
+   1e-12 step floor once stopped the solvers early at reserves ~1e-6 and
+   left this output 3.1e-4 relative off the 50-digit invariant solve */
+near("SSWAP dust-pool out stays accurate at micro reserves", app.stableSwap("0.0000022759418488544604", "1.005149823295138e-7", "1332.1493795556776", "2.5916962339471478e-14", 0).out, 2.46377281385e-14, 1e-19);
 /* rejections */
 check("SSWAP rejects a saturating trade instead of quoting a full drain", app.stableSwap("1000", "1000", "100", "1000000000000", 0) === null);
 check("SSWAP rejects non-positive amplification", app.stableSwap("1000", "1000", "0", "100", 25) === null && app.stableSwap("1000", "1000", "-5", "100", 25) === null);

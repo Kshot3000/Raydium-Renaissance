@@ -3635,12 +3635,18 @@ function stableInvariantD(reserveA, reserveB, amp) {
   if (!(S > 0)) return null;
   var Ann = 2 * amp;
   var D = S, prev = 0;
+  /* Convergence is judged RELATIVE to D, with no absolute floor: an
+     absolute epsilon (say 1e-12) dwarfs D itself in a dust-scale pool
+     and stops Newton early, leaving the output — a small difference of
+     two near-equal reserves — up to ~1e-4 relative off. The step
+     threshold |D| * 1e-14 is ~45 ulps, so genuine ulp-level oscillation
+     still terminates the loop. */
   for (var i = 0; i < 255; i++) {
     var Dp = D * D / (reserveA * 2);
     Dp = Dp * D / (reserveB * 2);
     prev = D;
     D = (Ann * S + Dp * 2) * D / ((Ann - 1) * D + 3 * Dp);
-    if (Math.abs(D - prev) <= Math.max(1e-12, Math.abs(D) * 1e-14)) break;
+    if (Math.abs(D - prev) <= Math.abs(D) * 1e-14) break;
   }
   return D;
 }
@@ -3653,7 +3659,7 @@ function stableSolveY(reserveInNew, reserveOutOld, amp, D) {
   for (var i = 0; i < 255; i++) {
     prev = y;
     y = (y * y + c) / (2 * y + b - D);
-    if (Math.abs(y - prev) <= Math.max(1e-12, Math.abs(y) * 1e-14)) break;
+    if (Math.abs(y - prev) <= Math.abs(y) * 1e-14) break;
   }
   return y;
 }
