@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=58"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=59"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists fifty tools", readme.includes("fifty pool tools") || readme.includes("all fifty"));
+check("README lists fifty-one tools", readme.includes("fifty-one pool tools") || readme.includes("all fifty-one"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts fifty tools and names the single-sided zap-in planner from token B",
-  appSrc.includes("plus fifty fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, and a single-sided zap-in planner\n   from token B.\n   These are educational MODELS"));
+check("app.js header counts fifty-one tools and names the single-sided zap-out planner to token B",
+  appSrc.includes("plus fifty-one fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, and a single-sided zap-out planner\n   to token B.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -2639,6 +2639,68 @@ check("zapb tool present in index.html", html.includes('id="zapb-calc"') && html
 check("zapb honesty: B-side entry and not-live labels", html.includes("Tool 19's entry mirror") && html.includes("wallet holding only token B") && html.includes("not live pool state") && html.includes("not financial advice"));
 check("guide covers zap-in from token B", guide.includes("Entering a constant-product pool from the B side"));
 check("README lists tool 49 and tool 50", readme.includes("49. **CLMM single-sided zap-out planner to token B**") && readme.includes("50. **Single-sided zap-in planner from token B**"));
+
+/* ---------- Tool 51: single-sided zap-out planner to token B (ZOB) ---------- */
+/* zero-fee known values, Tool 20's mirrored: withdraw 10% of 1000/1000 in full
+   (100 A + 100 B, 900/900 left), then swap the 100 A into the shallower pool:
+   out = 900*100/1000 = 90 B, total 190 B against a 200 B spot value (cost 10 B, 5%) */
+const zob0 = app.zapOutPlanB("1000", "1000", "10", "100", 0);
+check("ZOB zero-fee feasible", zob0.feasible === true);
+check("ZOB zero-fee withdrawal leg", zob0.withdrawA === "100" && zob0.withdrawB === "100" && zob0.postWithdrawReserveA === "900" && zob0.postWithdrawReserveB === "900");
+check("ZOB zero-fee swap out", zob0.swapOutB === "90" && zob0.swapInA === "100");
+check("ZOB zero-fee total B", zob0.totalB === "190");
+near("ZOB zero-fee spot value", zob0.valueAtSpotB, 200, 1e-9);
+near("ZOB zero-fee consolidation cost", zob0.consolidationCostB, 10, 1e-9);
+near("ZOB zero-fee consolidation cost pct", zob0.consolidationCostPct, 5, 1e-9);
+near("ZOB zero-fee swap impact", zob0.priceImpactPct, 10, 1e-9);
+/* fee 25 on the same exit: the swap leg nets 99.75 A in, out = 900*99.75/999.75 */
+const zobF = app.zapOutPlanB("1000", "1000", "10", "100", 25);
+check("ZOB fee25 swap out", zobF.swapOutB === "89.797449362" && zobF.totalB === "189.797449362");
+near("ZOB fee25 consolidation cost pct", zobF.consolidationCostPct, 5.101275319, 1e-6);
+check("ZOB larger fee costs more", zobF.consolidationCostB > zob0.consolidationCostB && app.zapOutPlanB("1000", "1000", "10", "100", 100).consolidationCostB > zobF.consolidationCostB);
+/* the balanced headline is Tool 20's own plan mirrored, field for field */
+const zoBal = app.zapOutPlan("1000", "1000", "10", "100", 25);
+check("ZOB mirrors Tool 20 swap out on a balanced pool", zobF.swapOutB === zoBal.swapOutA && zobF.totalB === zoBal.totalA);
+near("ZOB mirrors Tool 20 cost pct on a balanced pool", zobF.consolidationCostPct, zoBal.consolidationCostPct, 1e-12);
+near("ZOB mirrors Tool 20 spot value on a balanced pool", zobF.valueAtSpotB, zoBal.valueAtSpotA, 1e-9);
+/* partial withdrawal: half of the same position leaves 950/950, swap 50 A -> 47.5 B */
+const zobP = app.zapOutPlanB("1000", "1000", "10", "50", 0);
+check("ZOB partial withdrawal leg", zobP.withdrawA === "50" && zobP.withdrawB === "50" && zobP.postWithdrawReserveA === "950");
+check("ZOB partial totals", zobP.swapOutB === "47.5" && zobP.totalB === "97.5");
+/* the cost grows with your share: exiting half the whole pool costs 25% of spot value */
+const zobBig = app.zapOutPlanB("1000", "1000", "50", "100", 0);
+check("ZOB big-share totals", zobBig.swapOutB === "250" && zobBig.totalB === "750");
+near("ZOB big-share cost pct", zobBig.consolidationCostPct, 25, 1e-9);
+check("ZOB bigger share costs a bigger share", zobBig.consolidationCostPct > zob0.consolidationCostPct && zob0.consolidationCostPct > zobP.consolidationCostPct);
+/* asymmetric pool: spot 0.5 B per A, pre-verified against a clean prototype */
+const zobA = app.zapOutPlanB("1000000", "500000", "10", "100", 25);
+check("ZOB asymmetric swap out", zobA.swapOutB === "44898.72468117" && zobA.totalB === "94898.72468117");
+near("ZOB asymmetric spot", zobA.spotPrice, 0.5, 1e-12);
+near("ZOB asymmetric spot value", zobA.valueAtSpotB, 100000, 1e-6);
+/* mirror parity: Tool 20 run on the reserve-swapped pool returns the same fill */
+const zoSwap = app.zapOutPlan("500000", "1000000", "10", "100", 25);
+check("ZOB asym equals Tool 20 on the swapped pool", zobA.swapOutB === zoSwap.swapOutA && zobA.totalB === zoSwap.totalA);
+near("ZOB asym cost pct equals Tool 20 on the swapped pool", zobA.consolidationCostPct, zoSwap.consolidationCostPct, 1e-9);
+/* consistency: the withdrawal leg IS Tool 7 and the swap leg IS Tool 1, unchanged */
+for (const [label, z, args] of [["zero-fee", zob0, ["1000", "1000", "10", "100"]], ["fee25", zobF, ["1000", "1000", "10", "100"]], ["asym", zobA, ["1000000", "500000", "10", "100"]], ["b-heavy", app.zapOutPlanB("500", "2000", "25", "50", 100), ["500", "2000", "25", "50"]], ["small-share", app.zapOutPlanB("10000", "10000", "1", "100", 0), ["10000", "10000", "1", "100"]]]) {
+  const wd = app.withdrawPlan(args[0], args[1], args[2], args[3]);
+  check("ZOB " + label + " withdrawal leg matches Tool 7", z.withdrawA === wd.outA && z.withdrawB === wd.outB && z.postWithdrawReserveA === wd.remainingReserveA && z.postWithdrawReserveB === wd.remainingReserveB);
+  check("ZOB " + label + " swap leg matches Tool 1", app.cpSwap(z.postWithdrawReserveA, z.postWithdrawReserveB, z.withdrawA, z.feeBps).out === z.swapOutB);
+  near("ZOB " + label + " total is withdrawal B plus swap B", Number(z.totalB), Number(z.withdrawB) + Number(z.swapOutB), 1e-9);
+  check("ZOB " + label + " consolidation never pays you", z.totalB !== null && Number(z.totalB) < z.valueAtSpotB && z.consolidationCostPct > 0 && z.consolidationCostPct < z.priceImpactPct);
+}
+/* honest edge: withdrawing all of a pool you own entirely leaves no pool to swap in */
+const zobFull = app.zapOutPlanB("1000", "1000", "100", "100", 25);
+check("ZOB full-pool exit is not feasible", zobFull.feasible === false && zobFull.swapOutB === null && zobFull.totalB === null && zobFull.withdrawA === "1000" && zobFull.withdrawB === "1000");
+check("ZOB rejects share / withdraw out of range", app.zapOutPlanB("1000", "1000", "101", "100", 25) === null && app.zapOutPlanB("1000", "1000", "0", "100", 25) === null && app.zapOutPlanB("1000", "1000", "10", "0", 25) === null && app.zapOutPlanB("1000", "1000", "10", "101", 25) === null);
+check("ZOB rejects zero reserves", app.zapOutPlanB("0", "1000", "10", "100", 25) === null && app.zapOutPlanB("1000", "0", "10", "100", 25) === null);
+check("ZOB rejects bad fees", app.zapOutPlanB("1000", "1000", "10", "100", -1) === null && app.zapOutPlanB("1000", "1000", "10", "100", 10000) === null && app.zapOutPlanB("1000", "1000", "10", "100", 2.5) === null);
+check("ZOB rejects junk / empty", app.zapOutPlanB("abc", "1000", "10", "100", 25) === null && app.zapOutPlanB("1000", "1000", "", "100", 25) === null && app.zapOutPlanB("1000", "1000", "10", "100", "") === null && app.zapOutPlanB("", "1000", "10", "100", 25) === null);
+check("all zob controls labelled", ["zob-ra", "zob-rb", "zob-share", "zob-pct", "zob-fee", "zob-swapout", "zob-totalb"].every(id => html.includes(`for="${id}"`)));
+check("zob tool present in index.html", html.includes('id="zob-calc"') && html.includes('id="zob-result"'));
+check("zob honesty: exit mirror and not-live labels", html.includes("Tool 20's exit mirror") && html.includes("post-withdrawal reserves") && html.includes("not a live quote, not financial advice"));
+check("guide covers zap-out to token B", guide.includes("Leaving a constant-product pool into token B"));
+check("README lists tool 51", readme.includes("51. **Single-sided zap-out planner to token B**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

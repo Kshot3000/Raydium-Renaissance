@@ -1203,6 +1203,27 @@
         <button type="submit" class="btn primary">Plan my zap-in from B</button>
         <p id="zapb-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="zob-calc">
+        <h3>51 · Single-sided zap-out planner to token B</h3>
+        <p>Tool 20's exit mirror. Tool 7's withdrawal always pays both tokens in the pool's ratio — but you may want to leave holding only token B, the stablecoin side of the pair, say. The standard way out to token B alone is a zap-out: withdraw, then swap all the token A the withdrawal returned back into B in the same pool. Enter the pool's reserves, your share of the pool, how much of your position to withdraw and the pool fee — both legs are tool 7's and tool 1's own models run against the post-withdrawal reserves, and the result prices the consolidation honestly, in B: the fee plus the price impact of swapping into a pool your own withdrawal just made shallower, a cost that grows with your share. One honest edge: withdrawing all of a pool you own entirely leaves no pool behind to swap in, so that combination is reported as not completable in this pool rather than given a made-up fill. Educational model only — one pool, no routing, no price movement between the withdrawal and the swap (a real zap-out is a single transaction for exactly that reason), no withdrawal fee modelled; reserves are your inputs, not live pool state; not a live quote, not financial advice. CLMM exits are range-based and differ.</p>
+        <label for="zob-ra">Pool reserve — token A (current)</label>
+        <input id="zob-ra" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="zob-rb">Pool reserve — token B (current)</label>
+        <input id="zob-rb" inputmode="decimal" placeholder="e.g. 500000" autocomplete="off">
+        <label for="zob-share">Your share of the pool (%)</label>
+        <input id="zob-share" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="zob-pct">Withdraw — % of your position</label>
+        <input id="zob-pct" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="zob-fee">Pool fee (basis points, 25 = 0.25%)</label>
+        <input id="zob-fee" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="zob-swapout">Swap back — token B from the A leg (model)</label>
+        <input id="zob-swapout" readonly placeholder="—" autocomplete="off">
+        <label for="zob-totalb">You end holding — token B in total (model)</label>
+        <input id="zob-totalb" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan my zap-out to B</button>
+        <p id="zob-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1230,6 +1251,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=58"></script>
+<script src="app.js?v=59"></script>
 </body>
 </html>

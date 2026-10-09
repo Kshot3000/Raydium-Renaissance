@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus fifty fully
+/* Raydium Renaissance hub logic: project filtering plus fifty-one fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -27,8 +27,9 @@
    CLMM three-range swap model, a CLMM three-range
    exact-out swap model, a CLMM single-sided zap-in
    planner from token B, a CLMM single-sided zap-out
-   planner to token B, and a single-sided zap-in planner
-   from token B.
+   planner to token B, a single-sided zap-in planner
+   from token B, and a single-sided zap-out planner
+   to token B.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -977,6 +978,72 @@ function zapOutPlan(reserveAStr, reserveBStr, sharePctStr, withdrawPctStr, feeBp
     valueAtSpotA: valueAtSpotA,
     consolidationCostA: valueAtSpotA - totalANum,
     consolidationCostPct: (valueAtSpotA - totalANum) / valueAtSpotA * 100
+  });
+}
+
+/* ---------- 51 · Single-sided zap-out planner to token B (constant-product pools) ---------- */
+/* Tool 20's exit mirror. Tool 20 zaps out to token A alone, but a
+   wallet that measures itself in token B — the stablecoin side of
+   the pair, say — wants to leave holding B: withdraw (Tool 7's
+   model, unchanged), then swap all of the token A the withdrawal
+   returned back into token B in the same pool, against the
+   POST-withdrawal reserves (Tool 1's model, unchanged). Both legs
+   are computed by those tools' own functions, so the numbers can
+   never drift from their own forms. The consolidation is priced in
+   B the way Tool 20 prices it in A: valueAtSpotB is what the
+   withdrawn pair would be worth in B if the A leg filled at the
+   post-withdrawal spot price with no fee and no impact, and
+   consolidationCostB / consolidationCostPct are the difference —
+   the fee plus the price impact of swapping into a pool your own
+   withdrawal just made shallower, which is why the cost grows with
+   your share of the pool. On a balanced pool the plan is Tool 20's
+   own numbers mirrored (withdrawing a 10% share of 1000/1000 in
+   full at 25 bps: swap 100 A for 89.797449362 B, total
+   189.797449362 B against a 200 B spot value). The same honest
+   edge: withdrawing 100% of a pool you own 100% of leaves no pool
+   behind to swap in, so that combination returns feasible: false
+   (you simply keep both tokens, or swap elsewhere) instead of a
+   made-up fill. Model only — one pool, no routing, no price
+   movement between the withdrawal and the swap (a real zap-out is
+   a single transaction for exactly that reason), no withdrawal fee
+   modelled, and the reserves are your inputs, not live pool state.
+   CLMM exits are range-based and differ (Tool 49). Not financial
+   advice. */
+function zapOutPlanB(reserveAStr, reserveBStr, sharePctStr, withdrawPctStr, feeBps) {
+  var required = [reserveAStr, reserveBStr, sharePctStr, withdrawPctStr, feeBps];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var fee = Number(feeBps);
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var wd = withdrawPlan(reserveAStr, reserveBStr, sharePctStr, withdrawPctStr);
+  if (wd === null) return null;
+  var base = {
+    withdrawA: wd.outA, withdrawB: wd.outB,
+    postWithdrawReserveA: wd.remainingReserveA, postWithdrawReserveB: wd.remainingReserveB,
+    sharePct: wd.sharePct, withdrawPct: wd.withdrawPct, feeBps: fee
+  };
+  var remA = parseScaled(wd.remainingReserveA), remB = parseScaled(wd.remainingReserveB);
+  if (remA <= 0n || remB <= 0n) {
+    return Object.assign(base, { feasible: false, swapInA: wd.outA, swapOutB: null, totalB: null,
+      spotPrice: null, priceImpactPct: null, valueAtSpotB: null, consolidationCostB: null, consolidationCostPct: null });
+  }
+  var swap = cpSwap(wd.remainingReserveA, wd.remainingReserveB, wd.outA, fee);
+  if (swap === null) return null;
+  var totalB = parseScaled(wd.outB) + parseScaled(swap.out);
+  var spot = scaledToNumber(remB) / scaledToNumber(remA);
+  var valueAtSpotB = scaledToNumber(parseScaled(wd.outB)) + scaledToNumber(parseScaled(wd.outA)) * spot;
+  var totalBNum = scaledToNumber(totalB);
+  return Object.assign(base, {
+    feasible: true,
+    swapInA: wd.outA,
+    swapOutB: swap.out,
+    totalB: formatScaled(totalB),
+    spotPrice: spot,
+    priceImpactPct: swap.priceImpactPct,
+    valueAtSpotB: valueAtSpotB,
+    consolidationCostB: valueAtSpotB - totalBNum,
+    consolidationCostPct: (valueAtSpotB - totalBNum) / valueAtSpotB * 100
   });
 }
 
@@ -3109,7 +3176,7 @@ function clmmTripleSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amou
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -3666,6 +3733,38 @@ if (typeof document !== "undefined") {
           fmt(res.priceImpactPct, 4) + "% on the swap leg) — the cost grows with your share of the pool. A single-sided exit model in one pool, not a live Raydium quote — no routing or price movement between the two steps is modelled, no withdrawal fee is modelled, and CLMM exits are range-based and differ.";
         document.getElementById("zout-swapout").value = res.swapOutA;
         document.getElementById("zout-totala").value = res.totalA;
+      }
+    });
+
+    /* --- single-sided zap-out planner to token B --- */
+    document.getElementById("zob-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = zapOutPlanB(
+        document.getElementById("zob-ra").value,
+        document.getElementById("zob-rb").value,
+        document.getElementById("zob-share").value,
+        document.getElementById("zob-pct").value,
+        document.getElementById("zob-fee").value
+      );
+      var out = document.getElementById("zob-result");
+      if (res === null) {
+        out.textContent = "Enter positive pool reserves for both tokens, your share of the pool (above 0 and at most 100%), how much of your position to withdraw (above 0 and at most 100%), and a fee in basis points (25 = 0.25%).";
+        document.getElementById("zob-swapout").value = "";
+        document.getElementById("zob-totalb").value = "";
+      } else if (!res.feasible) {
+        out.textContent = "Model output: withdrawing " + fmt(res.withdrawPct, 4) + "% of a pool you own " + fmt(res.sharePct, 4) +
+          "% of returns ≈ " + res.withdrawA + " of token A and ≈ " + res.withdrawB + " of token B — and leaves no pool behind to swap in, " +
+          "so a same-pool zap-out cannot complete: you keep both tokens, or swap the A elsewhere. A single-sided exit model, not a live Raydium quote.";
+        document.getElementById("zob-swapout").value = "";
+        document.getElementById("zob-totalb").value = "";
+      } else {
+        out.textContent = "Model output: withdraw ≈ " + res.withdrawA + " of token A and ≈ " + res.withdrawB +
+          " of token B, then swap all of that A back into token B in the same (now shallower) pool for ≈ " + res.swapOutB +
+          " B — leaving you holding ≈ " + res.totalB + " of token B in total. Consolidating costs ≈ " + fmt(res.consolidationCostB, 6) +
+          " B (≈ " + fmt(res.consolidationCostPct, 4) + "% of the withdrawn pair's value at the post-withdrawal spot price) in fee plus price impact (≈ " +
+          fmt(res.priceImpactPct, 4) + "% on the swap leg) — the cost grows with your share of the pool. A single-sided exit model in one pool, not a live Raydium quote — no routing or price movement between the two steps is modelled, no withdrawal fee is modelled, and CLMM exits are range-based and differ.";
+        document.getElementById("zob-swapout").value = res.swapOutB;
+        document.getElementById("zob-totalb").value = res.totalB;
       }
     });
 
