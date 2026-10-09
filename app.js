@@ -3464,7 +3464,13 @@ function clmmRangeProbability(currentStr, lowerStr, upperStr, dailyVolPctStr, da
    at 4 units of the output token, not 1 — the weight is part of
    the quote, which is the honest surprise of the tool. At 50/50
    the formula reduces to Tool 1's exactly (asserted in tests
-   against cpSwap itself). The honest edges: Raydium's own
+   against cpSwap itself). The output is evaluated in the
+   cancellation-free form -reserveOut x expm1(-exponent x
+   log1p(netIn / reserveIn)) — the same closed form, but a dust
+   trade at a 9999 bps fee leaves out at ~1e-9 of the reserve,
+   where the direct 1 - pow(...) form loses it to cancellation
+   (up to ~7e-6 relative error measured against this form).
+   The honest edges: Raydium's own
    constant-product pools are the 50/50 case — weighted pools are
    a generalised AMM design used elsewhere, modelled here so the
    weight's effect is a number rather than a slogan; the maths is
@@ -3490,7 +3496,7 @@ function weightedSwap(reserveInStr, reserveOutStr, weightInPctStr, amountInStr, 
   var exponent = wIn / wOut;
   var netIn = amountIn * (1 - fee / 10000);
   if (!(netIn > 0)) return null;
-  var out = reserveOut * (1 - Math.pow(reserveIn / (reserveIn + netIn), exponent));
+  var out = -reserveOut * Math.expm1(-exponent * Math.log1p(netIn / reserveIn));
   if (!(out > 0) || !(out < reserveOut)) return null;
   var spotPrice = (reserveOut / wOut) / (reserveIn / wIn);
   var effectivePrice = out / amountIn;

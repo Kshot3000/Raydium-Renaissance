@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=67"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=68"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -3032,6 +3032,11 @@ check("WPOOL heavier input weight impacts more", wq20.priceImpactPct < wq50.pric
 check("WPOOL spot rises with the input weight", wq20.spotPrice < wq50.spotPrice && wq50.spotPrice < wq80.spotPrice);
 /* dust trade against a deep pool still settles */
 near("WPOOL dust out", app.weightedSwap("1000", "1000", "80", "0.001", 25).out, 0.003989990050246028, 1e-12);
+/* cancellation pin: a dust trade at a 9999 bps fee leaves out at ~4e-10 of
+   the reserve, where the direct 1 - pow(...) form returned
+   4.000000330961484e-07 (8.3e-8 relative off). The cancellation-free
+   expm1/log1p evaluation matches the 50-digit value below. */
+near("WPOOL dust at 9999 bps fee is cancellation-free", app.weightedSwap("1000", "1000", "80", "0.001", 9999).out, 3.9999999989995594e-7, 1e-15);
 /* rejections */
 check("WPOOL rejects a saturating trade instead of quoting a full drain", app.weightedSwap("1", "1", "80", "1000000000", 0) === null);
 check("WPOOL rejects weights at the edges", app.weightedSwap("1000", "1000", "0", "100", 25) === null && app.weightedSwap("1000", "1000", "100", "100", 25) === null);
