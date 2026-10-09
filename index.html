@@ -1505,6 +1505,27 @@
         <button type="submit" class="btn primary">Model the arbitrage trade</button>
         <p id="sarb-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="sis-calc">
+        <h3>66 · Stableswap price-impact sizer</h3>
+        <p>Tool 17's question for the stableswap pools of tool 58: how much can go in before the trade's own price impact reaches a cap you set? Tool 58 measures impact as 1 minus the effective price (out divided by the gross input, fee included) over the pool's spot, and the stableswap curve has no closed-form inverse for that condition, so the cap is found numerically with every candidate priced by tool 58's own swap model — the sized trade cannot drift from the model it sizes for. The honest shape is how much more a stable curve admits than a product curve at the same cap, because it defends par: on balanced 1,000/1,000 reserves at a 1% cap and a 25 bps tier, A = 100 admits ≈546.3266 in where tool 17's constant product admits ≈7.5947. And the warning inside the tool: at a 10% cap and A = 5,000 the sized trade pays out ≈999.1248 of the 1,000 output reserve and leaves the pool's spot at ≈0.0084 — impact is an average over a fill that hugged par, not a measure of what is left behind, so a trade can sit inside your cap while draining one side of the pool. A cap at or below the fee tier admits no trade — even a dust trade's impact is exactly the fee — and a cap within a hair of the fee sizes dust at the swap model's float noise floor. The maths is floating point. Educational model only — your reserves, amplification and cap; not live pool data, not a live quote, not financial advice.</p>
+        <label for="sis-rin">Reserve in (tokens)</label>
+        <input id="sis-rin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sis-rout">Reserve out (tokens)</label>
+        <input id="sis-rout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sis-amp">Amplification A (e.g. 100)</label>
+        <input id="sis-amp" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="sis-cap">Maximum price impact you accept (%)</label>
+        <input id="sis-cap" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="sis-fee">Swap fee (basis points, 25 = 0.25%)</label>
+        <input id="sis-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="sis-ain">Largest amount in at that impact cap (model)</label>
+        <input id="sis-ain" readonly placeholder="—" autocomplete="off">
+        <label for="sis-aout">Amount out that trade returns (model)</label>
+        <input id="sis-aout" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Size this stableswap trade</button>
+        <p id="sis-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1532,6 +1553,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=81"></script>
+<script src="app.js?v=82"></script>
 </body>
 </html>

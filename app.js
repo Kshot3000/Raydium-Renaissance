@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus sixty-five fully
+/* Raydium Renaissance hub logic: project filtering plus sixty-six fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -39,7 +39,8 @@
    stableswap depeg-loss calculator, a weighted-pool
    arbitrage model, a weighted-pool exact-out
    swap model, a weighted-pool price-impact
-   sizer, and a stableswap arbitrage model.
+   sizer, a stableswap arbitrage model, and a
+   stableswap price-impact sizer.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -4308,8 +4309,96 @@ function stableArbitrage(reserveAStr, reserveBStr, ampStr, externalPriceStr, fee
   return result;
 }
 
+/* ---------- 66 · Stableswap price-impact sizer ---------- */
+/* Tool 17's question for the stableswap pools of Tool 58: how
+   much can go in before the trade's own price impact — Tool 58's
+   measure, 1 minus the effective price (out divided by the GROSS
+   input, fee included) over the pool's spot — reaches a cap? The
+   stableswap curve has no closed-form inverse for that condition,
+   so the cap is bisected geometrically on the input amount with
+   every candidate priced by Tool 58's own stableSwap, which
+   means the sized trade can never drift from the swap model it
+   sizes for (asserted in tests across an amplification / cap /
+   fee sweep: the sized input fed through Tool 58 lands on the cap
+   to ~1e-13). The honest shape is how much MORE a stable curve
+   admits than a product curve at the same cap, because it defends
+   par: on balanced 1,000/1,000 reserves at a 1% cap and a 25 bps
+   tier, A = 100 admits ≈546.3266 in where Tool 17's constant
+   product admits ≈7.5947; at a 10% cap A = 1 admits ≈214.9800
+   (Tool 17: ≈108.6048), A = 100 ≈1,063.7013 and A = 5,000
+   ≈1,110.1387 — and that last trade pays out ≈999.1248 of the
+   1,000 output reserve, leaving the pool's own spot at ≈0.0084
+   against a start of exactly 1. That is the warning inside the
+   tool: impact is an average-price measure, not a solvency one —
+   on a high-amplification curve a trade can read 10% impact
+   while draining 99.9% of one side, because the average is taken
+   over a fill that hugged par until the reserve was nearly gone.
+   The fee floor mirrors Tools 17/64: a cap at or below the fee
+   tier admits NO trade, because even a dust trade's impact is
+   exactly the fee. A cap within a hair of the fee sizes a dust
+   trade at Tool 58's float noise floor (its output there is a
+   difference of near-equal reserves, ~1 ulp of the reserve
+   scale), so the last digits of such an answer are the floor's,
+   not the curve's. The maths is floating point. Educational
+   model only — your reserves, amplification and cap, not live
+   pool data, not a live quote, not financial advice. */
+function stableImpactSizer(reserveInStr, reserveOutStr, ampStr, maxImpactPctStr, feeBps) {
+  var raw = [reserveInStr, reserveOutStr, ampStr, maxImpactPctStr, feeBps];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var reserveIn = Number(reserveInStr), reserveOut = Number(reserveOutStr);
+  var amp = Number(ampStr), capPct = Number(maxImpactPctStr);
+  var fee = Number(feeBps);
+  if (![reserveIn, reserveOut, amp, capPct].every(Number.isFinite)) return null;
+  if (reserveIn <= 0 || reserveOut <= 0 || amp <= 0) return null;
+  if (capPct <= 0 || capPct >= 100) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var D = stableInvariantD(reserveIn, reserveOut, amp);
+  if (D === null || !(D > 0)) return null;
+  var Ann = 2 * amp, K = Math.pow(D, 3) / 4;
+  function spotAt(x, y) {
+    return (K / (x * x * y) + Ann) / (Ann + K / (x * y * y));
+  }
+  var spotPrice = spotAt(reserveIn, reserveOut);
+  if (!Number.isFinite(spotPrice) || !(spotPrice > 0)) return null;
+  var feeFrac = fee / 10000;
+  var base = { reserveIn: reserveIn, reserveOut: reserveOut, amp: amp,
+    spotPrice: spotPrice, maxImpactPct: capPct, feeBps: fee,
+    feeImpactPct: feeFrac * 100, invariantD: D };
+  if (capPct / 100 <= feeFrac) {
+    return Object.assign(base, { feasible: false, maxAmountIn: 0, netIn: 0, amountOut: 0, actualImpactPct: feeFrac * 100 });
+  }
+  function impactOf(amount) {
+    var r = stableSwap(String(reserveIn), String(reserveOut), String(amp), String(amount), fee);
+    return r === null ? Infinity : r.priceImpactPct;
+  }
+  var lo = reserveIn * 1e-9, hi = reserveIn, guard = 0;
+  while (impactOf(hi) < capPct && guard++ < 200) { lo = hi; hi *= 4; }
+  if (impactOf(hi) < capPct) return null;
+  for (var it = 0; it < 200; it++) {
+    var mid = Math.sqrt(lo * hi);
+    if (impactOf(mid) >= capPct) hi = mid; else lo = mid;
+  }
+  var amount = lo;
+  var fin = stableSwap(String(reserveIn), String(reserveOut), String(amp), String(amount), fee);
+  if (fin === null) return null;
+  var result = Object.assign(base, {
+    feasible: true, maxAmountIn: amount, netIn: fin.netIn, amountOut: fin.out,
+    effectivePrice: fin.effectivePrice, actualImpactPct: fin.priceImpactPct,
+    postTradeSpotPrice: spotAt(fin.newReserveIn, fin.newReserveOut),
+    newReserveIn: fin.newReserveIn, newReserveOut: fin.newReserveOut
+  });
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    var v = result[fields[j]];
+    if (typeof v === "number" && !Number.isFinite(v)) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -6292,6 +6381,35 @@ if (typeof document !== "undefined") {
           " B with its spot on your price. Modelled profit valued in B at your external price: ≈ " + fmt(res.profitInB, 6) +
           " B — a gap smaller than the fee honestly comes out negative, and because the curve defends par the aligning trade is large for its gap. A stableswap arbitrage model over a price you typed — not a live feed, not a found opportunity, not financial advice.";
         document.getElementById("sarb-out").value = fmt(res.profitInB, 6);
+      }
+    });
+
+    /* --- stableswap price-impact sizer --- */
+    document.getElementById("sis-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = stableImpactSizer(
+        document.getElementById("sis-rin").value,
+        document.getElementById("sis-rout").value,
+        document.getElementById("sis-amp").value,
+        document.getElementById("sis-cap").value,
+        document.getElementById("sis-fee").value
+      );
+      var out = document.getElementById("sis-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, an amplification above 0, a price-impact cap above 0% and below 100%, and a fee tier in whole basis points (0–9999).";
+        document.getElementById("sis-ain").value = "";
+        document.getElementById("sis-aout").value = "";
+      } else if (!res.feasible) {
+        out.textContent = "Model output: no trade fits. The cap of ≈ " + fmt(res.maxImpactPct, 4) + "% is at or below the fee tier of ≈ " + fmt(res.feeImpactPct, 4) + "% — even a dust trade's price impact is exactly the fee, because the fee is part of the impact measure, so the fee alone spends the whole cap at any amplification. Raise the cap or find a cheaper pool. A stableswap price-impact model — not live pool data, not a live quote, not financial advice.";
+        document.getElementById("sis-ain").value = "0";
+        document.getElementById("sis-aout").value = "0";
+      } else {
+        out.textContent = "Model output: the largest input that keeps the price impact at ≈ " + fmt(res.maxImpactPct, 4) + "% is ≈ " + fmt(res.maxAmountIn, 6) +
+          " in (≈ " + fmt(res.netIn, 6) + " after the fee reaches the pool), returning ≈ " + fmt(res.amountOut, 6) +
+          " out. The pool's stableswap spot price before the trade is ≈ " + fmt(res.spotPrice, 6) + " out per in, the effective price is ≈ " + fmt(res.effectivePrice, 6) +
+          ", and the trade leaves the pool's own spot at ≈ " + fmt(res.postTradeSpotPrice, 6) + ". Read that last figure before trusting the cap: on a high-amplification curve the impact is an average over a fill that hugged par, so a trade can sit inside your cap while draining nearly all of the output reserve and collapsing the spot behind it. A stableswap price-impact model — not live pool data, not a live quote, not financial advice.";
+        document.getElementById("sis-ain").value = fmt(res.maxAmountIn, 6);
+        document.getElementById("sis-aout").value = fmt(res.amountOut, 6);
       }
     });
 

@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=81"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=82"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists sixty-five tools", readme.includes("sixty-five pool tools") || readme.includes("all sixty-five"));
+check("README lists sixty-six tools", readme.includes("sixty-six pool tools") || readme.includes("all sixty-six"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts sixty-five tools and names the stableswap arbitrage model",
-  appSrc.includes("plus sixty-five fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, and a stableswap arbitrage model.\n   These are educational MODELS"));
+check("app.js header counts sixty-six tools and names the stableswap price-impact sizer",
+  appSrc.includes("plus sixty-six fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, and a\n   stableswap price-impact sizer.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -3733,6 +3733,97 @@ check("sarb tool present in index.html", html.includes('id="sarb-calc"') && html
 check("sarb honesty: no-live-feed and not-live labels", html.includes("this tool has no live feed and finds no opportunities") && html.includes("not a found opportunity") && html.includes("not financial advice"));
 check("guide covers stableswap arbitrage", guide.includes("Arbitrage on a stable curve is a big trade for a small gap"));
 check("README lists tool 65", readme.includes("65. **Stableswap arbitrage model**"));
+
+/* ---------- Tool 66: Stableswap price-impact sizer (SIS) ---------- */
+/* Vectors verified against a clean foreground prototype BEFORE these
+   tests were written: impact is monotone in the input outside Tool
+   58's dust noise floor, and every candidate in the shipped sizer is
+   priced by Tool 58 itself, so the composition sweep below is the
+   definition, not a cross-check. */
+const sis = app.stableImpactSizer("1000", "1000", "100", "1", 25);
+check("SIS headline feasible", sis !== null && sis.feasible === true);
+near("SIS headline gross in", sis.maxAmountIn, 546.3265619034373, 1e-5);
+near("SIS headline net in", sis.netIn, 544.9607454986788, 1e-5);
+near("SIS headline amount out", sis.amountOut, 540.8632962844032, 1e-5);
+near("SIS headline spot is exactly 1", sis.spotPrice, 1, 1e-12);
+near("SIS headline actual impact is the cap", sis.actualImpactPct, 1, 1e-9);
+near("SIS headline post-trade spot", sis.postTradeSpotPrice, 0.979063385189904, 1e-9);
+const sis10 = app.stableImpactSizer("1000", "1000", "100", "10", 0);
+near("SIS zero-fee 10% cap gross in", sis10.maxAmountIn, 1064.9200284447274, 1e-5);
+near("SIS zero-fee 10% cap amount out", sis10.amountOut, 958.4280256002548, 1e-5);
+const sis10f = app.stableImpactSizer("1000", "1000", "100", "10", 25);
+near("SIS 10% cap gross in", sis10f.maxAmountIn, 1063.70125271014, 1e-5);
+near("SIS 10% cap amount out", sis10f.amountOut, 957.3311274391259, 1e-5);
+/* Amplification ordering: a flatter curve admits a bigger trade. */
+const sisA1 = app.stableImpactSizer("1000", "1000", "1", "10", 25);
+const sisA5000 = app.stableImpactSizer("1000", "1000", "5000", "10", 25);
+near("SIS amp 1 gross in", sisA1.maxAmountIn, 214.9800088702125, 1e-5);
+near("SIS amp 5000 gross in", sisA5000.maxAmountIn, 1110.1386673651064, 1e-5);
+near("SIS amp 5000 amount out", sisA5000.amountOut, 999.1248006285958, 1e-5);
+check("SIS admitted trade grows with amplification", sisA1.maxAmountIn < sis10f.maxAmountIn && sis10f.maxAmountIn < sisA5000.maxAmountIn);
+/* The drain warning: at A = 5000 a 10% cap pays out >99.9% of the
+   output reserve and the spot behind the fill collapses. */
+check("SIS amp 5000 trade drains over 99.9% of the out reserve", sisA5000.amountOut > 0.999 * 1000);
+near("SIS amp 5000 post-trade spot collapses", sisA5000.postTradeSpotPrice, 0.00841828893307595, 1e-9);
+/* Against Tool 17 on the same pool and cap: the stable curve
+   admits far more, at every amplification tested. */
+const sisCp1 = app.priceImpactSizer("1000", "1000", "1", 25);
+check("SIS admits over 50x the constant-product trade at a 1% cap", sis.maxAmountIn > 50 * sisCp1.maxAmountIn);
+const sisCp10 = app.priceImpactSizer("1000", "1000", "10", 25);
+check("SIS at amp 1 still admits more than constant product at a 10% cap", sisA1.maxAmountIn > sisCp10.maxAmountIn);
+/* Lopsided pool: spot off par, sized trade still lands on the cap. */
+const sisLop = app.stableImpactSizer("1000", "500", "100", "5", 25);
+near("SIS lopsided spot", sisLop.spotPrice, 0.9917176313020062, 1e-9);
+near("SIS lopsided gross in", sisLop.maxAmountIn, 434.7698128268828, 1e-5);
+near("SIS lopsided amount out", sisLop.amountOut, 409.6104444913782, 1e-5);
+near("SIS lopsided post-trade spot", sisLop.postTradeSpotPrice, 0.7522405104962911, 1e-9);
+/* Composition: the sized trade, run through Tool 58 itself, lands
+   on the cap and returns the modelled output. */
+for (const amp of [1, 5, 100, 1000, 5000]) {
+  for (const cap of [0.5, 2, 10, 30]) {
+    for (const fee of [0, 4, 25, 100]) {
+      if (cap <= fee / 100) continue;
+      const s = app.stableImpactSizer("1000", "750", String(amp), String(cap), fee);
+      const sw = s && app.stableSwap("1000", "750", String(amp), String(s.maxAmountIn), fee);
+      check("SIS sized trade hits the cap at A" + amp + " cap " + cap + " fee " + fee,
+        s !== null && s.feasible && Math.abs(s.actualImpactPct - cap) < 1e-6 &&
+        sw !== null && Math.abs(sw.priceImpactPct - cap) < 1e-6 &&
+        Math.abs(sw.out - s.amountOut) / s.amountOut < 1e-9);
+    }
+  }
+}
+/* A 10x deeper pool admits a 10x trade at the same cap. */
+const sisBig = app.stableImpactSizer("10000", "10000", "100", "10", 25);
+near("SIS 10x pool admits 10x the trade", sisBig.maxAmountIn / sis10f.maxAmountIn, 10, 1e-9);
+/* A cap at or below the fee tier admits no trade. */
+check("SIS cap equal to the fee is infeasible",
+  (() => { const s = app.stableImpactSizer("1000", "1000", "100", "0.25", 25); return s !== null && s.feasible === false && s.maxAmountIn === 0 && Math.abs(s.feeImpactPct - 0.25) < 1e-12; })());
+check("SIS cap below the fee is infeasible", app.stableImpactSizer("1000", "1000", "100", "0.1", 25).feasible === false);
+check("SIS cap equal to a 100 bps fee is infeasible", app.stableImpactSizer("1000", "1000", "100", "1", 100).feasible === false);
+check("SIS rejects blank and junk",
+  app.stableImpactSizer("", "1000", "100", "10", 25) === null &&
+  app.stableImpactSizer("1000", "1000", "abc", "10", 25) === null);
+check("SIS rejects non-positive inputs",
+  app.stableImpactSizer("0", "1000", "100", "10", 25) === null &&
+  app.stableImpactSizer("1000", "-5", "100", "10", 25) === null &&
+  app.stableImpactSizer("1000", "1000", "0", "10", 25) === null);
+check("SIS rejects cap at the edges",
+  app.stableImpactSizer("1000", "1000", "100", "0", 25) === null &&
+  app.stableImpactSizer("1000", "1000", "100", "100", 25) === null);
+check("SIS rejects bad fee",
+  app.stableImpactSizer("1000", "1000", "100", "10", 25.5) === null &&
+  app.stableImpactSizer("1000", "1000", "100", "10", -1) === null &&
+  app.stableImpactSizer("1000", "1000", "100", "10", 10000) === null);
+check("SIS rejects an overflowing cap", app.stableImpactSizer("1000", "1000", "100", "1e309", 0) === null);
+check("SIS handler bisects the impact condition", appSrc.includes("if (impactOf(mid) >= capPct) hi = mid; else lo = mid;"));
+check("SIS sizer prices candidates through tool 58", appSrc.includes("function stableImpactSizer(") && appSrc.includes("var r = stableSwap(String(reserveIn), String(reserveOut), String(amp), String(amount), fee);"));
+check("all sis controls labelled",
+  ["sis-rin", "sis-rout", "sis-amp", "sis-cap", "sis-fee", "sis-ain", "sis-aout"]
+    .every(id => html.includes(`for="${id}"`)));
+check("sis tool present in index.html", html.includes('id="sis-calc"') && html.includes('id="sis-result"'));
+check("sis honesty: fee-floor and not-live labels", html.includes("A cap at or below the fee tier admits no trade") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers stableswap impact sizing", guide.includes("an impact cap is not a drain cap"));
+check("README lists tool 66", readme.includes("66. **Stableswap price-impact sizer**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
