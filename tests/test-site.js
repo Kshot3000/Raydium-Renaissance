@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=65"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=66"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists fifty-four tools", readme.includes("fifty-four pool tools") || readme.includes("all fifty-four"));
+check("README lists fifty-five tools", readme.includes("fifty-five pool tools") || readme.includes("all fifty-five"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts fifty-four tools and names the pool seeding planner",
-  appSrc.includes("plus fifty-four fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator,\n   and a pool seeding / initial-liquidity planner.\n   These are educational MODELS"));
+check("app.js header counts fifty-five tools and names the CLMM range probability calculator",
+  appSrc.includes("plus fifty-five fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, and a CLMM range\n   probability calculator.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -2912,6 +2912,88 @@ check("seed tool present in index.html", html.includes('id="seed-calc"') && html
 check("seed honesty: amounts-are-the-price and lock labels", html.includes("the amounts are the price") && html.includes("minimum-liquidity locks or burns are not modelled") && html.includes("not live pool data"));
 check("guide covers pool seeding", guide.includes("Seeding a pool sets its price"));
 check("README lists tool 54", readme.includes("54. **Pool seeding / initial-liquidity planner**"));
+
+/* ---------- 55 · CLMM range probability calculator ---------- */
+/* normalCdf pins against the standard normal table (the A&S 7.1.26 erf
+   approximation is good to ~1.5e-7, so tolerances sit at 1e-6) */
+near("PROB cdf(0)", app.normalCdf(0), 0.5, 1e-6);
+near("PROB cdf(1)", app.normalCdf(1), 0.8413447460685429, 1e-6);
+near("PROB cdf(-1)", app.normalCdf(-1), 0.15865525393145707, 1e-6);
+near("PROB cdf(2)", app.normalCdf(2), 0.9772498680518208, 1e-6);
+near("PROB cdf(-2.5)", app.normalCdf(-2.5), 0.006209665325776159, 1e-6);
+check("PROB cdf symmetry", Math.abs(app.normalCdf(1.3) + app.normalCdf(-1.3) - 1) < 1e-12);
+/* headline: log-symmetric 0.8-1.25 at P1, 5%/day, 20 days */
+const prob1 = app.clmmRangeProbability("1", "0.8", "1.25", "5", "20");
+check("PROB headline is not null", prob1 !== null && prob1.deterministic === false);
+near("PROB headline sigma", prob1.sigma, 0.223606797749979, 1e-12);
+near("PROB headline z upper", prob1.zUpper, 0.997928298958571, 1e-9);
+near("PROB headline z lower", prob1.zLower, -0.997928298958571, 1e-9);
+near("PROB headline prob in", prob1.probInPct, 68.16858534113275, 1e-4);
+near("PROB headline prob above", prob1.probAbovePct, 15.915707329433616, 1e-4);
+near("PROB headline prob below", prob1.probBelowPct, 15.915707329433626, 1e-4);
+check("PROB headline log-symmetric range gives equal tails", Math.abs(prob1.probAbovePct - prob1.probBelowPct) < 1e-9);
+near("PROB headline one-sigma band lower", prob1.sigmaBandLower, 0.7996294886770354, 1e-9);
+near("PROB headline one-sigma band upper", prob1.sigmaBandUpper, 1.2505791921887124, 1e-9);
+near("PROB headline probabilities sum to 100", prob1.probInPct + prob1.probAbovePct + prob1.probBelowPct, 100, 1e-9);
+/* scale invariance: the same relative geometry at P100 is the same answer */
+const prob100 = app.clmmRangeProbability("100", "80", "125", "5", "20");
+near("PROB scale-invariant prob in", prob100.probInPct, prob1.probInPct, 1e-9);
+near("PROB scale-invariant band lower", prob100.sigmaBandLower, 79.96294886770355, 1e-7);
+/* the z = +/-1 case: days chosen so sigma = ln(1.25) exactly */
+const probZ1 = app.clmmRangeProbability("1", "0.8", "1.25", "5", "19.917217797246945");
+near("PROB z=1 prob in is Phi(1)-Phi(-1)", probZ1.probInPct, 68.26894921370859, 1e-4);
+near("PROB z=1 band edges are the range edges", probZ1.sigmaBandUpper, 1.25, 1e-9);
+/* one day barely moves: 99.9992% ends inside */
+near("PROB one-day prob in", app.clmmRangeProbability("1", "0.8", "1.25", "5", "1").probInPct, 99.99919060045053, 1e-4);
+/* extreme vol over a year still prices, tails symmetric on a log-symmetric range */
+const probExtreme = app.clmmRangeProbability("1", "0.8", "1.25", "100", "365");
+near("PROB extreme-vol prob in", probExtreme.probInPct, 0.9319026599352576, 1e-4);
+check("PROB extreme-vol tails equal", Math.abs(probExtreme.probAbovePct - probExtreme.probBelowPct) < 1e-9);
+/* starting outside the range is priced, not rejected */
+const probOut = app.clmmRangeProbability("2", "0.8", "1.25", "5", "20");
+near("PROB outside-start prob in", probOut.probInPct, 1.775920606381215, 1e-4);
+near("PROB outside-start prob above", probOut.probAbovePct, 98.22199257878714, 1e-4);
+near("PROB outside-start prob below", probOut.probBelowPct, 0.002086814831653294, 1e-5);
+/* a narrow range at the same vol is mostly missed */
+near("PROB narrow-range prob in", app.clmmRangeProbability("1", "0.99", "1.01", "5", "20").probInPct, 3.5671908823687035, 1e-4);
+/* zero volatility is the deterministic degenerate case */
+const probZeroIn = app.clmmRangeProbability("1", "0.8", "1.25", "0", "20");
+check("PROB zero vol inside is certain", probZeroIn.deterministic === true && probZeroIn.probInPct === 100 && probZeroIn.probAbovePct === 0 && probZeroIn.probBelowPct === 0 && probZeroIn.zLower === null);
+check("PROB zero vol band collapses to the price", probZeroIn.sigmaBandLower === 1 && probZeroIn.sigmaBandUpper === 1);
+const probZeroAbove = app.clmmRangeProbability("2", "0.8", "1.25", "0", "20");
+check("PROB zero vol above range is certain above", probZeroAbove.probAbovePct === 100 && probZeroAbove.probInPct === 0);
+const probZeroBelow = app.clmmRangeProbability("0.5", "0.8", "1.25", "0", "20");
+check("PROB zero vol below range is certain below", probZeroBelow.probBelowPct === 100 && probZeroBelow.probInPct === 0);
+/* ordering sweep: wider range helps, more days or more vol hurts, and
+   the three probabilities always partition 100 */
+const probBase = app.clmmRangeProbability("1", "0.8", "1.25", "5", "20").probInPct;
+check("PROB wider range ends inside more often", app.clmmRangeProbability("1", "0.5", "2", "5", "20").probInPct > probBase);
+check("PROB narrower range ends inside less often", app.clmmRangeProbability("1", "0.9", "1.111111111", "5", "20").probInPct < probBase);
+check("PROB more days ends inside less often", app.clmmRangeProbability("1", "0.8", "1.25", "5", "90").probInPct < probBase);
+check("PROB more vol ends inside less often", app.clmmRangeProbability("1", "0.8", "1.25", "10", "20").probInPct < probBase);
+for (const [cp, cl, cu, cv, cd] of [["1", "0.8", "1.25", "5", "20"], ["3.7", "2.5", "5.5", "8.25", "45"], ["0.02", "0.01", "0.04", "12", "7"], ["150", "100", "200", "3.5", "365"], ["1", "0.95", "1.05", "1", "3"]]) {
+  const s = app.clmmRangeProbability(cp, cl, cu, cv, cd);
+  check("PROB sweep partitions 100 " + cp + "/" + cl + "-" + cu + "/" + cv + "/" + cd,
+    s !== null && Math.abs(s.probInPct + s.probAbovePct + s.probBelowPct - 100) < 1e-9 &&
+    s.probInPct >= 0 && s.probInPct <= 100 && s.sigmaBandLower < Number(cp) && s.sigmaBandUpper > Number(cp) &&
+    Math.abs(s.sigmaBandLower * s.sigmaBandUpper - Number(cp) * Number(cp)) < 1e-9 * Number(cp) * Number(cp));
+}
+/* a second log-symmetric range also splits its tails evenly */
+const probSym2 = app.clmmRangeProbability("1", "0.5", "2", "7.5", "30");
+check("PROB 0.5-2 tails equal", Math.abs(probSym2.probAbovePct - probSym2.probBelowPct) < 1e-9);
+/* rejections */
+check("PROB rejects blank fields", app.clmmRangeProbability("", "0.8", "1.25", "5", "20") === null && app.clmmRangeProbability("1", "0.8", "1.25", "", "20") === null && app.clmmRangeProbability("1", "0.8", "1.25", "5", "") === null);
+check("PROB rejects junk", app.clmmRangeProbability("abc", "0.8", "1.25", "5", "20") === null && app.clmmRangeProbability("1", "0.8", "1.25", "high", "20") === null);
+check("PROB rejects non-positive prices", app.clmmRangeProbability("0", "0.8", "1.25", "5", "20") === null && app.clmmRangeProbability("1", "-0.8", "1.25", "5", "20") === null);
+check("PROB rejects an inverted or empty range", app.clmmRangeProbability("1", "1.25", "0.8", "5", "20") === null && app.clmmRangeProbability("1", "1", "1", "5", "20") === null);
+check("PROB rejects negative vol and non-positive days", app.clmmRangeProbability("1", "0.8", "1.25", "-5", "20") === null && app.clmmRangeProbability("1", "0.8", "1.25", "5", "0") === null && app.clmmRangeProbability("1", "0.8", "1.25", "5", "-3") === null);
+check("PROB rejects vol / days above the caps", app.clmmRangeProbability("1", "0.8", "1.25", "10001", "20") === null && app.clmmRangeProbability("1", "0.8", "1.25", "5", "36501") === null);
+check("PROB rejects inputs whose sigma band overflows", app.clmmRangeProbability("1", "0.5", "2", "10000", "36500") === null);
+check("all prob controls labelled", ["prob-p", "prob-lo", "prob-hi", "prob-vol", "prob-days", "prob-in", "prob-band"].every(id => html.includes(`for="${id}"`)));
+check("prob tool present in index.html", html.includes('id="prob-calc"') && html.includes('id="prob-result"'));
+check("prob honesty: ending-is-not-staying and not-live labels", html.includes("ending inside the range is not staying inside it") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers range probability", guide.includes("Ending inside the range is not staying inside it"));
+check("README lists tool 55", readme.includes("55. **CLMM range probability calculator**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

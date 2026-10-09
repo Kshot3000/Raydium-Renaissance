@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus fifty-four fully
+/* Raydium Renaissance hub logic: project filtering plus fifty-five fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -30,8 +30,9 @@
    planner to token B, a single-sided zap-in planner
    from token B, a single-sided zap-out planner
    to token B, a fee compounding calculator, a
-   loss-versus-rebalancing round-trip calculator,
-   and a pool seeding / initial-liquidity planner.
+   loss-versus-rebalancing round-trip calculator, a
+   pool seeding / initial-liquidity planner, and a CLMM range
+   probability calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3381,8 +3382,78 @@ function poolSeedPlan(amountAStr, amountBStr, referencePriceStr) {
   return result;
 }
 
+/* ---------- 55 · CLMM range probability calculator ---------- */
+/* Tools 13, 15 and 31 all take a "time in range %" figure the user
+   has to invent. This gives that guess a model behind it: IF the
+   log price follows a driftless random walk with constant daily
+   volatility sigma_d (geometric Brownian motion with zero drift),
+   the log price after d days is normal with standard deviation
+   sigma = sigma_d * sqrt(d), so the probability the price ENDS the
+   period inside [lower, upper] is Phi(zUpper) - Phi(zLower) with
+   z = ln(edge / current) / sigma. Phi is the Abramowitz & Stegun
+   7.1.26 erf approximation (absolute error <= ~1.5e-7), more than
+   precise enough for a planning estimate. The honest edges are the
+   point of the tool: ending inside is NOT staying inside — the
+   price can leave the range and come back, so the true share of
+   time in range is lower than this ending probability whenever the
+   path wanders; zero drift and constant volatility are assumptions
+   doing real work (a trending or vol-clustering market breaks
+   both); and the volatility is the user's own input, not a live
+   feed. Zero volatility is the degenerate case: the price never
+   moves, so the ending probabilities are 100/0 by construction.
+   Educational model only — your price, range and volatility
+   inputs, not live pool data, not a live quote, not financial
+   advice. */
+function erfApprox(x) {
+  var sign = x < 0 ? -1 : 1;
+  var ax = Math.abs(x);
+  var t = 1 / (1 + 0.3275911 * ax);
+  var poly = (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t;
+  return sign * (1 - poly * Math.exp(-ax * ax));
+}
+function normalCdf(z) { return 0.5 * (1 + erfApprox(z / Math.SQRT2)); }
+function clmmRangeProbability(currentStr, lowerStr, upperStr, dailyVolPctStr, daysStr) {
+  var raw = [currentStr, lowerStr, upperStr, dailyVolPctStr, daysStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var current = Number(currentStr), lower = Number(lowerStr), upper = Number(upperStr);
+  var volPct = Number(dailyVolPctStr), days = Number(daysStr);
+  if (![current, lower, upper, volPct, days].every(Number.isFinite)) return null;
+  if (current <= 0 || lower <= 0 || upper <= 0 || volPct < 0 || days <= 0) return null;
+  if (lower >= upper) return null;
+  if (volPct > 10000 || days > 36500) return null;
+  var sigma = volPct / 100 * Math.sqrt(days);
+  var result = {
+    currentPrice: current, lowerPrice: lower, upperPrice: upper,
+    dailyVolPct: volPct, days: days, sigma: sigma,
+    sigmaBandLower: current * Math.exp(-sigma), sigmaBandUpper: current * Math.exp(sigma)
+  };
+  if (sigma === 0) {
+    result.deterministic = true;
+    result.zLower = null; result.zUpper = null;
+    result.probInPct = current >= lower && current <= upper ? 100 : 0;
+    result.probAbovePct = current > upper ? 100 : 0;
+    result.probBelowPct = current < lower ? 100 : 0;
+  } else {
+    result.deterministic = false;
+    result.zUpper = Math.log(upper / current) / sigma;
+    result.zLower = Math.log(lower / current) / sigma;
+    var cdfU = normalCdf(result.zUpper), cdfL = normalCdf(result.zLower);
+    result.probInPct = (cdfU - cdfL) * 100;
+    result.probAbovePct = (1 - cdfU) * 100;
+    result.probBelowPct = cdfL * 100;
+  }
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    var v = result[fields[j]];
+    if (typeof v === "number" && !Number.isFinite(v)) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -5055,6 +5126,37 @@ if (typeof document !== "undefined") {
           " Program-specific minimum-liquidity locks or burns are not modelled — a live program may keep a small part of the mint unwithdrawable. A pool seeding model, not a live quote — not financial advice.";
         document.getElementById("seed-price").value = fmt(res.spotPrice, 6);
         document.getElementById("seed-lp").value = res.lpMinted;
+      }
+    });
+
+    /* --- CLMM range probability calculator --- */
+    document.getElementById("prob-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmRangeProbability(
+        document.getElementById("prob-p").value,
+        document.getElementById("prob-lo").value,
+        document.getElementById("prob-hi").value,
+        document.getElementById("prob-vol").value,
+        document.getElementById("prob-days").value
+      );
+      var out = document.getElementById("prob-result");
+      if (res === null) {
+        out.textContent = "Enter a positive current price, a range with its lower edge below its upper edge, a daily volatility of 0% or more, and a positive number of days.";
+        document.getElementById("prob-in").value = "";
+        document.getElementById("prob-band").value = "";
+      } else if (res.deterministic) {
+        out.textContent = "Model output: at 0% daily volatility the modelled price never moves from ≈ " + fmt(res.currentPrice, 6) +
+          " B per A, so it ends the period " + (res.probInPct === 100 ? "inside" : "outside") + " the ≈ " + fmt(res.lowerPrice, 6) + " – " + fmt(res.upperPrice, 6) +
+          " range with certainty under this model. Real prices move — a zero-volatility answer is the model telling you the input did all the work. A range probability model, not live pool data — not financial advice.";
+        document.getElementById("prob-in").value = fmt(res.probInPct, 4) + "%";
+        document.getElementById("prob-band").value = fmt(res.sigmaBandLower, 6) + " – " + fmt(res.sigmaBandUpper, 6);
+      } else {
+        out.textContent = "Model output: if the log price wanders with zero drift at ≈ " + fmt(res.dailyVolPct, 4) + "% daily volatility, after " + fmt(res.days, 2) +
+          " day(s) the total one-sigma move is ≈ " + fmt(res.sigma * 100, 4) + "% in log terms (a one-sigma band of ≈ " + fmt(res.sigmaBandLower, 6) + " – " + fmt(res.sigmaBandUpper, 6) +
+          " B per A), and the price ends inside the ≈ " + fmt(res.lowerPrice, 6) + " – " + fmt(res.upperPrice, 6) + " range with probability ≈ " + fmt(res.probInPct, 4) +
+          "% — ≈ " + fmt(res.probAbovePct, 4) + "% above it and ≈ " + fmt(res.probBelowPct, 4) + "% below it. Ending inside is not staying inside: the price can leave the range and come back, so the share of time actually in range — the figure tools 13, 15 and 31 take as an input — will be lower than this ending probability whenever the path wanders. Zero drift and constant volatility are assumptions doing real work here. A range probability model, not live pool data — not financial advice.";
+        document.getElementById("prob-in").value = fmt(res.probInPct, 4) + "%";
+        document.getElementById("prob-band").value = fmt(res.sigmaBandLower, 6) + " – " + fmt(res.sigmaBandUpper, 6);
       }
     });
 

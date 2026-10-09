@@ -1279,6 +1279,27 @@
         <button type="submit" class="btn primary">Model the seed</button>
         <p id="seed-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="prob-calc">
+        <h3>55 · CLMM range probability calculator</h3>
+        <p>Tools 13, 15 and 31 all take a &#8220;time in range %&#8221; figure you have to invent. This gives that guess a model behind it: <em>if</em> the log price follows a driftless random walk at a constant daily volatility you supply, the log price after your chosen number of days is normally distributed with standard deviation volatility × √days, and the model reports the probability the price <em>ends</em> the period inside your range, above it, or below it — plus the one-sigma price band for the period. The honest edges are the point: ending inside the range is not staying inside it — the price can leave and come back, so the share of time actually in range will be lower than this ending probability whenever the path wanders; zero drift and constant volatility are assumptions doing real work, and a trending or vol-clustering market breaks both; and the volatility is your own input, not a live feed — no number here comes from a market. Use it to sanity-check a range width (tools 8 and 22) and the time-in-range guesses the fee tools ask for, not as a forecast. Educational model only — your price, range and volatility inputs, not live pool data; not a live quote, not financial advice.</p>
+        <label for="prob-p">Current price — token B per token A</label>
+        <input id="prob-p" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="prob-lo">Range lower edge — token B per token A</label>
+        <input id="prob-lo" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="prob-hi">Range upper edge — token B per token A</label>
+        <input id="prob-hi" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="prob-vol">Daily volatility (%) — your own estimate</label>
+        <input id="prob-vol" inputmode="decimal" placeholder="e.g. 5" autocomplete="off">
+        <label for="prob-days">Days ahead</label>
+        <input id="prob-days" inputmode="decimal" placeholder="e.g. 20" autocomplete="off">
+        <label for="prob-in">Probability the price ends inside the range (model)</label>
+        <input id="prob-in" readonly placeholder="—" autocomplete="off">
+        <label for="prob-band">One-sigma price band for the period — token B per token A (model)</label>
+        <input id="prob-band" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model the range odds</button>
+        <p id="prob-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1306,6 +1327,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=65"></script>
+<script src="app.js?v=66"></script>
 </body>
 </html>
