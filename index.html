@@ -1321,6 +1321,32 @@
         <button type="submit" class="btn primary">Model this weighted swap</button>
         <p id="wswap-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="rord-calc">
+        <h3>57 · CLMM range-order (limit-order) planner</h3>
+        <p>A single-sided CLMM position placed entirely outside the current price works as a limit order: a position in a range above the current price holds only token A, and as the price rises through the range it converts into token B — a range below the current price mirrors it, holding only B and converting into A as the price falls through. The range must sit entirely on the far side of the current price; a range straddling it starts two-sided, which is an LP position, not an order, and is rejected here. The average execution price of a full fill is the geometric mean of the range, √(lower × upper) B per A, whatever the amount — a wider range fills at a better average price but needs a bigger move, and a partial fill to a check price inside the range averages √(edge × check). Nothing fills unless the price actually crosses — the price entering the range is what executes the order — and while it crosses, the position also earns swap fees, which this model does not add to the received side. Withdrawing mid-range leaves a two-token mix, not a clean partial fill at one price, and tick-spacing snapping is not modelled. Educational model only — your amounts, prices and range; not live pool data, not a live quote, not financial advice.</p>
+        <label for="rord-side">Order side</label>
+        <select id="rord-side">
+          <option value="a">Sell token A for token B (range above the current price)</option>
+          <option value="b">Sell token B for token A (range below the current price)</option>
+        </select>
+        <label for="rord-amt">Amount to sell (tokens)</label>
+        <input id="rord-amt" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="rord-cur">Current price — token B per token A</label>
+        <input id="rord-cur" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="rord-lo">Range lower edge — token B per token A</label>
+        <input id="rord-lo" inputmode="decimal" placeholder="e.g. 1.21 (selling A) or 0.64 (selling B)" autocomplete="off">
+        <label for="rord-hi">Range upper edge — token B per token A</label>
+        <input id="rord-hi" inputmode="decimal" placeholder="e.g. 1.44 (selling A) or 0.81 (selling B)" autocomplete="off">
+        <label for="rord-chk">Check price — token B per token A</label>
+        <input id="rord-chk" inputmode="decimal" placeholder="e.g. 1.3225" autocomplete="off">
+        <label for="rord-full">Amount received on a full crossing (model)</label>
+        <input id="rord-full" readonly placeholder="—" autocomplete="off">
+        <label for="rord-avg">Average execution price on a full fill — B per A (model)</label>
+        <input id="rord-avg" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan this range order</button>
+        <p id="rord-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1348,6 +1374,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=68"></script>
+<script src="app.js?v=69"></script>
 </body>
 </html>

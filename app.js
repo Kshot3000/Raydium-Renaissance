@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus fifty-six fully
+/* Raydium Renaissance hub logic: project filtering plus fifty-seven fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -32,7 +32,8 @@
    to token B, a fee compounding calculator, a
    loss-versus-rebalancing round-trip calculator, a
    pool seeding / initial-liquidity planner, a CLMM range
-   probability calculator, and a weighted-pool swap model.
+   probability calculator, a weighted-pool swap model, and a
+   CLMM range-order (limit-order) planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3516,8 +3517,91 @@ function weightedSwap(reserveInStr, reserveOutStr, weightInPctStr, amountInStr, 
   return result;
 }
 
+/* ---------- 57 · CLMM range-order (limit-order) planner ---------- */
+/* A single-sided CLMM position placed entirely outside the current
+   price is a limit order in LP clothing: a position in a range above
+   the current price holds only token A (Tool 9's below case), and as
+   the price rises through the range the position converts into token
+   B; a range below the current price mirrors it (only B, converting
+   into A as the price falls through). Given the amount to sell, the
+   range sets the liquidity exactly the way Tool 9's edges do:
+     sell A: L = amount / (1/sqrt(lower) - 1/sqrt(upper)),
+             full fill pays L * (sqrt(upper) - sqrt(lower)) of B
+     sell B: L = amount / (sqrt(upper) - sqrt(lower)),
+             full fill pays L * (1/sqrt(lower) - 1/sqrt(upper)) of A
+   The average execution price of a full fill is sqrt(lower x upper)
+   — the geometric mean of the range, in B per A either way — and a
+   partial fill to a check price inside the range averages
+   sqrt(edge x check) on the same identity (asserted in tests). The
+   holdings at the check price are Tool 9's own clmmPositionAtPrice
+   at this L (asserted verbatim), so sold = deposit - what the
+   position still holds of the sold token. The honest edges: the
+   range must sit entirely on the far side of the current price —
+   a range straddling it starts two-sided, which is an LP position,
+   not an order, and is rejected; nothing fills unless the price
+   actually crosses, and a real crossing pays fees TO the position
+   while it is in range (not modelled — they would add to the
+   received side, they do not change the conversion price); tick
+   spacing snapping is not modelled; and withdrawing mid-range
+   leaves a two-token mix, not a clean partial fill at one price.
+   Educational model only — your amounts, prices and range, not live
+   pool data, not a live quote, not financial advice. */
+function clmmRangeOrder(sideStr, amountStr, currentStr, lowerStr, upperStr, checkStr) {
+  var raw = [amountStr, currentStr, lowerStr, upperStr, checkStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var side = String(sideStr == null ? "" : sideStr).trim().toLowerCase();
+  if (side !== "a" && side !== "b") return null;
+  var amount = Number(amountStr), current = Number(currentStr);
+  var lower = Number(lowerStr), upper = Number(upperStr), check = Number(checkStr);
+  if (![amount, current, lower, upper, check].every(Number.isFinite)) return null;
+  if (amount <= 0 || current <= 0 || lower <= 0 || upper <= 0 || check <= 0) return null;
+  if (lower >= upper) return null;
+  var sa = Math.sqrt(lower), sb = Math.sqrt(upper);
+  var liquidity, fullOut;
+  if (side === "a") {
+    if (lower < current) return null;
+    liquidity = amount / (1 / sa - 1 / sb);
+    fullOut = liquidity * (sb - sa);
+  } else {
+    if (upper > current) return null;
+    liquidity = amount / (sb - sa);
+    fullOut = liquidity * (1 / sa - 1 / sb);
+  }
+  if (!(liquidity > 0) || !(fullOut > 0)) return null;
+  var pos = clmmPositionAtPrice(String(liquidity), lowerStr, upperStr, checkStr);
+  if (pos === null) return null;
+  var sold, received, remaining;
+  if (side === "a") { remaining = pos.amountA; received = pos.amountB; }
+  else { remaining = pos.amountB; received = pos.amountA; }
+  sold = amount - remaining;
+  if (sold < 0 && sold > -1e-9 * amount) sold = 0;
+  if (!(sold >= 0)) return null;
+  var avgPriceFull = side === "a" ? fullOut / amount : amount / fullOut;
+  var avgPriceAtCheck = null;
+  if (sold > 0 && received > 0) avgPriceAtCheck = side === "a" ? received / sold : sold / received;
+  var status;
+  if (side === "a") status = check <= lower ? "not-started" : (check >= upper ? "filled" : "partial");
+  else status = check >= upper ? "not-started" : (check <= lower ? "filled" : "partial");
+  var result = {
+    side: side, amount: amount, currentPrice: current,
+    lowerPrice: lower, upperPrice: upper, checkPrice: check,
+    liquidity: liquidity, fullOut: fullOut, avgPriceFull: avgPriceFull,
+    remaining: remaining, sold: sold, received: received,
+    executedPct: sold / amount * 100, avgPriceAtCheck: avgPriceAtCheck,
+    status: status
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    var v = result[fields[j]];
+    if (typeof v === "number" && !Number.isFinite(v)) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -5246,6 +5330,38 @@ if (typeof document !== "undefined") {
           ", and the price impact against that spot is ≈ " + fmt(res.priceImpactPct, 4) + "%. At 50/50 this is exactly tool 1's constant-product answer — Raydium's own constant-product pools are the 50/50 case, and weighted pools are a generalised design modelled here for comparison. A weighted-pool swap model, not live pool data — not financial advice.";
         document.getElementById("wswap-out").value = fmt(res.out, 6);
         document.getElementById("wswap-spot").value = fmt(res.spotPrice, 6);
+      }
+    });
+
+    /* --- CLMM range-order (limit-order) planner --- */
+    document.getElementById("rord-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmRangeOrder(
+        document.getElementById("rord-side").value,
+        document.getElementById("rord-amt").value,
+        document.getElementById("rord-cur").value,
+        document.getElementById("rord-lo").value,
+        document.getElementById("rord-hi").value,
+        document.getElementById("rord-chk").value
+      );
+      var out = document.getElementById("rord-result");
+      if (res === null) {
+        out.textContent = "Enter a positive amount and prices with the lower edge below the upper edge. To sell token A the whole range must sit at or above the current price; to sell token B it must sit at or below it — a range straddling the current price starts two-sided, which is an LP position, not an order.";
+        document.getElementById("rord-full").value = "";
+        document.getElementById("rord-avg").value = "";
+      } else {
+        var sellTok = res.side === "a" ? "A" : "B", buyTok = res.side === "a" ? "B" : "A";
+        var stateTxt = res.status === "filled"
+          ? "At the check price of ≈ " + fmt(res.checkPrice, 6) + " B per A the order has fully crossed: all ≈ " + fmt(res.sold, 6) + " " + sellTok + " sold for ≈ " + fmt(res.received, 6) + " " + buyTok + "."
+          : res.status === "partial"
+            ? "At the check price of ≈ " + fmt(res.checkPrice, 6) + " B per A the order is part-filled: ≈ " + fmt(res.sold, 6) + " " + sellTok + " sold (≈ " + fmt(res.executedPct, 4) + "%) for ≈ " + fmt(res.received, 6) + " " + buyTok + " at an average of ≈ " + fmt(res.avgPriceAtCheck, 6) + " B per A so far, with ≈ " + fmt(res.remaining, 6) + " " + sellTok + " still in the position."
+            : "At the check price of ≈ " + fmt(res.checkPrice, 6) + " B per A the price has not entered the range, so nothing has filled — the position still holds the full ≈ " + fmt(res.amount, 6) + " " + sellTok + ".";
+        out.textContent = "Model output: selling ≈ " + fmt(res.amount, 6) + " token " + sellTok + " through a single-sided position over ≈ " + fmt(res.lowerPrice, 6) + " – " + fmt(res.upperPrice, 6) +
+          " B per A (model liquidity ≈ " + fmt(res.liquidity, 4) + ") pays ≈ " + fmt(res.fullOut, 6) + " token " + buyTok + " on a full crossing, an average execution price of ≈ " + fmt(res.avgPriceFull, 6) +
+          " B per A — the geometric mean of the range, whatever the amount. " + stateTxt +
+          " A range order earns swap fees while the price crosses it, which this model does not add to the received side. A CLMM range-order model, not live pool data — not financial advice.";
+        document.getElementById("rord-full").value = fmt(res.fullOut, 6);
+        document.getElementById("rord-avg").value = fmt(res.avgPriceFull, 6);
       }
     });
 

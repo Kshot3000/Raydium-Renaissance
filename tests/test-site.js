@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=68"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=69"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists fifty-six tools", readme.includes("fifty-six pool tools") || readme.includes("all fifty-six"));
+check("README lists fifty-seven tools", readme.includes("fifty-seven pool tools") || readme.includes("all fifty-seven"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts fifty-six tools and names the weighted-pool swap model",
-  appSrc.includes("plus fifty-six fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, and a weighted-pool swap model.\n   These are educational MODELS"));
+check("app.js header counts fifty-seven tools and names the CLMM range-order planner",
+  appSrc.includes("plus fifty-seven fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, and a\n   CLMM range-order (limit-order) planner.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -3048,6 +3048,75 @@ check("wswap tool present in index.html", html.includes('id="wswap-calc"') && ht
 check("wswap honesty: 50/50-is-Raydium and not-live labels", html.includes("Raydium's own constant-product pools are that 50/50 case") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers weighted pools", guide.includes("The weight is part of the price in a weighted pool"));
 check("README lists tool 56", readme.includes("56. **Weighted-pool swap model**"));
+
+/* ---------- 57 · CLMM range-order (limit-order) planner (RORD) ---------- */
+/* headline sell A: 100 A, current 1, range 1.21-1.44, checked at the top */
+const ro1 = app.clmmRangeOrder("a", "100", "1", "1.21", "1.44", "1.44");
+check("RORD headline is not null", ro1 !== null);
+near("RORD headline liquidity", ro1.liquidity, 1320, 1e-9);
+near("RORD headline full fill pays 132 B", ro1.fullOut, 132, 1e-9);
+near("RORD headline average is the geometric mean", ro1.avgPriceFull, 1.32, 1e-12);
+check("RORD headline status filled at the upper edge", ro1.status === "filled");
+near("RORD headline sold in full", ro1.sold, 100, 1e-9);
+near("RORD headline received equals the full fill", ro1.received, 132, 1e-9);
+near("RORD headline executed 100%", ro1.executedPct, 100, 1e-12);
+/* partial fill to 1.3225 (sqrt 1.15): sold 52.1739, received 66, avg sqrt(1.21 x 1.3225) = 1.265 */
+const ro2 = app.clmmRangeOrder("a", "100", "1", "1.21", "1.44", "1.3225");
+check("RORD partial status", ro2.status === "partial");
+near("RORD partial sold", ro2.sold, 52.17391304347825, 1e-9);
+near("RORD partial received", ro2.received, 66, 1e-9);
+near("RORD partial average is sqrt(edge x check)", ro2.avgPriceAtCheck, Math.sqrt(1.21 * 1.3225), 1e-12);
+near("RORD partial executed %", ro2.executedPct, 52.17391304347825, 1e-9);
+near("RORD partial remaining", ro2.remaining, 100 - 52.17391304347825, 1e-9);
+/* not started: check price still below the range */
+const ro3 = app.clmmRangeOrder("a", "100", "1", "1.21", "1.44", "1.1");
+check("RORD not-started status", ro3.status === "not-started" && ro3.received === 0 && ro3.avgPriceAtCheck === null);
+near("RORD not-started sells nothing", ro3.sold, 0, 1e-9);
+/* sell B mirror: 132 B, current 1, range 0.64-0.81, checked at the bottom */
+const ro4 = app.clmmRangeOrder("b", "132", "1", "0.64", "0.81", "0.64");
+near("RORD sell-B liquidity mirrors sell-A", ro4.liquidity, 1320, 1e-9);
+near("RORD sell-B full fill pays 183.3333 A", ro4.fullOut, 183.33333333333334, 1e-9);
+near("RORD sell-B average is the geometric mean in B per A", ro4.avgPriceFull, 0.72, 1e-12);
+check("RORD sell-B status filled at the lower edge", ro4.status === "filled");
+/* sell-B partial to 0.7225 (sqrt 0.85): sold 66 (50%), received 86.2745, avg sqrt(0.81 x 0.7225) = 0.765 */
+const ro5 = app.clmmRangeOrder("b", "132", "1", "0.64", "0.81", "0.7225");
+check("RORD sell-B partial status", ro5.status === "partial");
+near("RORD sell-B partial sold", ro5.sold, 66, 1e-9);
+near("RORD sell-B partial received", ro5.received, 86.27450980392157, 1e-9);
+near("RORD sell-B partial average is sqrt(edge x check)", ro5.avgPriceAtCheck, Math.sqrt(0.81 * 0.7225), 1e-12);
+near("RORD sell-B partial executed 50%", ro5.executedPct, 50, 1e-9);
+/* composition: holdings at the check price are tool 9's own amounts at this L */
+for (const [side, amt, cur, lo, hi, chk] of [["a", "100", "1", "1.21", "1.44", "1.3225"], ["a", "250", "2", "2.42", "2.88", "2.7"], ["b", "132", "1", "0.64", "0.81", "0.7225"], ["b", "500", "4", "2.56", "3.24", "3"], ["a", "77.7", "0.5", "0.605", "0.72", "0.66"], ["b", "88.8", "10", "6.4", "8.1", "7.5"]]) {
+  const r = app.clmmRangeOrder(side, amt, cur, lo, hi, chk);
+  const p = app.clmmPositionAtPrice(String(r.liquidity), lo, hi, chk);
+  const soldT = side === "a" ? Number(amt) - p.amountA : Number(amt) - p.amountB;
+  const recvT = side === "a" ? p.amountB : p.amountA;
+  check("RORD holdings are tool 9 verbatim " + side + "/" + amt + "/" + lo + "-" + hi + "@" + chk,
+    Math.abs(r.sold - soldT) < 1e-9 && Math.abs(r.received - recvT) < 1e-9 && Math.abs(r.remaining - (side === "a" ? p.amountA : p.amountB)) < 1e-9);
+  check("RORD full average is sqrt(lower x upper) " + side + "/" + lo + "-" + hi,
+    Math.abs(r.avgPriceFull - Math.sqrt(Number(lo) * Number(hi))) < 1e-9);
+  check("RORD partial average is sqrt(edge x check) " + side + "/" + chk,
+    r.avgPriceAtCheck !== null && Math.abs(r.avgPriceAtCheck - Math.sqrt((side === "a" ? Number(lo) : Number(hi)) * Number(chk))) < 1e-9);
+  check("RORD sold + remaining conserves the deposit " + side + "/" + amt,
+    Math.abs(r.sold + r.remaining - Number(amt)) < 1e-9 && r.executedPct >= 0 && r.executedPct <= 100);
+}
+/* a check beyond the far edge fills in full, at the full-fill average */
+const roBeyond = app.clmmRangeOrder("a", "100", "1", "1.21", "1.44", "3");
+check("RORD beyond the edge is filled", roBeyond.status === "filled" && Math.abs(roBeyond.received - roBeyond.fullOut) < 1e-9 && Math.abs(roBeyond.avgPriceAtCheck - roBeyond.avgPriceFull) < 1e-9);
+/* the range may touch the current price (position starts exactly single-sided) */
+check("RORD range touching the current price is allowed", app.clmmRangeOrder("a", "100", "1.21", "1.21", "1.44", "1.3") !== null && app.clmmRangeOrder("b", "132", "0.81", "0.64", "0.81", "0.7") !== null);
+/* rejections */
+check("RORD rejects a straddling range for sell A", app.clmmRangeOrder("a", "100", "1", "0.9", "1.44", "1.3") === null);
+check("RORD rejects a straddling range for sell B", app.clmmRangeOrder("b", "100", "1", "0.64", "1.1", "0.8") === null);
+check("RORD rejects a range on the wrong side", app.clmmRangeOrder("a", "100", "2", "1.21", "1.44", "1.3") === null && app.clmmRangeOrder("b", "100", "0.5", "0.64", "0.81", "0.7") === null);
+check("RORD rejects an inverted range and a bad side", app.clmmRangeOrder("a", "100", "1", "1.44", "1.21", "1.3") === null && app.clmmRangeOrder("x", "100", "1", "1.21", "1.44", "1.3") === null);
+check("RORD rejects blank and junk", app.clmmRangeOrder("a", "", "1", "1.21", "1.44", "1.3") === null && app.clmmRangeOrder("a", "100", "1", "1.21", "1.44", "") === null && app.clmmRangeOrder("a", "abc", "1", "1.21", "1.44", "1.3") === null);
+check("RORD rejects non-positive inputs", app.clmmRangeOrder("a", "0", "1", "1.21", "1.44", "1.3") === null && app.clmmRangeOrder("a", "100", "1", "1.21", "1.44", "-1") === null && app.clmmRangeOrder("a", "100", "0", "1.21", "1.44", "1.3") === null);
+check("all rord controls labelled", ["rord-side", "rord-amt", "rord-cur", "rord-lo", "rord-hi", "rord-chk", "rord-full", "rord-avg"].every(id => html.includes(`for="${id}"`)));
+check("rord tool present in index.html", html.includes('id="rord-calc"') && html.includes('id="rord-result"'));
+check("rord honesty: geometric-mean, crossing and not-live labels", html.includes("a range straddling it starts two-sided") && html.includes("Nothing fills unless the price actually crosses") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers range orders", guide.includes("A single-sided CLMM position outside the price is a limit order"));
+check("README lists tool 57", readme.includes("57. **CLMM range-order (limit-order) planner**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
