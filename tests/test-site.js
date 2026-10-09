@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=69"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=70"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists fifty-seven tools", readme.includes("fifty-seven pool tools") || readme.includes("all fifty-seven"));
+check("README lists fifty-eight tools", readme.includes("fifty-eight pool tools") || readme.includes("all fifty-eight"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts fifty-seven tools and names the CLMM range-order planner",
-  appSrc.includes("plus fifty-seven fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, and a\n   CLMM range-order (limit-order) planner.\n   These are educational MODELS"));
+check("app.js header counts fifty-eight tools and names the stableswap model",
+  appSrc.includes("plus fifty-eight fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, and a stableswap\n   swap model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -3117,6 +3117,66 @@ check("rord tool present in index.html", html.includes('id="rord-calc"') && html
 check("rord honesty: geometric-mean, crossing and not-live labels", html.includes("a range straddling it starts two-sided") && html.includes("Nothing fills unless the price actually crosses") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers range orders", guide.includes("A single-sided CLMM position outside the price is a limit order"));
 check("README lists tool 57", readme.includes("57. **CLMM range-order (limit-order) planner**"));
+
+/* ---------- 58 · Stableswap swap model (SSWAP) ---------- */
+/* headline: balanced 1000/1000, A=100, 100 in at 25 bps */
+const ss1 = app.stableSwap("1000", "1000", "100", "100", 25);
+check("SSWAP headline is not null", ss1 !== null);
+near("SSWAP headline out", ss1.out, 99.65061433806079, 1e-9);
+near("SSWAP headline spot is exactly par on a balanced pool", ss1.spotPrice, 1, 1e-12);
+near("SSWAP headline invariant D is the reserve sum", ss1.invariantD, 2000, 1e-9);
+near("SSWAP headline net in", ss1.netIn, 99.75, 1e-12);
+near("SSWAP headline impact", ss1.priceImpactPct, 0.3493856619392055, 1e-9);
+/* zero fee on the same pool */
+near("SSWAP zero-fee out", app.stableSwap("1000", "1000", "100", "100", 0).out, 99.90011086475852, 1e-9);
+near("SSWAP zero-fee impact", app.stableSwap("1000", "1000", "100", "100", 0).priceImpactPct, 0.09988913524148213, 1e-9);
+/* a balanced pool's D is its reserve sum at any amplification, and its spot is par */
+for (const a of ["1", "10", "100", "1000", "5000"]) {
+  const r = app.stableSwap("1000", "1000", a, "100", 0);
+  check("SSWAP balanced D and spot at amp " + a, Math.abs(r.invariantD - 2000) < 1e-9 && Math.abs(r.spotPrice - 1) < 1e-12);
+}
+/* amplification ordering: higher A pays more, always above tool 1 and below par */
+const ssAmps = ["1", "10", "100", "1000", "5000"].map(a => app.stableSwap("1000", "1000", a, "100", 0).out);
+near("SSWAP amp 1 out", ssAmps[0], 95.2272997771098, 1e-9);
+near("SSWAP amp 5000 out", ssAmps[4], 99.99798025134567, 1e-9);
+check("SSWAP out rises with amplification, between CP and par",
+  ssAmps.every((v, i) => i === 0 || v > ssAmps[i - 1]) && ssAmps[0] > Number(app.cpSwap("1000", "1000", "100", 0).out) && ssAmps[4] < 100);
+/* the invariant equation itself holds on both sides of the trade, at the same D */
+for (const [ri, ro, a, ai, f] of [["1000", "1000", "100", "100", 0], ["1000", "500", "100", "100", 0], ["10000", "2000", "85", "500", 30], ["1234", "567", "200", "123", 25], ["777", "333", "42", "77", 10], ["5000", "5000", "7", "250", 50]]) {
+  const r = app.stableSwap(ri, ro, a, ai, f);
+  const Ann = 2 * Number(a), D = r.invariantD;
+  const inv = (x, y) => Ann * (x + y) + D - (Ann * D + Math.pow(D, 3) / (4 * x * y));
+  check("SSWAP invariant holds pre-trade " + ri + "/" + ro + "/A" + a,
+    Math.abs(inv(Number(ri), Number(ro))) / (Ann * D) < 1e-9);
+  check("SSWAP invariant preserved post-trade " + ri + "/" + ro + "/A" + a,
+    Math.abs(inv(r.newReserveIn, r.newReserveOut)) / (Ann * D) < 1e-9 && r.out > 0 && r.out < Number(ro));
+}
+/* a lopsided pool prices off par: short of the output token, spot below 1 */
+const ssU = app.stableSwap("1000", "500", "100", "100", 0);
+near("SSWAP lopsided spot", ssU.spotPrice, 0.9917176313020062, 1e-9);
+near("SSWAP lopsided out", ssU.out, 98.87832443950845, 1e-9);
+near("SSWAP lopsided D", ssU.invariantD, 1499.0734926199473, 1e-9);
+check("SSWAP trading into the short side pays above par",
+  app.stableSwap("500", "1000", "100", "100", 0).out > 100 && app.stableSwap("500", "1000", "100", "100", 0).spotPrice > 1);
+near("SSWAP short-side out", app.stableSwap("500", "1000", "100", "100", 0).out, 100.6184800873408, 1e-9);
+/* asym case with a fee */
+const ssA = app.stableSwap("10000", "2000", "85", "500", 30);
+near("SSWAP asym out", ssA.out, 467.98702025853595, 1e-9);
+near("SSWAP asym spot", ssA.spotPrice, 0.9528284929981158, 1e-9);
+near("SSWAP asym impact", ssA.priceImpactPct, 1.7688862796294669, 1e-9);
+/* dust trade still prices */
+near("SSWAP dust out", app.stableSwap("1000", "1000", "100", "0.000001", 0).out, 9.99999883788405e-7, 1e-13);
+/* rejections */
+check("SSWAP rejects a saturating trade instead of quoting a full drain", app.stableSwap("1000", "1000", "100", "1000000000000", 0) === null);
+check("SSWAP rejects non-positive amplification", app.stableSwap("1000", "1000", "0", "100", 25) === null && app.stableSwap("1000", "1000", "-5", "100", 25) === null);
+check("SSWAP rejects blank and junk", app.stableSwap("1000", "1000", "", "100", 25) === null && app.stableSwap("abc", "1000", "100", "100", 25) === null && app.stableSwap("1000", "1000", "100", "", 25) === null);
+check("SSWAP rejects non-positive amounts", app.stableSwap("0", "1000", "100", "100", 25) === null && app.stableSwap("1000", "1000", "100", "-5", 25) === null);
+check("SSWAP rejects bad fees", app.stableSwap("1000", "1000", "100", "100", 10000) === null && app.stableSwap("1000", "1000", "100", "100", -1) === null && app.stableSwap("1000", "1000", "100", "100", "25.5") === null);
+check("all sswap controls labelled", ["sswap-rin", "sswap-rout", "sswap-amp", "sswap-ain", "sswap-fee", "sswap-out", "sswap-spot"].every(id => html.includes(`for="${id}"`)));
+check("sswap tool present in index.html", html.includes('id="sswap-calc"') && html.includes('id="sswap-result"'));
+check("sswap honesty: depeg danger and not-live labels", html.includes("near-par pricing assumes both tokens really are worth the same") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers stableswap", guide.includes("Pegged pairs trade on a blended curve"));
+check("README lists tool 58", readme.includes("58. **Stableswap swap model**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

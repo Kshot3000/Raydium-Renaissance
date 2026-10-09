@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus fifty-seven fully
+/* Raydium Renaissance hub logic: project filtering plus fifty-eight fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -32,8 +32,9 @@
    to token B, a fee compounding calculator, a
    loss-versus-rebalancing round-trip calculator, a
    pool seeding / initial-liquidity planner, a CLMM range
-   probability calculator, a weighted-pool swap model, and a
-   CLMM range-order (limit-order) planner.
+   probability calculator, a weighted-pool swap model, a
+   CLMM range-order (limit-order) planner, and a stableswap
+   swap model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3600,8 +3601,100 @@ function clmmRangeOrder(sideStr, amountStr, currentStr, lowerStr, upperStr, chec
   return result;
 }
 
+/* ---------- 58 · Stableswap swap model ---------- */
+/* Tools 1 and 56 keep a product (or weighted product) of the reserves
+   constant; a stableswap pool for pegged pairs blends the sum and the
+   product instead. Its invariant D is defined implicitly by
+     Ann * (x + y) + D = Ann * D + D^3 / (4 * x * y),   Ann = 2 * amp,
+   solved here by Newton iteration (the standard getD / getY pair).
+   A balanced pool has D = x + y at any amplification, and the trade
+   is solved so the post-trade reserves satisfy the same D — the
+   tests re-check the invariant equation itself on both sides of
+   every vector, not just this solver's say-so. The amplification
+   amp interpolates the two curves: high amp hugs the sum (trades
+   near 1:1 while the pool is balanced), low amp leans toward tool
+   1's product curve. The marginal spot price follows from
+   differentiating the invariant with D held constant:
+     spot = (K / (x^2 * y) + Ann) / (Ann + K / (x * y^2)),
+     K = D^3 / 4
+   (verified against a numeric derivative in prototyping). The fee
+   comes off the input first, exactly as in tool 1. Honest edges:
+   near-1:1 pricing is the model working as designed ONLY while both
+   tokens really are worth the same — if one side depegs, the curve
+   keeps offering close to par for a token the market prices lower,
+   which is precisely how stable pools get drained of the good side;
+   amp is a parameter of the pool's design, not a dial a trader
+   sets; the maths is floating point (Newton solves, no BigInt
+   flooring); and a trade so large the float output saturates at
+   the whole output reserve is rejected, not quoted — the curve
+   only approaches the reserve asymptotically. Educational model
+   only — your reserves, amplification and trade, not live pool
+   data, not a live quote, not financial advice. */
+function stableInvariantD(reserveA, reserveB, amp) {
+  var S = reserveA + reserveB;
+  if (!(S > 0)) return null;
+  var Ann = 2 * amp;
+  var D = S, prev = 0;
+  for (var i = 0; i < 255; i++) {
+    var Dp = D * D / (reserveA * 2);
+    Dp = Dp * D / (reserveB * 2);
+    prev = D;
+    D = (Ann * S + Dp * 2) * D / ((Ann - 1) * D + 3 * Dp);
+    if (Math.abs(D - prev) <= Math.max(1e-12, Math.abs(D) * 1e-14)) break;
+  }
+  return D;
+}
+function stableSolveY(reserveInNew, reserveOutOld, amp, D) {
+  var Ann = 2 * amp;
+  var c = D * D / (reserveInNew * 2);
+  c = c * D / (Ann * 2);
+  var b = reserveInNew + D / Ann;
+  var y = D, prev = 0;
+  for (var i = 0; i < 255; i++) {
+    prev = y;
+    y = (y * y + c) / (2 * y + b - D);
+    if (Math.abs(y - prev) <= Math.max(1e-12, Math.abs(y) * 1e-14)) break;
+  }
+  return y;
+}
+function stableSwap(reserveInStr, reserveOutStr, ampStr, amountInStr, feeBps) {
+  var raw = [reserveInStr, reserveOutStr, ampStr, amountInStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var reserveIn = Number(reserveInStr), reserveOut = Number(reserveOutStr);
+  var amp = Number(ampStr), amountIn = Number(amountInStr);
+  var fee = Number(feeBps);
+  if (![reserveIn, reserveOut, amp, amountIn].every(Number.isFinite)) return null;
+  if (reserveIn <= 0 || reserveOut <= 0 || amp <= 0 || amountIn <= 0) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var D = stableInvariantD(reserveIn, reserveOut, amp);
+  if (D === null || !(D > 0)) return null;
+  var netIn = amountIn * (1 - fee / 10000);
+  if (!(netIn > 0)) return null;
+  var newReserveOut = stableSolveY(reserveIn + netIn, reserveOut, amp, D);
+  var out = reserveOut - newReserveOut;
+  if (!(out > 0) || !(out < reserveOut)) return null;
+  var Ann = 2 * amp, K = Math.pow(D, 3) / 4;
+  var spotPrice = (K / (reserveIn * reserveIn * reserveOut) + Ann) /
+    (Ann + K / (reserveIn * reserveOut * reserveOut));
+  var effectivePrice = out / amountIn;
+  var result = {
+    reserveIn: reserveIn, reserveOut: reserveOut, amp: amp,
+    amountIn: amountIn, feeBps: fee, netIn: netIn, out: out,
+    invariantD: D, spotPrice: spotPrice, effectivePrice: effectivePrice,
+    priceImpactPct: (1 - effectivePrice / spotPrice) * 100,
+    newReserveIn: reserveIn + netIn, newReserveOut: newReserveOut
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (!Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -5362,6 +5455,31 @@ if (typeof document !== "undefined") {
           " A range order earns swap fees while the price crosses it, which this model does not add to the received side. A CLMM range-order model, not live pool data — not financial advice.";
         document.getElementById("rord-full").value = fmt(res.fullOut, 6);
         document.getElementById("rord-avg").value = fmt(res.avgPriceFull, 6);
+      }
+    });
+
+    /* --- Stableswap swap model --- */
+    document.getElementById("sswap-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = stableSwap(
+        document.getElementById("sswap-rin").value,
+        document.getElementById("sswap-rout").value,
+        document.getElementById("sswap-amp").value,
+        document.getElementById("sswap-ain").value,
+        document.getElementById("sswap-fee").value
+      );
+      var out = document.getElementById("sswap-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves, a positive amplification parameter and a positive amount in, and a fee of 0–9999 basis points. A trade so large the model saturates at the whole output reserve is rejected, not quoted.";
+        document.getElementById("sswap-out").value = "";
+        document.getElementById("sswap-spot").value = "";
+      } else {
+        out.textContent = "Model output: paying ≈ " + fmt(res.amountIn, 6) + " of the input token into a stableswap pool with amplification ≈ " + fmt(res.amp, 2) +
+          " returns ≈ " + fmt(res.out, 6) + " of the output token. The spot price before the trade is ≈ " + fmt(res.spotPrice, 6) +
+          " out per in (exactly 1 when the pool is balanced, whatever the amplification), the effective price after the fee is ≈ " + fmt(res.effectivePrice, 6) +
+          ", and the price impact against that spot is ≈ " + fmt(res.priceImpactPct, 4) + "%. Higher amplification trades closer to 1:1 while the pool stays balanced — and keeps pricing near par even if one token depegs, which is the design's known danger, not a safety feature. A stableswap swap model, not live pool data — not financial advice.";
+        document.getElementById("sswap-out").value = fmt(res.out, 6);
+        document.getElementById("sswap-spot").value = fmt(res.spotPrice, 6);
       }
     });
 

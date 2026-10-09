@@ -1347,6 +1347,27 @@
         <button type="submit" class="btn primary">Plan this range order</button>
         <p id="rord-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="sswap-calc">
+        <h3>58 · Stableswap swap model</h3>
+        <p>Tools 1 and 56 keep a product of the reserves constant; a stableswap pool — the design used for pegged pairs like stablecoin/stablecoin or liquid-staking pairs — blends the sum and the product instead, through an amplification parameter A: high A hugs the sum and trades near 1:1 while the pool is balanced, low A leans toward tool 1's product curve. The fee comes off the input first, exactly as in tool 1, and the trade is solved on the invariant Ann × (x + y) + D = Ann × D + D³ ÷ (4xy), with Ann = 2A, by Newton iteration. A balanced pool's spot price is exactly 1 whatever A is, and a pool holding 1,000/500 already prices below par (≈0.9917 out per in at A = 100) because it is short of the output token. The honest danger is the flip side of the design: near-par pricing assumes both tokens really are worth the same, so if one side depegs the curve keeps offering close to par for it and the pool is drained of the good side first — the amplification is a property of the pool, not a dial a trader sets or a safety feature. The maths is floating point, and a trade so large the result saturates at the whole output reserve is rejected rather than quoted: the curve approaches the reserve asymptotically and never pays it all. Educational model only — your reserves, amplification and trade inputs; not live pool data, not a live quote, not financial advice.</p>
+        <label for="sswap-rin">Reserve in (tokens)</label>
+        <input id="sswap-rin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sswap-rout">Reserve out (tokens)</label>
+        <input id="sswap-rout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sswap-amp">Amplification parameter A — higher trades closer to 1:1 while balanced</label>
+        <input id="sswap-amp" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="sswap-ain">Amount in (tokens)</label>
+        <input id="sswap-ain" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="sswap-fee">Swap fee (basis points, 25 = 0.25%)</label>
+        <input id="sswap-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="sswap-out">Amount out (model)</label>
+        <input id="sswap-out" readonly placeholder="—" autocomplete="off">
+        <label for="sswap-spot">Spot price before the trade — out per in (model)</label>
+        <input id="sswap-spot" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model this stableswap trade</button>
+        <p id="sswap-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1374,6 +1395,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=69"></script>
+<script src="app.js?v=70"></script>
 </body>
 </html>
