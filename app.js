@@ -1830,7 +1830,13 @@ function clmmZapIn(reserveAStr, reserveBStr, currentStr, lowerStr, upperStr, amo
     ratio = (s - sa) / (1 / s - 1 / sb);
     var k = 1 - fee / 10000;
     var qa = ratio * k, qb = rb * k - ratio * x * k + ratio * ra, qc = -ratio * x * ra;
-    var root = (-qb + Math.sqrt(qb * qb - 4 * qa * qc)) / (2 * qa);
+    // Cancellation-free root: when qb > 0 (deep pool vs the holding)
+    // -qb + sqrt(disc) subtracts two nearly-equal numbers and the
+    // split can be off by percent, leaving a real leftover instead
+    // of dust; the product form -2*qc / (qb + sqrt(disc)) is the
+    // same root with no subtraction of near-equals.
+    var discRoot = Math.sqrt(qb * qb - 4 * qa * qc);
+    var root = qb >= 0 ? (-2 * qc) / (qb + discRoot) : (-qb + discRoot) / (2 * qa);
     if (!(root > 0 && root < x)) return null;
     var split = Math.floor(root * 1e9) / 1e9;
     if (split <= 0) return null;
@@ -1927,7 +1933,13 @@ function clmmZapInB(reserveAStr, reserveBStr, currentStr, lowerStr, upperStr, am
     ratio = (s - sa) / (1 / s - 1 / sb);
     var k = 1 - fee / 10000;
     var qa = k, qb = rb + ratio * ra * k - y * k, qc = -y * rb;
-    var root = (-qb + Math.sqrt(qb * qb - 4 * qa * qc)) / (2 * qa);
+    // Cancellation-free root, same fix as Tool 33: when qb > 0 (deep
+    // pool vs the holding) -qb + sqrt(disc) subtracts two nearly-
+    // equal numbers and the split can be off by percent, leaving a
+    // real leftover instead of dust; the product form
+    // -2*qc / (qb + sqrt(disc)) is the same root without it.
+    var discRoot = Math.sqrt(qb * qb - 4 * qa * qc);
+    var root = qb >= 0 ? (-2 * qc) / (qb + discRoot) : (-qb + discRoot) / (2 * qa);
     if (!(root > 0 && root < y)) return null;
     var split = Math.floor(root * 1e9) / 1e9;
     if (split <= 0) return null;

@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=55"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=56"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -2509,6 +2509,24 @@ check("all czapb controls labelled", ["czapb-ra", "czapb-rb", "czapb-bps", "czap
 check("czapb tool present in index.html", html.includes('id="czapb-calc"') && html.includes('id="czapb-result"'));
 check("czapb honesty: B-side entry and not-live labels", html.includes("wallet holding only token B") && html.includes("not live pool state") && html.includes("not financial advice"));
 check("guide covers CLMM zap-in from token B", guide.includes("Entering a CLMM range from the B side"));
+
+/* ---------- Zap-in quadratic cancellation at extreme pool ratios ---------- */
+/* The naive root -qb + sqrt(disc) subtracts two nearly-equal numbers
+   when qb > 0 (deep pool vs the holding): both zap tools returned
+   splits off by up to 22% at a 1e6 reserve ratio, leaving a real
+   leftover (22 of 100 for Tool 33) instead of dust. The product-form
+   root must land on the stable values below. */
+const czbDeep = app.clmmZapInB("1000000000000", "1000000000000", "1", "0.8", "1.25", "1", 25);
+near("CZB deep-pool split is the stable root", czbDeep.swapIn, 0.500625782, 1e-9);
+check("CZB deep-pool leftover is dust", czbDeep.leftoverB > 0 && czbDeep.leftoverB < 1e-6);
+const czbRatio = app.clmmZapInB("1000000", "1000000000000", "1", "0.8", "1.25", "100", 25);
+near("CZB 1e6-ratio split is the stable root", czbRatio.swapIn, 99.99990025, 1e-9);
+check("CZB 1e6-ratio leftover is dust", czbRatio.leftoverB > 0 && czbRatio.leftoverB < 1e-6);
+const czaRatio = app.clmmZapIn("1000000", "1000000000000", "1", "0.8", "1.25", "100", 25);
+near("CZA 1e6-ratio split is the stable root", czaRatio.swapIn, 0.00010025, 1e-12);
+check("CZA 1e6-ratio leaves no B leftover (was 22 of 100)", czaRatio.leftoverB === 0 && czaRatio.depositB > 99.99);
+const czaDeep = app.clmmZapIn("1000000000000", "1000000000000", "1", "0.8", "1.25", "0.001", 25);
+near("CZA deep-pool tiny-holding split is the stable root", czaDeep.swapIn, 0.000500625, 1e-12);
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
