@@ -1300,6 +1300,27 @@
         <button type="submit" class="btn primary">Model the range odds</button>
         <p id="prob-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="wswap-calc">
+        <h3>56 · Weighted-pool swap model</h3>
+        <p>Tool 1's constant product is one point in a wider family: a weighted pool keeps reserveIn<sup>wIn</sup> × reserveOut<sup>wOut</sup> constant, with the two weights summing to 100%. The fee comes off the input first, exactly as in tool 1, and the output is reserveOut × (1 − (reserveIn ÷ (reserveIn + net in))<sup>wIn/wOut</sup>). The honest surprise is that the weight is part of the price: the spot price is (reserveOut ÷ wOut) ÷ (reserveIn ÷ wIn), so an 80/20 pool holding equal reserves prices the input token at 4 output tokens, not 1 — and pays out more per unit in, at steeper impact, to match. At 50/50 the formula reduces to tool 1's answer exactly. Raydium's own constant-product pools are that 50/50 case; weighted pools are a generalised AMM design used elsewhere, modelled here so the weight's effect is a number rather than a slogan — not a Raydium pool type, not live pool data. The maths is floating point, and a trade so large the result saturates at the whole output reserve is rejected rather than quoted: the curve approaches the reserve asymptotically and never pays it all. Educational model only — your reserves, weights and trade inputs; not a live quote, not financial advice.</p>
+        <label for="wswap-rin">Reserve in (tokens)</label>
+        <input id="wswap-rin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="wswap-rout">Reserve out (tokens)</label>
+        <input id="wswap-rout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="wswap-win">Weight of the input token (%) — the output token takes the rest</label>
+        <input id="wswap-win" inputmode="decimal" placeholder="e.g. 80 (50 = tool 1's pool)" autocomplete="off">
+        <label for="wswap-ain">Amount in (tokens)</label>
+        <input id="wswap-ain" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="wswap-fee">Swap fee (basis points, 25 = 0.25%)</label>
+        <input id="wswap-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="wswap-out">Amount out (model)</label>
+        <input id="wswap-out" readonly placeholder="—" autocomplete="off">
+        <label for="wswap-spot">Spot price before the trade — out per in, weights included (model)</label>
+        <input id="wswap-spot" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model this weighted swap</button>
+        <p id="wswap-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1327,6 +1348,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=66"></script>
+<script src="app.js?v=67"></script>
 </body>
 </html>

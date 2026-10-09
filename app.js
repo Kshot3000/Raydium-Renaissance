@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus fifty-five fully
+/* Raydium Renaissance hub logic: project filtering plus fifty-six fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -31,8 +31,8 @@
    from token B, a single-sided zap-out planner
    to token B, a fee compounding calculator, a
    loss-versus-rebalancing round-trip calculator, a
-   pool seeding / initial-liquidity planner, and a CLMM range
-   probability calculator.
+   pool seeding / initial-liquidity planner, a CLMM range
+   probability calculator, and a weighted-pool swap model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3452,8 +3452,66 @@ function clmmRangeProbability(currentStr, lowerStr, upperStr, dailyVolPctStr, da
   return result;
 }
 
+/* ---------- 56 · Weighted-pool swap model ---------- */
+/* Tool 1's constant product is the 50/50 case of a wider family:
+   a weighted pool keeps reserveIn^wIn x reserveOut^wOut constant,
+   with weights wIn + wOut = 1. The fee comes off the input first
+   (Tool 1's convention), then
+     out = reserveOut x (1 - (reserveIn / (reserveIn + netIn))^(wIn/wOut))
+   and the spot price carries the weights in it:
+     spot = (reserveOut / wOut) / (reserveIn / wIn),
+   so an 80/20 pool holding equal reserves prices the input token
+   at 4 units of the output token, not 1 — the weight is part of
+   the quote, which is the honest surprise of the tool. At 50/50
+   the formula reduces to Tool 1's exactly (asserted in tests
+   against cpSwap itself). The honest edges: Raydium's own
+   constant-product pools are the 50/50 case — weighted pools are
+   a generalised AMM design used elsewhere, modelled here so the
+   weight's effect is a number rather than a slogan; the maths is
+   floating point (no 9 dp BigInt flooring like Tool 1); and a
+   trade so large the float result saturates at the whole output
+   reserve is rejected, not quoted — the curve approaches the
+   reserve asymptotically and never pays it all. Educational
+   model only — your reserves, weights and trade inputs, not live
+   pool data, not a live quote, not financial advice. */
+function weightedSwap(reserveInStr, reserveOutStr, weightInPctStr, amountInStr, feeBps) {
+  var raw = [reserveInStr, reserveOutStr, weightInPctStr, amountInStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var reserveIn = Number(reserveInStr), reserveOut = Number(reserveOutStr);
+  var weightInPct = Number(weightInPctStr), amountIn = Number(amountInStr);
+  var fee = Number(feeBps);
+  if (![reserveIn, reserveOut, weightInPct, amountIn].every(Number.isFinite)) return null;
+  if (reserveIn <= 0 || reserveOut <= 0 || amountIn <= 0) return null;
+  if (weightInPct <= 0 || weightInPct >= 100) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var wIn = weightInPct / 100, wOut = 1 - wIn;
+  var exponent = wIn / wOut;
+  var netIn = amountIn * (1 - fee / 10000);
+  if (!(netIn > 0)) return null;
+  var out = reserveOut * (1 - Math.pow(reserveIn / (reserveIn + netIn), exponent));
+  if (!(out > 0) || !(out < reserveOut)) return null;
+  var spotPrice = (reserveOut / wOut) / (reserveIn / wIn);
+  var effectivePrice = out / amountIn;
+  var result = {
+    reserveIn: reserveIn, reserveOut: reserveOut,
+    weightInPct: weightInPct, weightOutPct: 100 - weightInPct,
+    exponent: exponent, amountIn: amountIn, feeBps: fee,
+    netIn: netIn, out: out,
+    spotPrice: spotPrice, effectivePrice: effectivePrice,
+    priceImpactPct: (1 - effectivePrice / spotPrice) * 100,
+    newReserveIn: reserveIn + netIn, newReserveOut: reserveOut - out
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (!Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -5157,6 +5215,31 @@ if (typeof document !== "undefined") {
           "% — ≈ " + fmt(res.probAbovePct, 4) + "% above it and ≈ " + fmt(res.probBelowPct, 4) + "% below it. Ending inside is not staying inside: the price can leave the range and come back, so the share of time actually in range — the figure tools 13, 15 and 31 take as an input — will be lower than this ending probability whenever the path wanders. Zero drift and constant volatility are assumptions doing real work here. A range probability model, not live pool data — not financial advice.";
         document.getElementById("prob-in").value = fmt(res.probInPct, 4) + "%";
         document.getElementById("prob-band").value = fmt(res.sigmaBandLower, 6) + " – " + fmt(res.sigmaBandUpper, 6);
+      }
+    });
+
+    /* --- weighted-pool swap model --- */
+    document.getElementById("wswap-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = weightedSwap(
+        document.getElementById("wswap-rin").value,
+        document.getElementById("wswap-rout").value,
+        document.getElementById("wswap-win").value,
+        document.getElementById("wswap-ain").value,
+        document.getElementById("wswap-fee").value
+      );
+      var out = document.getElementById("wswap-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves and an amount in, a weight for the input token above 0% and below 100%, and a fee of 0–9999 basis points. A trade so large the model saturates at the whole output reserve is rejected, not quoted.";
+        document.getElementById("wswap-out").value = "";
+        document.getElementById("wswap-spot").value = "";
+      } else {
+        out.textContent = "Model output: paying ≈ " + fmt(res.amountIn, 6) + " of the input token into a ≈ " + fmt(res.weightInPct, 2) + "% / ≈ " + fmt(res.weightOutPct, 2) +
+          "% weighted pool returns ≈ " + fmt(res.out, 6) + " of the output token. The weights are in the price: the spot price is ≈ " + fmt(res.spotPrice, 6) +
+          " out per in before the trade (equal reserves at 80/20 price at 4, not 1), the effective price after the fee is ≈ " + fmt(res.effectivePrice, 6) +
+          ", and the price impact against that spot is ≈ " + fmt(res.priceImpactPct, 4) + "%. At 50/50 this is exactly tool 1's constant-product answer — Raydium's own constant-product pools are the 50/50 case, and weighted pools are a generalised design modelled here for comparison. A weighted-pool swap model, not live pool data — not financial advice.";
+        document.getElementById("wswap-out").value = fmt(res.out, 6);
+        document.getElementById("wswap-spot").value = fmt(res.spotPrice, 6);
       }
     });
 

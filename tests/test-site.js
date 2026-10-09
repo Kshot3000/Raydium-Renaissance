@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=66"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=67"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists fifty-five tools", readme.includes("fifty-five pool tools") || readme.includes("all fifty-five"));
+check("README lists fifty-six tools", readme.includes("fifty-six pool tools") || readme.includes("all fifty-six"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts fifty-five tools and names the CLMM range probability calculator",
-  appSrc.includes("plus fifty-five fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, and a CLMM range\n   probability calculator.\n   These are educational MODELS"));
+check("app.js header counts fifty-six tools and names the weighted-pool swap model",
+  appSrc.includes("plus fifty-six fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, and a weighted-pool swap model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -2994,6 +2994,55 @@ check("prob tool present in index.html", html.includes('id="prob-calc"') && html
 check("prob honesty: ending-is-not-staying and not-live labels", html.includes("ending inside the range is not staying inside it") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers range probability", guide.includes("Ending inside the range is not staying inside it"));
 check("README lists tool 55", readme.includes("55. **CLMM range probability calculator**"));
+
+/* ---------- 56 · Weighted-pool swap model (WPOOL) ---------- */
+/* headline: 80/20 pool, equal reserves, 100 in at 25 bps */
+const wq1 = app.weightedSwap("1000", "1000", "80", "100", 25);
+check("WPOOL headline is not null", wq1 !== null);
+near("WPOOL headline out", wq1.out, 316.3652703552382, 1e-9);
+near("WPOOL headline spot carries the weights", wq1.spotPrice, 4, 1e-12);
+near("WPOOL headline exponent", wq1.exponent, 4, 1e-12);
+near("WPOOL headline impact", wq1.priceImpactPct, 20.908682411190483, 1e-9);
+near("WPOOL headline net in", wq1.netIn, 99.75, 1e-12);
+check("WPOOL weight split sums to 100", wq1.weightInPct + wq1.weightOutPct === 100);
+/* zero-fee closed forms at both weight extremes */
+near("WPOOL 80/20 zero-fee out is the closed form", app.weightedSwap("1000", "1000", "80", "100", 0).out, 1000 * (1 - Math.pow(1000 / 1100, 4)), 1e-9);
+near("WPOOL 20/80 zero-fee out", app.weightedSwap("1000", "1000", "20", "100", 0).out, 23.54591032368947, 1e-9);
+near("WPOOL 20/80 spot", app.weightedSwap("1000", "1000", "20", "100", 0).spotPrice, 0.25, 1e-12);
+/* the 50/50 case is tool 1 exactly (to its 9dp BigInt flooring) */
+for (const [ri, ro, ai, f] of [["1000", "1000", "100", 25], ["1000", "4000", "50", 100], ["250", "1000", "10", 0], ["123456", "654321", "999", 30]]) {
+  const w = app.weightedSwap(ri, ro, "50", ai, f);
+  const c = app.cpSwap(ri, ro, ai, f);
+  check("WPOOL 50/50 equals cpSwap " + ri + "/" + ro + "/" + ai + "/" + f, w !== null && c !== null && Math.abs(w.out - Number(c.out)) <= 1e-6 && Math.abs(w.spotPrice - c.spotPrice) < 1e-12);
+}
+/* invariant sweep: reserveIn^wIn x reserveOut^wOut is preserved on the
+   post-trade (net-of-fee) reserves, and out stays inside (0, reserveOut) */
+for (const [ri, ro, w, ai, f] of [["1000", "1000", "80", "100", 25], ["500", "2000", "30", "75", 50], ["1000", "1000", "50", "100", 25], ["1234", "567", "65", "33", 10], ["2000", "250", "15", "500", 100], ["750", "750", "92", "5", 0]]) {
+  const r = app.weightedSwap(ri, ro, w, ai, f);
+  const v0 = Math.pow(Number(ri), Number(w) / 100) * Math.pow(Number(ro), 1 - Number(w) / 100);
+  const v1 = Math.pow(r.newReserveIn, Number(w) / 100) * Math.pow(r.newReserveOut, 1 - Number(w) / 100);
+  check("WPOOL invariant preserved " + ri + "/" + ro + "/w" + w, Math.abs((v1 - v0) / v0) < 1e-12 && r.out > 0 && r.out < Number(ro));
+}
+/* ordering: a heavier input weight pays more out and impacts more */
+const wq20 = app.weightedSwap("1000", "1000", "20", "100", 0);
+const wq50 = app.weightedSwap("1000", "1000", "50", "100", 0);
+const wq80 = app.weightedSwap("1000", "1000", "80", "100", 0);
+check("WPOOL heavier input weight pays more out", wq20.out < wq50.out && wq50.out < wq80.out);
+check("WPOOL heavier input weight impacts more", wq20.priceImpactPct < wq50.priceImpactPct && wq50.priceImpactPct < wq80.priceImpactPct);
+check("WPOOL spot rises with the input weight", wq20.spotPrice < wq50.spotPrice && wq50.spotPrice < wq80.spotPrice);
+/* dust trade against a deep pool still settles */
+near("WPOOL dust out", app.weightedSwap("1000", "1000", "80", "0.001", 25).out, 0.003989990050246028, 1e-12);
+/* rejections */
+check("WPOOL rejects a saturating trade instead of quoting a full drain", app.weightedSwap("1", "1", "80", "1000000000", 0) === null);
+check("WPOOL rejects weights at the edges", app.weightedSwap("1000", "1000", "0", "100", 25) === null && app.weightedSwap("1000", "1000", "100", "100", 25) === null);
+check("WPOOL rejects blank and junk", app.weightedSwap("1000", "1000", "80", "", 25) === null && app.weightedSwap("abc", "1000", "80", "100", 25) === null && app.weightedSwap("1000", "1000", "", "100", 25) === null);
+check("WPOOL rejects non-positive amounts", app.weightedSwap("0", "1000", "80", "100", 25) === null && app.weightedSwap("1000", "1000", "80", "-5", 25) === null);
+check("WPOOL rejects bad fees", app.weightedSwap("1000", "1000", "80", "100", 10000) === null && app.weightedSwap("1000", "1000", "80", "100", -1) === null && app.weightedSwap("1000", "1000", "80", "100", "25.5") === null);
+check("all wswap controls labelled", ["wswap-rin", "wswap-rout", "wswap-win", "wswap-ain", "wswap-fee", "wswap-out", "wswap-spot"].every(id => html.includes(`for="${id}"`)));
+check("wswap tool present in index.html", html.includes('id="wswap-calc"') && html.includes('id="wswap-result"'));
+check("wswap honesty: 50/50-is-Raydium and not-live labels", html.includes("Raydium's own constant-product pools are that 50/50 case") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers weighted pools", guide.includes("The weight is part of the price in a weighted pool"));
+check("README lists tool 56", readme.includes("56. **Weighted-pool swap model**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
