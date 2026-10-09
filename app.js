@@ -3648,17 +3648,46 @@ function weightedImpactSizer(reserveInStr, reserveOutStr, weightInPctStr, maxImp
   if (pFrac <= feeFrac) {
     return Object.assign(base, { feasible: false, maxAmountIn: 0, netIn: 0, amountOut: 0, actualImpactPct: feeFrac * 100 });
   }
-  var target = exponent * (1 - pFrac) / (1 - feeFrac);
+  /* The cap condition in terms of the surviving fraction is
+     (1 - feeFrac) x g(u) x s = 1 - pFrac, where s =
+     (reserveOut / reserveIn) / spotPrice is exactly 1 / exponent
+     in real arithmetic. Use s, not the exponent, in the target:
+     spotPrice and exponent are different float roundings of the
+     same real ratio (they can differ by ~2 ulps), and at a cap
+     within ~1e-9 of the fee floor that ulp gap is ~1e-5 of the
+     cap itself — sizing with the exponent would hand back a
+     trade whose own reported impact (which divides by
+     spotPrice, like Tool 56) misses the cap. */
+  var target = (1 - pFrac) / ((1 - feeFrac) * ((reserveOut / reserveIn) / spotPrice));
   function g(u) { return u * (-Math.expm1(exponent * Math.log(u))) / (1 - u); }
-  var lo = 0, hi = 1;
-  for (var it = 0; it < 200; it++) {
-    var mid = (lo + hi) / 2;
-    if (g(mid) < target) lo = mid; else hi = mid;
+  var netIn, out;
+  if (target > g(0.5)) {
+    /* The root sits in the upper half (a dust-sized trade): there
+       u is within ulps of 1, so bisecting u quantises
+       delta = 1 - u at ulp(1) ≈ 2.2e-16 and a trade with
+       delta ≈ 4e-12 comes back ~4e-5 relative off. Bisect delta
+       itself instead — g falls monotonically as delta grows, and
+       the log1p/expm1 form stays exact at tiny delta. */
+    function gd(d) { return (1 - d) * (-Math.expm1(exponent * Math.log1p(-d))) / d; }
+    var dlo = 0, dhi = 0.5;
+    for (var dit = 0; dit < 200; dit++) {
+      var dmid = (dlo + dhi) / 2;
+      if (gd(dmid) > target) dlo = dmid; else dhi = dmid;
+    }
+    var delta = (dlo + dhi) / 2;
+    netIn = reserveIn * delta / (1 - delta);
+    out = -reserveOut * Math.expm1(exponent * Math.log1p(-delta));
+  } else {
+    var lo = 0, hi = 0.5;
+    for (var it = 0; it < 200; it++) {
+      var mid = (lo + hi) / 2;
+      if (g(mid) < target) lo = mid; else hi = mid;
+    }
+    var u = (lo + hi) / 2;
+    netIn = reserveIn * (1 - u) / u;
+    out = -reserveOut * Math.expm1(exponent * Math.log(u));
   }
-  var u = (lo + hi) / 2;
-  var netIn = reserveIn * (1 - u) / u;
   var grossIn = netIn / (1 - feeFrac);
-  var out = -reserveOut * Math.expm1(exponent * Math.log(u));
   if (!(grossIn > 0) || !(out > 0) || !(out < reserveOut)) return null;
   var effectivePrice = out / grossIn;
   var result = Object.assign(base, {

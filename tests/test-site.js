@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=79"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=80"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -3617,6 +3617,21 @@ check("WIS rejects bad fee",
   app.weightedImpactSizer("1000", "1000", "50", "10", 10000) === null);
 check("WIS rejects an overflowing cap", app.weightedImpactSizer("1000", "1000", "50", "1e309", 0) === null);
 check("WIS handler bisects the impact condition", appSrc.includes("if (g(mid) < target) lo = mid; else hi = mid;"));
+/* Dust-cap pins: at a 1e-6% cap the surviving fraction's complement
+   delta is ~1e-8, where bisecting u itself quantises delta at
+   ulp(1) and the sized trade lands ~6e-9 relative off; bisecting
+   delta (upper-half roots) holds it to ~2e-9 of the exact
+   1.00000001e-5. At a 1e-9% cap (delta ~4e-12) the answer is
+   within 1e-5 relative of the spot-consistent oracle
+   3.999977795571507e-9 — the float64 floor there, set by the
+   ~2-ulp disagreement between spotPrice and exponent. */
+const wisDust = app.weightedImpactSizer("1000", "1000", "50", "0.000001", 0);
+near("WIS dust cap 1e-6% gross in", wisDust.maxAmountIn, 1.00000001e-5, 3e-14);
+const wisDust80 = app.weightedImpactSizer("1000", "1000", "80", "1e-9", 0);
+check("WIS dust cap 1e-9% gross in within the float floor",
+  Math.abs(wisDust80.maxAmountIn - 3.999977795571507e-9) / 3.999977795571507e-9 < 1e-5);
+check("WIS sizer bisects delta for upper-half roots", appSrc.includes("Math.log1p(-delta)") && appSrc.includes("if (gd(dmid) > target) dlo = dmid; else dhi = dmid;"));
+check("WIS target derives from spotPrice, not the exponent", appSrc.includes("((reserveOut / reserveIn) / spotPrice)"));
 check("all wis controls labelled",
   ["wis-rin", "wis-rout", "wis-win", "wis-cap", "wis-fee", "wis-ain", "wis-aout"]
     .every(id => html.includes(`for="${id}"`)));
