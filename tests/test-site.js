@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=71"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=72"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists fifty-eight tools", readme.includes("fifty-eight pool tools") || readme.includes("all fifty-eight"));
+check("README lists fifty-nine tools", readme.includes("fifty-nine pool tools") || readme.includes("all fifty-nine"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts fifty-eight tools and names the stableswap model",
-  appSrc.includes("plus fifty-eight fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, and a stableswap\n   swap model.\n   These are educational MODELS"));
+check("app.js header counts fifty-nine tools and names the stableswap models",
+  appSrc.includes("plus fifty-nine fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, and a stableswap exact-out swap model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -3181,6 +3181,74 @@ check("sswap tool present in index.html", html.includes('id="sswap-calc"') && ht
 check("sswap honesty: depeg danger and not-live labels", html.includes("near-par pricing assumes both tokens really are worth the same") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers stableswap", guide.includes("Pegged pairs trade on a blended curve"));
 check("README lists tool 58", readme.includes("58. **Stableswap swap model**"));
+
+/* ---------- 59 · Stableswap exact-out swap model (SSXO) ---------- */
+/* headline: tool 58's own outputs inverted — its zero-fee headline out
+   needs exactly its 100 in back, and its 25 bps headline out needs
+   exactly 100 gross in (99.75 net) */
+const sx1 = app.stableSwapExactOut("1000", "1000", "100", "99.90011086475852", 0);
+check("SSXO headline is not null", sx1 !== null);
+near("SSXO headline amount in inverts tool 58 exactly", sx1.amountIn, 100, 1e-9);
+near("SSXO headline net in", sx1.netIn, 100, 1e-9);
+near("SSXO headline spot is exactly par on a balanced pool", sx1.spotPrice, 1, 1e-12);
+near("SSXO headline impact equals tool 58's", sx1.priceImpactPct, 0.09988913524148213, 1e-9);
+near("SSXO headline new reserve out", sx1.newReserveOut, 900.0998891352415, 1e-9);
+const sxF = app.stableSwapExactOut("1000", "1000", "100", "99.65061433806079", 25);
+near("SSXO fee headline gross in is tool 58's 100", sxF.amountIn, 100, 1e-9);
+near("SSXO fee headline net in is the gross minus the fee", sxF.netIn, 99.75, 1e-9);
+near("SSXO fee headline impact equals tool 58's", sxF.priceImpactPct, 0.3493856619392055, 1e-9);
+/* a round target at a fee tier */
+const sxT = app.stableSwapExactOut("1000", "1000", "100", "100", 25);
+near("SSXO target 100 at 25 bps amount in", sxT.amountIn, 100.35096849591363, 1e-9);
+near("SSXO target 100 at 25 bps net in", sxT.netIn, 100.10009107467386, 1e-9);
+/* tool 58's lopsided, short-side, asym and amp-extreme outputs invert to its inputs */
+near("SSXO lopsided inverts to 100 in", app.stableSwapExactOut("1000", "500", "100", "98.87832443950845", 0).amountIn, 100, 1e-9);
+near("SSXO lopsided spot", app.stableSwapExactOut("1000", "500", "100", "98.87832443950845", 0).spotPrice, 0.9917176313020062, 1e-9);
+near("SSXO short-side inverts to 100 in", app.stableSwapExactOut("500", "1000", "100", "100.6184800873408", 0).amountIn, 100, 1e-9);
+near("SSXO asym inverts to 500 in", app.stableSwapExactOut("10000", "2000", "85", "467.98702025853595", 30).amountIn, 500, 1e-9);
+near("SSXO amp 1 inverts to 100 in", app.stableSwapExactOut("1000", "1000", "1", "95.2272997771098", 0).amountIn, 100, 1e-9);
+near("SSXO amp 5000 inverts to 100 in", app.stableSwapExactOut("1000", "1000", "5000", "99.99798025134567", 0).amountIn, 100, 1e-9);
+/* round-trip sweep: this tool's amount in, fed into tool 58, returns the
+   target; and the invariant equation holds at the post-trade reserves */
+for (const [ri, ro, a, tgt, f] of [["1000", "1000", "100", "50", 0], ["1000", "1000", "100", "99.9", 25], ["1000", "500", "100", "98.87832443950845", 0], ["10000", "2000", "85", "467.98702025853595", 30], ["500", "1000", "100", "100.6184800873408", 0], ["1234", "567", "200", "100", 25], ["777", "333", "42", "50", 10], ["5000", "5000", "7", "200", 50], ["1000", "1000", "5000", "99.99", 0], ["1000", "1000", "1", "90", 0]]) {
+  const r = app.stableSwapExactOut(ri, ro, a, tgt, f);
+  const back = app.stableSwap(ri, ro, a, String(r.amountIn), f);
+  check("SSXO round-trips through tool 58 " + ri + "/" + ro + "/A" + a + "/tgt" + tgt,
+    Math.abs(back.out - Number(tgt)) / Number(tgt) < 1e-9);
+  const Ann = 2 * Number(a), D = r.invariantD;
+  const inv = (x, y) => Ann * (x + y) + D - (Ann * D + Math.pow(D, 3) / (4 * x * y));
+  check("SSXO invariant preserved post-trade " + ri + "/" + ro + "/A" + a,
+    Math.abs(inv(r.newReserveIn, r.newReserveOut)) / (Ann * D) < 1e-9 && r.newReserveOut === Number(ro) - Number(tgt));
+  check("SSXO fee identity " + ri + "/" + ro + "/A" + a,
+    Math.abs(r.netIn - r.amountIn * (1 - f / 10000)) < 1e-9 * r.amountIn && r.amountIn >= r.netIn);
+}
+/* the cost explodes as the target approaches the whole reserve */
+near("SSXO near-drain target 999 of 1000 amount in", app.stableSwapExactOut("1000", "1000", "100", "999", 0).amountIn, 3309.4706258125425, 1e-9);
+check("SSXO near-drain costs far above spot", app.stableSwapExactOut("1000", "1000", "100", "999", 0).priceImpactPct > 69);
+/* dust target: the required input is a difference of near-equal reserves,
+   so it is pinned at the float noise floor of the reserve scale (~1 ulp),
+   not to full precision — the round trip still lands within 1e-6 relative */
+const sxDust = app.stableSwapExactOut("1000", "1000", "100", "0.000001", 0);
+check("SSXO dust target amount in at the noise floor", sxDust !== null && Math.abs(sxDust.amountIn - 0.000001) < 2e-13);
+check("SSXO dust target round-trips within the noise floor",
+  Math.abs(app.stableSwap("1000", "1000", "100", String(sxDust.amountIn), 0).out - 0.000001) / 0.000001 < 1e-6);
+/* a bigger target always costs more, and a fee always costs more gross */
+check("SSXO amount in rises with the target",
+  app.stableSwapExactOut("1000", "1000", "100", "200", 0).amountIn > app.stableSwapExactOut("1000", "1000", "100", "100", 0).amountIn);
+check("SSXO a fee raises the gross in, never the net",
+  app.stableSwapExactOut("1000", "1000", "100", "100", 25).amountIn > app.stableSwapExactOut("1000", "1000", "100", "100", 0).amountIn &&
+  Math.abs(app.stableSwapExactOut("1000", "1000", "100", "100", 25).netIn - app.stableSwapExactOut("1000", "1000", "100", "100", 0).netIn) < 1e-9);
+/* rejections */
+check("SSXO rejects a target at or above the whole output reserve", app.stableSwapExactOut("1000", "1000", "100", "1000", 0) === null && app.stableSwapExactOut("1000", "1000", "100", "1001", 0) === null);
+check("SSXO rejects non-positive amplification", app.stableSwapExactOut("1000", "1000", "0", "100", 25) === null && app.stableSwapExactOut("1000", "1000", "-5", "100", 25) === null);
+check("SSXO rejects blank and junk", app.stableSwapExactOut("1000", "1000", "", "100", 25) === null && app.stableSwapExactOut("abc", "1000", "100", "100", 25) === null && app.stableSwapExactOut("1000", "1000", "100", "", 25) === null);
+check("SSXO rejects non-positive amounts", app.stableSwapExactOut("0", "1000", "100", "100", 25) === null && app.stableSwapExactOut("1000", "1000", "100", "-5", 25) === null && app.stableSwapExactOut("1000", "1000", "100", "0", 25) === null);
+check("SSXO rejects bad fees", app.stableSwapExactOut("1000", "1000", "100", "100", 10000) === null && app.stableSwapExactOut("1000", "1000", "100", "100", -1) === null && app.stableSwapExactOut("1000", "1000", "100", "100", "25.5") === null);
+check("all ssxo controls labelled", ["ssxo-rin", "ssxo-rout", "ssxo-amp", "ssxo-aout", "ssxo-fee", "ssxo-ain", "ssxo-spot"].every(id => html.includes(`for="${id}"`)));
+check("ssxo tool present in index.html", html.includes('id="ssxo-calc"') && html.includes('id="ssxo-result"'));
+check("ssxo honesty: asymptotic reserve and not-live labels", html.includes("a target at or above the whole output reserve is rejected, not quoted") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers stableswap exact-out", guide.includes("Exact-out on a stable curve"));
+check("README lists tool 59", readme.includes("59. **Stableswap exact-out swap model**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

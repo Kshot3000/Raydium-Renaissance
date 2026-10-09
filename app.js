@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus fifty-eight fully
+/* Raydium Renaissance hub logic: project filtering plus fifty-nine fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -33,8 +33,8 @@
    loss-versus-rebalancing round-trip calculator, a
    pool seeding / initial-liquidity planner, a CLMM range
    probability calculator, a weighted-pool swap model, a
-   CLMM range-order (limit-order) planner, and a stableswap
-   swap model.
+   CLMM range-order (limit-order) planner, a stableswap
+   swap model, and a stableswap exact-out swap model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3699,8 +3699,71 @@ function stableSwap(reserveInStr, reserveOutStr, ampStr, amountInStr, feeBps) {
   return result;
 }
 
+/* ---------- 59 · Stableswap exact-out swap model ---------- */
+/* Tool 58 run backwards, for the trade specified by what must come
+   OUT — a payment, a debt, a target holding — rather than by what
+   goes in. The output side is set first (newReserveOut = reserveOut
+   − amountOut) and the same Newton pair from tool 58 is solved with
+   the reserves' roles swapped: stableSolveY finds the input reserve
+   that satisfies the same invariant D at that output reserve. The
+   fee is then grossed back UP — amountIn = netIn / (1 − fee) — the
+   mirror of tool 58 taking it off the input first, so feeding this
+   tool's amountIn into tool 58 returns the target output (asserted
+   in tests at a sweep of pools, amplifications and fee tiers).
+   Honest edges: a target at or above the whole output reserve is
+   rejected, not priced — the curve only approaches the reserve
+   asymptotically, and targets close to it cost explosively more
+   than spot suggests (999 out of a balanced 1,000/1,000 pool at
+   A = 100 needs ≈3,309 in, not ≈999); the required input is a
+   difference of two near-equal reserves, so for dust targets its
+   last digits carry the float noise floor of the reserve scale
+   itself (~1 ulp of the reserves, the same floor tool 58's dust
+   pins document); and all of tool 58's labels apply unchanged —
+   near-par pricing assumes the peg holds, and on a depeg this
+   tool prices the cost of draining the good side just as calmly.
+   Educational model only — your reserves, amplification and
+   target, not live pool data, not a live quote, not financial
+   advice. */
+function stableSwapExactOut(reserveInStr, reserveOutStr, ampStr, amountOutStr, feeBps) {
+  var raw = [reserveInStr, reserveOutStr, ampStr, amountOutStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var reserveIn = Number(reserveInStr), reserveOut = Number(reserveOutStr);
+  var amp = Number(ampStr), amountOut = Number(amountOutStr);
+  var fee = Number(feeBps);
+  if (![reserveIn, reserveOut, amp, amountOut].every(Number.isFinite)) return null;
+  if (reserveIn <= 0 || reserveOut <= 0 || amp <= 0 || amountOut <= 0) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  if (amountOut >= reserveOut) return null;
+  var D = stableInvariantD(reserveIn, reserveOut, amp);
+  if (D === null || !(D > 0)) return null;
+  var newReserveOut = reserveOut - amountOut;
+  var newReserveIn = stableSolveY(newReserveOut, reserveIn, amp, D);
+  var netIn = newReserveIn - reserveIn;
+  if (!(netIn > 0)) return null;
+  var amountIn = netIn / (1 - fee / 10000);
+  if (!(amountIn > 0)) return null;
+  var Ann = 2 * amp, K = Math.pow(D, 3) / 4;
+  var spotPrice = (K / (reserveIn * reserveIn * reserveOut) + Ann) /
+    (Ann + K / (reserveIn * reserveOut * reserveOut));
+  var effectivePrice = amountOut / amountIn;
+  var result = {
+    reserveIn: reserveIn, reserveOut: reserveOut, amp: amp,
+    amountOut: amountOut, feeBps: fee, netIn: netIn, amountIn: amountIn,
+    invariantD: D, spotPrice: spotPrice, effectivePrice: effectivePrice,
+    priceImpactPct: (1 - effectivePrice / spotPrice) * 100,
+    newReserveIn: newReserveIn, newReserveOut: newReserveOut
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (!Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -5486,6 +5549,31 @@ if (typeof document !== "undefined") {
           ", and the price impact against that spot is ≈ " + fmt(res.priceImpactPct, 4) + "%. Higher amplification trades closer to 1:1 while the pool stays balanced — and keeps pricing near par even if one token depegs, which is the design's known danger, not a safety feature. A stableswap swap model, not live pool data — not financial advice.";
         document.getElementById("sswap-out").value = fmt(res.out, 6);
         document.getElementById("sswap-spot").value = fmt(res.spotPrice, 6);
+      }
+    });
+
+    /* --- Stableswap exact-out swap model --- */
+    document.getElementById("ssxo-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = stableSwapExactOut(
+        document.getElementById("ssxo-rin").value,
+        document.getElementById("ssxo-rout").value,
+        document.getElementById("ssxo-amp").value,
+        document.getElementById("ssxo-aout").value,
+        document.getElementById("ssxo-fee").value
+      );
+      var out = document.getElementById("ssxo-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves, a positive amplification parameter and a positive target out below the whole output reserve, and a fee of 0–9999 basis points. A target at or above the whole output reserve is rejected, not quoted.";
+        document.getElementById("ssxo-ain").value = "";
+        document.getElementById("ssxo-spot").value = "";
+      } else {
+        out.textContent = "Model output: receiving exactly ≈ " + fmt(res.amountOut, 6) + " of the output token from a stableswap pool with amplification ≈ " + fmt(res.amp, 2) +
+          " needs ≈ " + fmt(res.amountIn, 6) + " of the input token in (≈ " + fmt(res.netIn, 6) + " after the fee is taken). The spot price before the trade is ≈ " + fmt(res.spotPrice, 6) +
+          " out per in (exactly 1 when the pool is balanced, whatever the amplification), the effective price across the whole trade is ≈ " + fmt(res.effectivePrice, 6) +
+          ", and the price impact against that spot is ≈ " + fmt(res.priceImpactPct, 4) + "%. The cost climbs steeply as the target approaches the whole output reserve — the curve approaches it asymptotically and never pays it all. A stableswap exact-out model, not live pool data — not financial advice.";
+        document.getElementById("ssxo-ain").value = fmt(res.amountIn, 6);
+        document.getElementById("ssxo-spot").value = fmt(res.spotPrice, 6);
       }
     });
 

@@ -1368,6 +1368,27 @@
         <button type="submit" class="btn primary">Model this stableswap trade</button>
         <p id="sswap-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="ssxo-calc">
+        <h3>59 · Stableswap exact-out swap model</h3>
+        <p>Tool 58 run backwards, for the trade you specify by what must come out — a payment to make, a debt to settle, a target holding — rather than by what goes in. The output side is set first and the same stableswap invariant is solved with the reserves' roles swapped to find the input reserve that satisfies it, then the fee is grossed back up, so feeding this tool's required input into tool 58 returns your target. The honest edges mirror tool 58's: a target at or above the whole output reserve is rejected, not quoted — the curve approaches the reserve asymptotically and never pays it all, and targets close to it cost explosively more than the spot price suggests (999 out of a balanced 1,000/1,000 pool at A = 100 needs ≈3,309 in, not ≈999). The required input is a difference of two near-equal reserves, so for dust targets its last digits carry the floating-point noise floor of the reserve scale itself. And near-par pricing assumes both tokens really are worth the same — on a depeg this tool prices the cost of draining the good side just as calmly as tool 58 prices selling into it. Educational model only — your reserves, amplification and target inputs; not live pool data, not a live quote, not financial advice.</p>
+        <label for="ssxo-rin">Reserve in (tokens)</label>
+        <input id="ssxo-rin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="ssxo-rout">Reserve out (tokens)</label>
+        <input id="ssxo-rout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="ssxo-amp">Amplification parameter A — higher trades closer to 1:1 while balanced</label>
+        <input id="ssxo-amp" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="ssxo-aout">Target amount out (tokens)</label>
+        <input id="ssxo-aout" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="ssxo-fee">Swap fee (basis points, 25 = 0.25%)</label>
+        <input id="ssxo-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="ssxo-ain">Amount in needed (model)</label>
+        <input id="ssxo-ain" readonly placeholder="—" autocomplete="off">
+        <label for="ssxo-spot">Spot price before the trade — out per in (model)</label>
+        <input id="ssxo-spot" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model this exact-out stableswap trade</button>
+        <p id="ssxo-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1395,6 +1416,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=71"></script>
+<script src="app.js?v=72"></script>
 </body>
 </html>
