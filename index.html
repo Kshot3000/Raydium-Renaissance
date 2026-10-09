@@ -1526,6 +1526,27 @@
         <button type="submit" class="btn primary">Size this stableswap trade</button>
         <p id="sis-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="cmp-calc">
+        <h3>67 · Curve comparison model</h3>
+        <p>Tools 1, 56 and 58 each price a trade on one curve family; this runs the same trade through all three at once, with every leg priced by its own tool, so the curves' shapes can be compared as numbers. On balanced 1,000/1,000 reserves with 100 in at a 25 bps tier, the constant-product curve pays ≈90.7024 out at ≈9.2976% price impact, the weighted curve at a 50% input weight pays exactly the same (at 50/50 the weighted curve is the product curve), and the stableswap curve at A = 100 pays ≈99.6506 out at ≈0.3494% impact — the stable curve defending par, priced honestly. The trap is stated on the tool: these are three different pools that happen to hold the same reserves, and each curve sets its own spot from them — the weighted spot carries the weight and the stable spot sits near par only while reserves are balanced. At an 80% input weight the weighted leg pays ≈316.3653 out, not because the curve is generous but because its spot is 4, not 1. So read each curve's spot before ranking payouts: the biggest payout can simply be the cheapest starting price, and price impact — measured against each curve's own spot — is the shape comparison. If one curve rejects the trade, the comparison rejects it too. Educational model only — your reserves, weight, amplification and trade; not live pool data, not a live quote, not financial advice.</p>
+        <label for="cmp-rin">Reserve in (tokens, same for all three pools)</label>
+        <input id="cmp-rin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="cmp-rout">Reserve out (tokens, same for all three pools)</label>
+        <input id="cmp-rout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="cmp-weight">Weighted pool: input weight (%)</label>
+        <input id="cmp-weight" inputmode="decimal" value="50" autocomplete="off">
+        <label for="cmp-amp">Stableswap pool: amplification A (e.g. 100)</label>
+        <input id="cmp-amp" inputmode="decimal" value="100" autocomplete="off">
+        <label for="cmp-ain">Amount in (tokens)</label>
+        <input id="cmp-ain" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="cmp-fee">Swap fee (basis points, 25 = 0.25%, same for all three)</label>
+        <input id="cmp-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="cmp-out">Largest amount out across the three curves (model)</label>
+        <input id="cmp-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Compare the three curves</button>
+        <p id="cmp-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1553,6 +1574,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=82"></script>
+<script src="app.js?v=83"></script>
 </body>
 </html>

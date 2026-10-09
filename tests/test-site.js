@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=82"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=83"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists sixty-six tools", readme.includes("sixty-six pool tools") || readme.includes("all sixty-six"));
+check("README lists sixty-seven tools", readme.includes("sixty-seven pool tools") || readme.includes("all sixty-seven"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts sixty-six tools and names the stableswap price-impact sizer",
-  appSrc.includes("plus sixty-six fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, and a\n   stableswap price-impact sizer.\n   These are educational MODELS"));
+check("app.js header counts sixty-seven tools and names the curve comparison model",
+  appSrc.includes("plus sixty-seven fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, and a curve\n   comparison model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -3824,6 +3824,108 @@ check("sis tool present in index.html", html.includes('id="sis-calc"') && html.i
 check("sis honesty: fee-floor and not-live labels", html.includes("A cap at or below the fee tier admits no trade") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers stableswap impact sizing", guide.includes("an impact cap is not a drain cap"));
 check("README lists tool 66", readme.includes("66. **Stableswap price-impact sizer**"));
+
+/* ---------- Tool 67: Curve comparison model (CMP) ---------- */
+/* Every leg is the source tool verbatim: tool 1's cpSwap (output
+   string parsed back, 9 dp flooring included), tool 56's
+   weightedSwap and tool 58's stableSwap. Headline vectors were
+   computed in a clean foreground prototype before being written. */
+const cmp = app.curveCompare("1000", "1000", "50", "100", "100", 25);
+check("CMP headline non-null", cmp !== null);
+near("CMP headline CP out", cmp.constantProduct.out, 90.70243237, 1e-9);
+near("CMP headline CP spot", cmp.constantProduct.spotPrice, 1, 1e-12);
+near("CMP headline CP impact", cmp.constantProduct.priceImpactPct, 9.29756763, 1e-6);
+near("CMP headline weighted out", cmp.weighted.out, 90.70243237099342, 1e-9);
+near("CMP 50/50 weighted leg is the CP leg", cmp.weighted.out, cmp.constantProduct.out, 1e-9);
+near("CMP headline weighted spot", cmp.weighted.spotPrice, 1, 1e-12);
+near("CMP headline stable out", cmp.stableswap.out, 99.65061433806079, 1e-9);
+near("CMP headline stable spot", cmp.stableswap.spotPrice, 1, 1e-12);
+near("CMP headline stable impact", cmp.stableswap.priceImpactPct, 0.3493856619392055, 1e-9);
+check("CMP headline best out is stableswap", cmp.bestOut === "stableswap");
+near("CMP headline best out amount", cmp.bestOutAmount, 99.65061433806079, 1e-9);
+check("CMP headline lowest impact is stableswap", cmp.lowestImpact === "stableswap");
+near("CMP headline spread", cmp.outSpread, 99.65061433806079 - 90.70243237, 1e-9);
+
+/* leg-for-leg equality with the source tools across a sweep */
+for (const [rin, rout, w, amp, ain, fee] of [
+  ["1000", "1000", "80", "100", "100", 25],
+  ["1000", "1000", "20", "100", "100", 25],
+  ["1000", "4000", "50", "100", "100", 25],
+  ["5000", "2500", "35", "100", "250", 10],
+  ["1000", "1000", "50", "1", "100", 25],
+  ["1000", "1000", "50", "5000", "100", 0],
+  ["2000", "500", "65", "20", "37.5", 100]
+]) {
+  const c = app.curveCompare(rin, rout, w, amp, ain, fee);
+  const cp1 = app.cpSwap(rin, rout, ain, fee);
+  const wt1 = app.weightedSwap(rin, rout, w, ain, fee);
+  const st1 = app.stableSwap(rin, rout, amp, ain, fee);
+  const tag = `CMP legs verbatim ${rin}/${rout} w${w} A${amp} in${ain} fee${fee}`;
+  check(tag + " non-null", c !== null && cp1 !== null && wt1 !== null && st1 !== null);
+  check(tag + " CP", c.constantProduct.out === Number(cp1.out) && c.constantProduct.spotPrice === cp1.spotPrice && c.constantProduct.priceImpactPct === cp1.priceImpactPct);
+  check(tag + " weighted", c.weighted.out === wt1.out && c.weighted.spotPrice === wt1.spotPrice && c.weighted.priceImpactPct === wt1.priceImpactPct);
+  check(tag + " stable", c.stableswap.out === st1.out && c.stableswap.spotPrice === st1.spotPrice && c.stableswap.priceImpactPct === st1.priceImpactPct);
+  check(tag + " bestOut consistent", c.bestOutAmount === Math.max(c.constantProduct.out, c.weighted.out, c.stableswap.out) && c[c.bestOut].out === c.bestOutAmount);
+  check(tag + " lowestImpact consistent", c.lowestImpactPct === Math.min(c.constantProduct.priceImpactPct, c.weighted.priceImpactPct, c.stableswap.priceImpactPct) && c[c.lowestImpact].priceImpactPct === c.lowestImpactPct);
+}
+
+/* the honesty trap: an 80% weight pays the most because its spot is 4 */
+const cmp80 = app.curveCompare("1000", "1000", "80", "100", "100", 25);
+near("CMP weight-80 weighted spot", cmp80.weighted.spotPrice, 4, 1e-9);
+near("CMP weight-80 weighted out", cmp80.weighted.out, 316.36527035523824, 1e-9);
+check("CMP weight-80 best out is weighted", cmp80.bestOut === "weighted");
+check("CMP weight-80 lowest impact is NOT the biggest payer", cmp80.lowestImpact === "stableswap" && cmp80.bestOut !== cmp80.lowestImpact);
+const cmp20 = app.curveCompare("1000", "1000", "20", "100", "100", 25);
+near("CMP weight-20 weighted spot", cmp20.weighted.spotPrice, 0.25, 1e-12);
+near("CMP weight-20 weighted out", cmp20.weighted.out, 23.4904220956106, 1e-9);
+check("CMP weight-20 best out is stableswap", cmp20.bestOut === "stableswap");
+
+/* parameter isolation: amp moves only the stable leg, weight only the weighted leg */
+const cmpA1 = app.curveCompare("1000", "1000", "50", "1", "100", 25);
+const cmpA5000 = app.curveCompare("1000", "1000", "50", "5000", "100", 25);
+check("CMP amp leaves CP and weighted legs untouched", cmpA1.constantProduct.out === cmp.constantProduct.out && cmpA1.weighted.out === cmp.weighted.out && cmpA5000.constantProduct.out === cmp.constantProduct.out);
+check("CMP stable out rises with amp at balanced reserves", cmpA1.stableswap.out < cmp.stableswap.out && cmp.stableswap.out < cmpA5000.stableswap.out);
+near("CMP amp-1 stable out", cmpA1.stableswap.out, 95.00061912364265, 1e-9);
+near("CMP amp-5000 stable out", cmpA5000.stableswap.out, 99.74799043868325, 1e-9);
+check("CMP weight leaves CP and stable legs untouched", cmp80.constantProduct.out === cmp.constantProduct.out && cmp80.stableswap.out === cmp.stableswap.out);
+
+/* zero fee, huge trade, dust (CP leg keeps tool 1's 9 dp flooring) */
+const cmpF0 = app.curveCompare("1000", "1000", "50", "100", "100", 0);
+near("CMP zero-fee CP out", cmpF0.constantProduct.out, 90.909090909, 1e-9);
+near("CMP zero-fee stable out", cmpF0.stableswap.out, 99.90011086475852, 1e-9);
+const cmpHuge = app.curveCompare("1000", "1000", "50", "100", "100000", 25);
+check("CMP huge trade priced on all curves", cmpHuge !== null && cmpHuge.constantProduct.priceImpactPct > 99 && cmpHuge.stableswap.priceImpactPct > 99 && cmpHuge.bestOut === "stableswap");
+const cmpDust = app.curveCompare("1000", "1000", "50", "100", "0.000001", 25);
+check("CMP dust CP leg floored by tool 1 verbatim", cmpDust.constantProduct.out === 0.000000996);
+near("CMP dust weighted out", cmpDust.weighted.out, 9.97499999004994e-7, 1e-15);
+
+/* rejections: blanks, junk, bad ranges, and any single leg rejecting */
+check("CMP rejects blank and junk", app.curveCompare("", "1000", "50", "100", "100", 25) === null &&
+  app.curveCompare("1000", "1000", "50", "100", "abc", 25) === null &&
+  app.curveCompare("1000", "1000", " ", "100", "100", 25) === null);
+check("CMP rejects non-positive inputs", app.curveCompare("0", "1000", "50", "100", "100", 25) === null &&
+  app.curveCompare("1000", "-5", "50", "100", "100", 25) === null &&
+  app.curveCompare("1000", "1000", "50", "100", "0", 25) === null &&
+  app.curveCompare("1000", "1000", "50", "0", "100", 25) === null);
+check("CMP rejects weight at the edges", app.curveCompare("1000", "1000", "0", "100", "100", 25) === null &&
+  app.curveCompare("1000", "1000", "100", "100", "100", 25) === null);
+check("CMP rejects bad fee", app.curveCompare("1000", "1000", "50", "100", "100", -1) === null &&
+  app.curveCompare("1000", "1000", "50", "100", "100", 10000) === null &&
+  app.curveCompare("1000", "1000", "50", "100", "100", 25.5) === null);
+check("CMP rejects inputs tool 1 cannot parse", app.curveCompare("1000", "1000", "50", "100", "0.0000000001", 25) === null &&
+  app.curveCompare("1e3", "1000", "50", "100", "100", 25) === null);
+check("CMP null when the CP leg alone rejects (fee floors the input to zero)",
+  app.cpSwap("1000", "1000", "0.000000001", 9999) === null &&
+  app.weightedSwap("1000", "1000", "50", "0.000000001", 9999) !== null &&
+  app.curveCompare("1000", "1000", "50", "100", "0.000000001", 9999) === null);
+check("CMP legs priced by the source tools", appSrc.includes("var cp = cpSwap(") && appSrc.includes("var wt = weightedSwap(") && appSrc.includes("var st = stableSwap("));
+check("all cmp controls labelled",
+  ["cmp-rin", "cmp-rout", "cmp-weight", "cmp-amp", "cmp-ain", "cmp-fee", "cmp-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("cmp tool present in index.html", html.includes('id="cmp-calc"') && html.includes('id="cmp-result"'));
+check("cmp honesty: own-spot and not-live labels", html.includes("each curve sets its own spot") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers curve comparison", guide.includes("Compare curves by their impact, not their payout"));
+check("README lists tool 67", readme.includes("67. **Curve comparison model**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
