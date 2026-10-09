@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=87"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=88"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -4099,7 +4099,8 @@ for (const [w, r, dep, your, tvl, fee, days] of [
     Math.abs(x.requiredPoolFeesPerDay - x.requiredFeesPerDay / (x.sharePct / 100)) < 1e-9);
 }
 /* The hurdle is NOT monotonic in the weight (hold minus LP, both move with w):
-   at 2x it peaks at 50% among round weights; at 4x the worst IL% sits near 30% */
+   at 2x it peaks at 50% among round weights; at 4x the worst IL% sits near a
+   39% weight (analytic argmin (3/ln4 - 1)/3 = 38.80%) */
 {
   const h = (w, r) => app.weightedRequiredVolume(w, r, "1000", "1000", "10000", 25, "30");
   near("WREQ hurdle at 10% weight, 2x", h("10", "2").feesNeeded, 28.2265, 1e-4);
@@ -4108,8 +4109,17 @@ for (const [w, r, dep, your, tvl, fee, days] of [
     h("50", "2").feesNeeded > h("10", "2").feesNeeded && h("50", "2").feesNeeded > h("90", "2").feesNeeded);
   near("WREQ 10% weight at 4x needs $151.3016 per $1,000 (Tool 68's figure)", h("10", "4").feesNeeded, 151.301645, 1e-6);
   near("WREQ hurdle at 90% weight, 4x", h("90", "4").feesNeeded, 217.7977, 1e-4);
-  check("WREQ worst IL% at 4x sits near a 30% weight, not at 50%",
-    h("30", "4").ilPct < h("50", "4").ilPct && Math.abs(h("30", "4").ilPct - -20.2254) < 1e-3);
+  near("WREQ IL% at a 30% weight, 4x (a value, NOT the worst)", h("30", "4").ilPct, -20.2254, 1e-3);
+  {
+    let worstW = null, worstIl = Infinity;
+    for (let w10 = 1; w10 < 1000; w10++) {
+      const r = h(String(w10 / 10), "4");
+      if (r.ilPct < worstIl) { worstIl = r.ilPct; worstW = w10 / 10; }
+    }
+    check("WREQ worst IL% at 4x sits near a 39% weight, not at 50%",
+      Math.abs(worstW - 38.8) < 0.2 && Math.abs(worstIl - -20.8698) < 1e-3 &&
+      worstIl < h("50", "4").ilPct && worstIl < h("30", "4").ilPct);
+  }
 }
 /* Mirror symmetry: (w, r) and (100-w, 1/r) carry the same IL% and the same
    hurdle as a share of hold value — the $ hurdle itself scales with hold value */

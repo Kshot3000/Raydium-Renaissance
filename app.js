@@ -4619,8 +4619,9 @@ function stableNetReturn(reserveAStr, reserveBStr, ampStr, priceBStr, sharePctSt
    weight, because it is hold minus LP and both sides move with the
    weight: at a 2x move the hurdle per $1,000 runs $28.2265 at a 10%
    weight, $85.7864 at 50%, $58.8989 at 80% and $33.9340 at 90%, and
-   at a 4x move the worst IL% sits near a 30% weight (-20.2254%),
-   not at 50% (-20%) — so a weighted LP cannot read the hurdle off
+   at a 4x move the worst IL% sits near a 39% weight (-20.8698% at
+   w = 38.8%, the analytic argmin (3/ln4 - 1)/3; -20.2254% is merely
+   the value AT a 30% weight), not at 50% (-20%) — so a weighted LP cannot read the hurdle off
    the 50/50 answer in either direction. The volume is a pool-wide
    total per day in the deposit's terms at a fee rate assumed to hold
    still — in a live pool volume, TVL, weights' values and price all
