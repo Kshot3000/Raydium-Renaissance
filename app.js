@@ -3246,13 +3246,23 @@ function feeCompounding(depositStr, aprPctStr, compoundsStr, yearsStr) {
    reserves but rebalances them at the external price; on each leg its
    advantage over the pool is (value of the pre-leg reserves at the new
    price) − (the pool's value at that price), which is Tool 27's own
-   holdValueInB − lpValueInB, so both legs here are Tool 27 verbatim:
-   up by a multiple m, then back by 1/m to exactly the start price.
-   The reserves after a full round trip are the starting reserves
-   again (k never changed and the price is home), so every identical
-   cycle costs exactly the same and the total is per-cycle × cycles.
-   Closed forms agree: the up leg is Rb·(√m − 1)² and the down leg
-   that divided by √m. Gross of fees — arbitrageurs in a live pool
+   holdValueInB − lpValueInB for each leg: up by a multiple m, then
+   back by 1/m to exactly the start price. The legs are EVALUATED in
+   the algebraically identical closed form below, not as that raw
+   difference, because the difference cancels catastrophically at
+   tiny excursions: hold and LP values are both position-sized, so
+   below roughly a 0.0001% move their difference quantises to whole
+   ulps of the position — on a 1e12 pool a 0.000001% excursion read
+   exactly 0 through the raw difference, where the true cost over
+   10,000 trips is ≈ 0.5 B. The reserves after a full round trip are
+   the starting reserves again (k never changed and the price is
+   home), so every identical cycle costs exactly the same and the
+   total is per-cycle × cycles. Closed forms: the up leg is
+   Rb·(√m − 1)² and the down leg that divided by √m, with √m − 1
+   formed as (move/100)/(√m + 1) — no near-equal subtraction, and
+   not (m − 1), whose inherited rounding is a 1e-8-relative error
+   on the step at a 0.000001% excursion.
+   Gross of fees — arbitrageurs in a live pool
    pay the swap fee, part of which reaches LPs and offsets some of
    this; the fee tools (3/13) estimate that offset separately. A real
    price path is many unequal steps, not identical round trips, and
@@ -3275,8 +3285,13 @@ function lvrRoundTrip(reserveAStr, reserveBStr, movePctStr, cyclesStr) {
   if (up === null) return null;
   var down = cpReservesAfterMove(up.newReserveA, up.newReserveB, 1 / m);
   if (down === null) return null;
-  var lvrUp = up.holdValueInB - up.lpValueInB;
-  var lvrDown = down.holdValueInB - down.lpValueInB;
+  var sqrtM = Math.sqrt(m);
+  /* step == √m − 1, formed as (move/100)/(√m + 1): no near-equal
+     subtraction, and not (m − 1) either — m's own rounding is a
+     1e-8-relative error on the step at a 0.000001% excursion. */
+  var step = (move / 100) / (sqrtM + 1);
+  var lvrUp = rb * step * step;
+  var lvrDown = lvrUp / sqrtM;
   var perCycle = lvrUp + lvrDown;
   var positionValue = ra * up.startPrice + rb;
   var result = {

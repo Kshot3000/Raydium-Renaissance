@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=62"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=63"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -2780,7 +2780,8 @@ near("LVR down leg is the up leg divided by sqrt m", lvrHead.lvrDownInB, lvrHead
 /* both legs are Tool 27 verbatim, and the up leg's share of the
    rebalancing value is exactly Tool 2's IL for the same move */
 const lvrUp27 = app.cpReservesAfterMove("1000", "1000", 1.1);
-check("LVR up leg is Tool 27 verbatim", lvrHead.lvrUpInB === lvrUp27.holdValueInB - lvrUp27.lpValueInB && lvrHead.topReserveA === lvrUp27.newReserveA);
+near("LVR up leg equals Tool 27's hold-minus-LP difference", lvrHead.lvrUpInB, lvrUp27.holdValueInB - lvrUp27.lpValueInB, 1e-9);
+check("LVR top reserves are Tool 27's", lvrHead.topReserveA === lvrUp27.newReserveA && lvrHead.topReserveB === lvrUp27.newReserveB);
 near("LVR up-leg IL pct matches Tool 2", lvrHead.upLegIlPct, -app.impermanentLoss(1.1).ilPct, 1e-9);
 check("LVR down-leg IL pct equals up-leg (m and 1/m are the same IL)", lvrHead.downLegIlPct === lvrHead.upLegIlPct);
 /* a round trip restores the starting reserves and value, while
@@ -2813,6 +2814,14 @@ for (const [ra, rb, mv, cy] of [[1000, 1000, 5, 7], [250, 4000, 33, 2], [10000, 
 }
 check("LVR cost rises with the excursion", app.lvrRoundTrip("1000", "1000", "20", "1").perCycleInB > lvrHead.perCycleInB &&
   lvrHead.perCycleInB > app.lvrRoundTrip("1000", "1000", "1", "1").perCycleInB);
+/* tiny excursions must not cancel to zero: the raw hold-minus-LP
+   difference returned exactly 0 for a 0.000001% wiggle on a 1e12
+   pool, where the true cost over 10000 trips is ≈ 0.5 B */
+const lvrTiny = app.lvrRoundTrip("1e12", "1e12", "0.000001", "10000");
+near("LVR tiny-excursion total on a 1e12 pool", lvrTiny.totalInB, 0.49999999625, 1e-9);
+check("LVR tiny excursion is not reported as free", lvrTiny.perCycleInB > 0 && lvrTiny.lvrDownInB > 0 && lvrTiny.lvrUpInB > lvrTiny.lvrDownInB);
+const lvrDust = app.lvrRoundTrip("1000", "1000", "0.000001", "1");
+near("LVR dust-scale per-cycle", lvrDust.perCycleInB, 4.9999999625e-14, 1e-20);
 /* rejections */
 check("LVR rejects blank / junk", app.lvrRoundTrip("", "1000", "10", "1") === null && app.lvrRoundTrip("1000", "1000", "abc", "1") === null && app.lvrRoundTrip("1000", "1000", "10", "") === null);
 check("LVR rejects non-positive reserves", app.lvrRoundTrip("0", "1000", "10", "1") === null && app.lvrRoundTrip("1000", "-5", "10", "1") === null);
