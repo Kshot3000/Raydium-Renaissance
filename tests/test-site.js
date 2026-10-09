@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=74"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=75"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -3372,6 +3372,7 @@ check("all depeg controls labelled",
     .every(id => html.includes(`for="${id}"`)));
 check("depeg tool present in index.html", html.includes('id="depeg-calc"') && html.includes('id="depeg-result"'));
 check("depeg honesty: amplification danger and not-live labels", html.includes("A higher amplification is more dangerous on a depeg, not safer") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("depeg zero loss renders as 0, not -0 (handler negates via 0 - loss)", appSrc.includes("fmt(0 - res.lossA, 6)") && appSrc.includes("fmt(0 - res.lossPct, 4)") && !appSrc.includes("fmt(-res.lossA"));
 check("guide covers stableswap depeg loss", guide.includes("On a depeg, a higher amplification loses more, not less"));
 check("README lists tool 61", readme.includes("61. **Stableswap depeg-loss calculator**"));
 

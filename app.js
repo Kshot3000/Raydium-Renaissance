@@ -5788,10 +5788,12 @@ if (typeof document !== "undefined") {
         document.getElementById("depeg-lpval").value = "";
         document.getElementById("depeg-holdval").value = "";
       } else {
+        /* 0 - loss, not -loss: at the peg the loss is exactly 0 and a
+           plain negation would render it as "-0.000000". */
         out.textContent = "Model output: arbitrage rebalances the pool until its own price of token B matches ≈ " + fmt(res.priceB, 6) +
           " A, leaving ≈ " + fmt(res.newReserveA, 6) + " A and ≈ " + fmt(res.newReserveB, 6) + " B (token A changes by ≈ " + fmt(res.aChange, 6) +
           ", token B by ≈ " + fmt(res.bChange, 6) + "). Valued at that external price, holding the starting reserves would be worth ≈ " + fmt(res.holdValueA, 6) +
-          " A; the LP position is worth ≈ " + fmt(res.lpValueA, 6) + " A — a depeg loss of ≈ " + fmt(-res.lossA, 6) + " A (≈ " + fmt(-res.lossPct, 4) +
+          " A; the LP position is worth ≈ " + fmt(res.lpValueA, 6) + " A — a depeg loss of ≈ " + fmt(0 - res.lossA, 6) + " A (≈ " + fmt(0 - res.lossPct, 4) +
           "% vs holding, before any fees earned). The loss grows with the amplification, because a higher A defends par longer. A stableswap depeg-loss model, not live pool data — not financial advice.";
         document.getElementById("depeg-lpval").value = fmt(res.lpValueA, 6);
         document.getElementById("depeg-holdval").value = fmt(res.holdValueA, 6);
