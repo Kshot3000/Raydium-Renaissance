@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=57"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=58"));
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
 
 /* catalogue links — all verified HTTP 200 at launch (2026-10-06) */
@@ -1355,7 +1355,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists forty-nine tools", readme.includes("forty-nine pool tools") || readme.includes("all forty-nine"));
+check("README lists fifty tools", readme.includes("fifty pool tools") || readme.includes("all fifty"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -1998,8 +1998,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts forty-nine tools and names the CLMM single-sided zap-out planner to token B",
-  appSrc.includes("plus forty-nine fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, and a CLMM single-sided zap-out\n   planner to token B.\n   These are educational MODELS"));
+check("app.js header counts fifty tools and names the single-sided zap-in planner from token B",
+  appSrc.includes("plus fifty fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, and a single-sided zap-in planner\n   from token B.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -2587,6 +2587,58 @@ check("all czob controls labelled", ["czob-ra", "czob-rb", "czob-bps", "czob-l",
 check("czob tool present in index.html", html.includes('id="czob-calc"') && html.includes('id="czob-result"'));
 check("czob honesty: separate models and not-live labels", html.includes("Tool 34's exit mirror") && html.includes("modelled separately") && html.includes("not live pool state") && html.includes("not financial advice"));
 check("guide covers CLMM zap-out to token B", guide.includes("Leaving a CLMM position into token B"));
+
+/* ---------- Tool 50: single-sided zap-in planner from token B (ZAPB) ---------- */
+const zapb1 = app.zapInPlanB("1000", "1000", "100", 25);
+near("ZAPB headline swap split", zapb1.swapIn, 48.87278054410468, 1e-9);
+near("ZAPB headline swap out", zapb1.swapOut, 46.48445365195494, 1e-9);
+check("ZAPB deposit A is the swap out", zapb1.depositA === zapb1.swapOut);
+near("ZAPB headline deposit B", zapb1.depositB, 51.12721945589532, 1e-9);
+near("ZAPB headline share pct", zapb1.sharePct, 4.648445365195494, 1e-9);
+near("ZAPB headline final A reserve returns to start", zapb1.finalReserveA, 1000, 1e-9);
+/* the balanced headline is Tool 19's own plan mirrored */
+const zapA1 = app.zapInPlan("1000", "1000", "100", 25);
+near("ZAPB mirrors Tool 19 swap split", zapb1.swapIn, zapA1.swapIn, 1e-9);
+near("ZAPB mirrors Tool 19 swap out", zapb1.swapOut, zapA1.swapOut, 1e-9);
+near("ZAPB mirrors Tool 19 share", zapb1.sharePct, zapA1.sharePct, 1e-9);
+near("ZAPB deposit B = Tool 19 deposit A", zapb1.depositB, zapA1.depositA, 1e-9);
+/* zero fee: split is the closed form -Rb + sqrt(Rb(Rb+Y)) */
+const zapb0 = app.zapInPlanB("1000", "1000", "100", 0);
+near("ZAPB zero-fee swap split", zapb0.swapIn, 48.80884817015158, 1e-9);
+near("ZAPB zero-fee swap split = closed form", zapb0.swapIn, -1000 + Math.sqrt(1000 * 1100), 1e-9);
+near("ZAPB zero-fee swap out", zapb0.swapOut, 46.53741075440771, 1e-9);
+check("ZAPB larger fee swaps more", zapb1.swapIn > zapb0.swapIn && app.zapInPlanB("1000", "1000", "100", 100).swapIn > zapb1.swapIn);
+/* asymmetric pool vector, pre-verified against a clean prototype */
+const zapbAsym = app.zapInPlanB("1000", "500", "100", 25);
+near("ZAPB asym swap split", zapbAsym.swapIn, 47.78749375758538, 1e-9);
+near("ZAPB asym swap out", zapbAsym.swapOut, 87.03817430490466, 1e-9);
+near("ZAPB asym deposit B", zapbAsym.depositB, 52.21250624241462, 1e-9);
+near("ZAPB asym share pct", zapbAsym.sharePct, 8.703817430490465, 1e-9);
+/* composition sweep: invariants + the split uses the whole holding */
+for (const [ra, rb, y, f] of [[1000, 1000, 100, 25], [1000, 500, 100, 25], [500, 2000, 50, 100], [2000, 500, 10, 5], [100, 4000, 2000, 25], [10000, 10000, 1, 25], [1000, 1000, 100, 0]]) {
+  const z = app.zapInPlanB(String(ra), String(rb), String(y), f);
+  const label = ra + "/" + rb + " Y" + y + " @" + f;
+  check("ZAPB " + label + " settles", z !== null && z.swapIn > 0 && z.swapIn < z.amountB);
+  near("ZAPB " + label + " final A reserve returns to start", z.finalReserveA, z.reserveA, Math.max(1e-9, ra * 1e-12));
+  near("ZAPB " + label + " deposit ratio matches post-swap pool ratio", z.depositA / z.depositB, z.postSwapReserveA / z.postSwapReserveB, 1e-9);
+  near("ZAPB " + label + " share same on both sides", z.depositA / z.finalReserveA * 100, z.sharePct, 1e-9);
+  check("ZAPB " + label + " split uses the whole holding", Math.abs(z.swapIn + z.depositB - z.amountB) < 1e-9 && z.depositA === z.swapOut);
+}
+near("ZAPB swap leg matches Tool 1", Number(app.cpSwap("1000", "1000", zapb1.swapIn.toFixed(9), 25).out), zapb1.swapOut, 1e-4);
+near("ZAPB deposit leg matches Tool 5", Number(app.depositPlan(zapb1.postSwapReserveA.toFixed(6), zapb1.postSwapReserveB.toFixed(6), zapb1.depositA.toFixed(6)).requiredB), zapb1.depositB, 1e-3);
+/* cancellation regression: the naive root was ~2% off on a deep pool
+   with a tiny holding, for Tool 19 and for this mirror alike */
+near("ZAPB deep-pool tiny-holding split is the stable root", app.zapInPlanB("1000000000000", "1000000000000", "0.001", 25).swapIn, 0.0005006257822277846, 1e-12);
+near("ZAP deep-pool tiny-holding split is the stable root (Tool 19 fix)", app.zapInPlan("1000000000000", "1000000000000", "0.001", 25).swapIn, 0.0005006257822277846, 1e-12);
+near("ZAP deep-pool split is the stable root (Tool 19 fix)", app.zapInPlan("1000000000000", "1000000000000", "1", 25).swapIn, 0.5006257822276599, 1e-12);
+check("ZAPB rejects zero / negative reserves and holding", app.zapInPlanB("0", "1000", "100", 25) === null && app.zapInPlanB("1000", "0", "100", 25) === null && app.zapInPlanB("1000", "1000", "0", 25) === null && app.zapInPlanB("1000", "1000", "-5", 25) === null);
+check("ZAPB rejects bad fees", app.zapInPlanB("1000", "1000", "100", -1) === null && app.zapInPlanB("1000", "1000", "100", 10000) === null && app.zapInPlanB("1000", "1000", "100", 2.5) === null);
+check("ZAPB rejects junk / empty", app.zapInPlanB("abc", "1000", "100", 25) === null && app.zapInPlanB("1000", "1000", "", 25) === null && app.zapInPlanB("", "1000", "100", 25) === null && app.zapInPlanB("1000", "1000", "100", "") === null);
+check("all zapb controls labelled", ["zapb-ra", "zapb-rb", "zapb-bb", "zapb-fee", "zapb-swap", "zapb-depa"].every(id => html.includes(`for="${id}"`)));
+check("zapb tool present in index.html", html.includes('id="zapb-calc"') && html.includes('id="zapb-result"'));
+check("zapb honesty: B-side entry and not-live labels", html.includes("Tool 19's entry mirror") && html.includes("wallet holding only token B") && html.includes("not live pool state") && html.includes("not financial advice"));
+check("guide covers zap-in from token B", guide.includes("Entering a constant-product pool from the B side"));
+check("README lists tool 49 and tool 50", readme.includes("49. **CLMM single-sided zap-out planner to token B**") && readme.includes("50. **Single-sided zap-in planner from token B**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus forty-nine fully
+/* Raydium Renaissance hub logic: project filtering plus fifty fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -26,8 +26,9 @@
    swap model, a CLMM two-range exact-out swap model, a
    CLMM three-range swap model, a CLMM three-range
    exact-out swap model, a CLMM single-sided zap-in
-   planner from token B, and a CLMM single-sided zap-out
-   planner to token B.
+   planner from token B, a CLMM single-sided zap-out
+   planner to token B, and a single-sided zap-in planner
+   from token B.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -840,7 +841,12 @@ function zapInPlan(reserveAStr, reserveBStr, amountAStr, feeBps) {
   if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
   var k = 1 - fee / 10000;
   var a = k * k, b = ra * (k + 1), c = -ra * x;
-  var s = (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a);
+  /* Stable product-form root: the naive (-b + sqrt(disc)) / (2a)
+     subtracts two nearly-equal numbers when the holding is tiny
+     against a deep pool and returned splits ~2% off there (0.00049073
+     instead of 0.00050063 on a 1e12/1e12 pool with a 0.001 holding);
+     -2c / (b + sqrt(disc)) is the same root with no cancellation. */
+  var s = (-2 * c) / (b + Math.sqrt(b * b - 4 * a * c));
   if (!Number.isFinite(s) || s <= 0 || s >= x) return null;
   var netIn = s * k;
   var amountOut = rb * netIn / (ra + netIn);
@@ -856,6 +862,58 @@ function zapInPlan(reserveAStr, reserveBStr, amountAStr, feeBps) {
     postSwapReserveA: postSwapReserveA, postSwapReserveB: postSwapReserveB,
     finalReserveA: finalReserveA, finalReserveB: finalReserveB,
     sharePct: depositA / finalReserveA * 100,
+    spotPrice: rb / ra
+  };
+}
+
+/* ---------- 50 · Single-sided zap-in planner from token B (constant-product pools) ---------- */
+/* Tool 19's entry mirror. Tool 19 zaps in from a wallet holding only
+   token A, but a wallet holding only token B — the stablecoin side of
+   the pair, say — needs the same entry run the other way: swap part
+   of the B for A in the same pool, then deposit the B that remains
+   together with all the A the swap returned. The split is the one
+   where the deposit matches the pool's POST-swap ratio: with k the
+   after-fee fraction it solves k^2 t^2 + Rb(k+1) t - Rb*Y = 0 for the
+   B amount t to swap — Tool 19's quadratic with the reserves swapped
+   — taken in the cancellation-free product form, for the reason
+   Tool 19's own comment gives. One honest invariant, mirrored: the A
+   comes straight back in as the deposit, so the pool's A reserve ends
+   where it started. On a balanced pool the plan is Tool 19's own
+   numbers mirrored (100 B at 25 bps on 1000/1000: swap 48.8728 B for
+   46.4845 A, deposit 51.1272 B with that A, share 4.6484%). Model
+   only — one pool, no routing, no price movement between the swap
+   and the deposit (a real zap is a single transaction for exactly
+   that reason), and the reserves are your inputs, not live pool
+   state. CLMM entries are range-based and differ (Tools 33 and 48).
+   Not financial advice. */
+function zapInPlanB(reserveAStr, reserveBStr, amountBStr, feeBps) {
+  var required = [reserveAStr, reserveBStr, amountBStr, feeBps];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var ra = Number(reserveAStr), rb = Number(reserveBStr);
+  var y = Number(amountBStr), fee = Number(feeBps);
+  if (![ra, rb, y, fee].every(Number.isFinite)) return null;
+  if (ra <= 0 || rb <= 0 || y <= 0) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var k = 1 - fee / 10000;
+  var a = k * k, b = rb * (k + 1), c = -rb * y;
+  var t = (-2 * c) / (b + Math.sqrt(b * b - 4 * a * c));
+  if (!Number.isFinite(t) || t <= 0 || t >= y) return null;
+  var netIn = t * k;
+  var amountOut = ra * netIn / (rb + netIn);
+  var depositB = y - t, depositA = amountOut;
+  if (!(amountOut > 0) || !(depositB > 0)) return null;
+  var postSwapReserveA = ra - amountOut, postSwapReserveB = rb + netIn;
+  var finalReserveA = postSwapReserveA + depositA;
+  var finalReserveB = postSwapReserveB + depositB;
+  return {
+    reserveA: ra, reserveB: rb, amountB: y, feeBps: fee,
+    swapIn: t, netIn: netIn, swapOut: amountOut,
+    depositA: depositA, depositB: depositB,
+    postSwapReserveA: postSwapReserveA, postSwapReserveB: postSwapReserveB,
+    finalReserveA: finalReserveA, finalReserveB: finalReserveB,
+    sharePct: depositB / finalReserveB * 100,
     spotPrice: rb / ra
   };
 }
@@ -3051,7 +3109,7 @@ function clmmTripleSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amou
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -3551,6 +3609,31 @@ if (typeof document !== "undefined") {
           " B (the B reserve returns to what it was — the swap's B comes straight back as the deposit). A single-sided entry model in one pool, not a live Raydium quote — no routing or price movement between the two steps is modelled, and CLMM entries are range-based and differ.";
         document.getElementById("zap-swap").value = fmt(res.swapIn, 6);
         document.getElementById("zap-depb").value = fmt(res.depositB, 6);
+      }
+    });
+
+    /* --- single-sided zap-in planner from token B --- */
+    document.getElementById("zapb-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = zapInPlanB(
+        document.getElementById("zapb-ra").value,
+        document.getElementById("zapb-rb").value,
+        document.getElementById("zapb-bb").value,
+        document.getElementById("zapb-fee").value
+      );
+      var out = document.getElementById("zapb-result");
+      if (res === null) {
+        out.textContent = "Enter positive pool reserves for both tokens, a positive amount of token B you hold, and a fee in basis points (25 = 0.25%).";
+        document.getElementById("zapb-swap").value = "";
+        document.getElementById("zapb-depa").value = "";
+      } else {
+        out.textContent = "Model output: swap ≈ " + fmt(res.swapIn, 6) + " of token B for ≈ " + fmt(res.swapOut, 6) +
+          " of token A in the same pool, then deposit the remaining ≈ " + fmt(res.depositB, 6) + " B together with that ≈ " +
+          fmt(res.depositA, 6) + " A — the split the pool's post-swap ratio requires, so nothing is left over. Your share of the pool would be ≈ " +
+          fmt(res.sharePct, 4) + "%, with model reserves after both steps of " + fmt(res.finalReserveA, 2) + " A / " + fmt(res.finalReserveB, 2) +
+          " B (the A reserve returns to what it was — the swap's A comes straight back as the deposit). A single-sided entry model in one pool, not a live Raydium quote — no routing or price movement between the two steps is modelled, and CLMM entries are range-based and differ.";
+        document.getElementById("zapb-swap").value = fmt(res.swapIn, 6);
+        document.getElementById("zapb-depa").value = fmt(res.depositA, 6);
       }
     });
 
