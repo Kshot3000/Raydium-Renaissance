@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=102"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=103"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1357,7 +1357,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists eighty-two tools", readme.includes("eighty-two pool tools") || readme.includes("all eighty-two"));
+check("README lists eighty-three tools", readme.includes("eighty-three pool tools") || readme.includes("all eighty-three"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2000,8 +2000,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts eighty-two tools and names the CLMM three-range price-impact sizer",
-  appSrc.includes("plus eighty-two fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, a curve\n   comparison exact-out model, a weighted-pool\n   IL tolerance band, a stableswap IL\n   tolerance band, a CLMM arbitrage model, a CLMM\n   price-impact sizer, a CLMM two-range arbitrage\n   model, a CLMM three-range arbitrage model, a CLMM\n   two-range price-impact sizer, and a CLMM\n   three-range price-impact sizer.\n   These are educational MODELS"));
+check("app.js header counts eighty-three tools and names the CLMM four-range swap model",
+  appSrc.includes("plus eighty-three fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, a curve\n   comparison exact-out model, a weighted-pool\n   IL tolerance band, a stableswap IL\n   tolerance band, a CLMM arbitrage model, a CLMM\n   price-impact sizer, a CLMM two-range arbitrage\n   model, a CLMM three-range arbitrage model, a CLMM\n   two-range price-impact sizer, a CLMM\n   three-range price-impact sizer, and a CLMM\n   four-range swap model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5106,7 +5106,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v101", html.includes("app.js?v=102"));
+check("app.js cache key bumped to v103", html.includes("app.js?v=103"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -5331,6 +5331,100 @@ check("tcis handler wired to its own form", appSrc.includes('getElementById("tci
 check("tcis honesty: third wall, fee floor and not-live labels", html.includes("emptying all three ranges costs ≈64.6447% impact at zero fee") && html.includes("a cap at or below the fee tier admits no trade at all") && html.includes("not live pool data, not a live quote, not financial advice"));
 check("guide covers CLMM three-range impact sizing", guide.includes("size the trade across the third range too"));
 check("README lists tool 82", readme.includes("82. **CLMM three-range price-impact sizer**"));
+
+/* ---------- Tool 83: CLMM four-range swap model (QSWAP) ---------- */
+const QSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; ranges chain x0.8 down / x1.25 up
+const qOuter = d => d === "ab" ? ["0.64", "0.512", "0.4096"] : ["1.5625", "1.953125", "2.44140625"];
+function qswap(ain, fee, dir, l4) {
+  const o = qOuter(dir);
+  return app.clmmQuadSwap(QSWAP_L, "0.8", "1.25", "1", String(ain), fee, dir, QSWAP_L, o[0], QSWAP_L, o[1], l4 || QSWAP_L, o[2]);
+}
+function tswap(ain, fee, dir) {
+  const o = qOuter(dir);
+  return app.clmmTripleSwap(QSWAP_L, "0.8", "1.25", "1", String(ain), fee, dir, QSWAP_L, o[0], QSWAP_L, o[1]);
+}
+/* a swap that never fills the third range is tool 46 verbatim */
+{
+  const q1 = qswap(10, 25, "ab"), t1 = tswap(10, 25, "ab");
+  check("QSWAP small swap does not enter the fourth range", q1 !== null && q1.enteredFourth === false && q1.hitFourthBoundary === false && q1.leg4UsedIn === 0 && q1.leg4Out === 0);
+  check("QSWAP small swap equals Tool 46 field by field", q1.amountOut === t1.amountOut && q1.usedIn === t1.usedIn && q1.newPrice === t1.newPrice && q1.feePaid === t1.feePaid && q1.leg3Out === t1.leg3Out);
+  const q2 = qswap(300, 25, "ab"), t2 = tswap(300, 25, "ab");
+  check("QSWAP third-range-only swap equals Tool 46 field by field", q2 !== null && q2.enteredThird === true && q2.enteredFourth === false && q2.amountOut === t2.amountOut && q2.usedIn === t2.usedIn && q2.newPrice === t2.newPrice);
+}
+/* headline: 500 in at zero fee crosses into the fourth range */
+{
+  const h = qswap(500, 0, "ab");
+  check("QSWAP headline enters the fourth range without capping", h !== null && h.enteredFourth === true && h.hitFourthBoundary === false);
+  near("QSWAP headline amount out", h.amountOut, 327.25424859373675, 1e-9);
+  near("QSWAP headline new price", h.newPrice, 0.4283813728906052, 1e-9);
+  near("QSWAP headline leg 4 in", h.leg4UsedIn, 123.44235253127368, 1e-9);
+  near("QSWAP headline leg 4 out", h.leg4Out, 57.81152949374527, 1e-9);
+  near("QSWAP headline impact", h.priceImpactPct, 34.54915028125265, 1e-9);
+  check("QSWAP headline uses the whole input", h.usedIn === 500 && h.unfilledIn === 0);
+  const hf = qswap(500, 25, "ab");
+  near("QSWAP fee-bearing headline amount out", hf.amountOut, 326.7183089711595, 1e-9);
+  near("QSWAP fee is the tier's share of the used input across all four legs", hf.feePaid, 1.25, 1e-9);
+  const m = qswap(500, 0, "ba");
+  check("QSWAP mirror pays the same amount out", m !== null && Math.abs(m.amountOut - h.amountOut) < 1e-9 && Math.abs(m.newPrice - 1 / h.newPrice) < 1e-9);
+}
+/* quad-cap: a huge input pays exactly the four holdings summed */
+{
+  const c = qswap(100000, 0, "ab");
+  check("QSWAP quad-cap hits the fourth boundary", c !== null && c.hitFourthBoundary === true && c.enteredFourth === true);
+  near("QSWAP quad-cap pays the four holdings summed", c.amountOut, 340.99689437998484, 1e-9);
+  near("QSWAP quad-cap used in", c.usedIn, 532.8076474687261, 1e-9);
+  near("QSWAP quad-cap new price is the fourth edge", c.newPrice, 0.4096, 1e-12);
+  near("QSWAP quad-cap impact is exactly 36%", c.priceImpactPct, 36, 1e-9);
+  check("QSWAP quad-cap leaves the rest unfilled", c.unfilledIn > 99000);
+}
+/* fourth-range depth moves the fill, not the reach */
+{
+  const thin = qswap(500, 0, "ab", String(947.2135954999577 / 10));
+  check("QSWAP thin fourth range caps", thin !== null && thin.hitFourthBoundary === true);
+  near("QSWAP thin fourth range pays a tenth of its holding", thin.leg4Out, 7.155417527999324, 1e-9);
+  const deep = qswap(500, 0, "ab", String(947.2135954999577 * 10));
+  check("QSWAP deep fourth range fills inside", deep !== null && deep.hitFourthBoundary === false && deep.amountOut > 327.25424859373675);
+  near("QSWAP deep fourth range amount out", deep.amountOut, 332.0612822584264, 1e-9);
+}
+/* composition sweep: legs conserve, fee identity, first three legs are Tool 46's */
+{
+  let ok = true;
+  for (const [ain, fee, dir] of [[50, 0, "ab"], [200, 25, "ab"], [450, 100, "ab"], [500, 0, "ba"], [700, 25, "ba"], [123.456, 5, "ab"], [1000, 25, "ab"]]) {
+    const r = qswap(ain, fee, dir), t3 = tswap(ain, fee, dir);
+    if (!r || !t3) { ok = false; break; }
+    if (Math.abs(r.leg1UsedIn + r.leg2UsedIn + r.leg3UsedIn + r.leg4UsedIn - r.usedIn) > 1e-6) ok = false;
+    if (Math.abs(r.leg1Out + r.leg2Out + r.leg3Out + r.leg4Out - r.amountOut) > 1e-6) ok = false;
+    if (Math.abs(r.feePaid - r.usedIn * fee / 10000) > 1e-6) ok = false;
+    if (Math.abs(r.usedIn + r.unfilledIn - r.amountIn) > 1e-9) ok = false;
+    if (r.leg1Out !== t3.leg1Out || r.leg2Out !== t3.leg2Out || r.leg3Out !== t3.leg3Out) ok = false;
+  }
+  check("QSWAP composes Tool 46 across a 7-combo sweep", ok);
+}
+/* a dust remainder into a deep fourth range settles instead of rejecting */
+{
+  const d = app.clmmQuadSwap(QSWAP_L, "0.8", "1.25", "1", "376.5576484687263", 0, "ab", QSWAP_L, "0.64", QSWAP_L, "0.512", "1000000000000", "0.4096");
+  check("QSWAP dust remainder into a deep fourth range settles", d !== null && d.enteredFourth === true && d.leg4UsedIn > 0 && d.leg4Out > 0);
+}
+/* rejections */
+check("QSWAP rejects bad inputs", [
+  () => app.clmmQuadSwap("", "0.8", "1.25", "1", "500", 0, "ab", QSWAP_L, "0.64", QSWAP_L, "0.512", QSWAP_L, "0.4096"),
+  () => app.clmmQuadSwap(QSWAP_L, "0.8", "1.25", "1", "500", 0, "ab", QSWAP_L, "0.64", QSWAP_L, "0.512", "0", "0.4096"),
+  () => app.clmmQuadSwap(QSWAP_L, "0.8", "1.25", "1", "500", 0, "ab", QSWAP_L, "0.64", QSWAP_L, "0.512", QSWAP_L, "0.512"),
+  () => app.clmmQuadSwap(QSWAP_L, "0.8", "1.25", "1", "500", 0, "ab", QSWAP_L, "0.64", QSWAP_L, "0.512", QSWAP_L, "0.6"),
+  () => app.clmmQuadSwap(QSWAP_L, "0.8", "1.25", "1", "500", 0, "ba", QSWAP_L, "1.5625", QSWAP_L, "1.953125", QSWAP_L, "1.8"),
+  () => app.clmmQuadSwap(QSWAP_L, "0.8", "1.25", "1", "500", 0, "ba", QSWAP_L, "1.5625", QSWAP_L, "1.953125", QSWAP_L, "1.953125"),
+  () => app.clmmQuadSwap(QSWAP_L, "0.8", "1.25", "1", "500", 0, "xx", QSWAP_L, "0.64", QSWAP_L, "0.512", QSWAP_L, "0.4096"),
+  () => app.clmmQuadSwap(QSWAP_L, "0.8", "1.25", "1", "500", 0, "ab", QSWAP_L, "0.64", QSWAP_L, "0.512", QSWAP_L, "")
+].every(fn => fn() === null));
+check("QSWAP composes Tool 46 in source", appSrc.includes("function clmmQuadSwap") && appSrc.includes("clmmTripleSwap(liquidityStr, lowerStr, upperStr, priceStr, amountInStr, feeBps, direction, secondLiquidityStr, secondOuterStr, thirdLiquidityStr, thirdOuterStr)"));
+check("all qswap controls labelled",
+  ["qswap-liq", "qswap-lower", "qswap-upper", "qswap-price", "qswap-dir", "qswap-ain", "qswap-fee", "qswap-liq2", "qswap-outer", "qswap-liq3", "qswap-outer3", "qswap-liq4", "qswap-outer4", "qswap-out", "qswap-newprice", "qswap-used"]
+    .every(id => html.includes(`for="${id}"`)));
+check("qswap tool present in index.html", html.includes('id="qswap-calc"') && html.includes('id="qswap-result"'));
+check("qswap handler wired to its own form", appSrc.includes('getElementById("qswap-calc")') && appSrc.includes('getElementById("qswap-result")'));
+check("qswap honesty: fourth wall and not-live labels", html.includes("The fourth range is a wall too") && html.includes("continue into a fifth range, a sixth") && html.includes("not a live quote, not financial advice"));
+check("guide covers CLMM four-range swaps", guide.includes("price the fourth range too"));
+check("README lists tool 83", readme.includes("83. **CLMM four-range swap model**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

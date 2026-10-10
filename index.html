@@ -1894,6 +1894,48 @@
         <button type="submit" class="btn primary">Size the trade at my cap across all three ranges</button>
         <p id="tcis-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="qswap-calc">
+        <h3>83 · CLMM four-range swap model</h3>
+        <p>Tool 46 stops a CLMM swap at the third range's outer edge and leaves the rest unfilled, because what happens next depends on a fourth range's liquidity, which it refused to invent. This model lets you supply that fourth range too: enter the active range (its liquidity L, its bounds, the current price), your amount in and direction, then the second, third and fourth ranges' liquidities and outer edges — the ranges chain by construction, each sharing the previous range's edge, so paying token A the ranges run downward from the active range and paying token B upward. If the swap never fills the third range, the fourth is never entered and the answer is exactly tool 46's. If it crosses the third wall, the remainder walks the fourth range's own curve from the third edge, under the same maths and the same fee tier — so the total fee is still exactly the tier's share of the input actually used. The fourth range is a wall too: fill it as well and the rest is again unfilled, not absorbed — a real pool would continue into a fifth range, a sixth, at liquidity that usually keeps thinning the further price walks from where it started. Four ranges at four constant L values only — a real pool's liquidity varies tick by tick. Educational model only — your inputs, not live pool state; not a live quote, not financial advice.</p>
+        <label for="qswap-liq">Active range liquidity L (model — tool 8 reports it)</label>
+        <input id="qswap-liq" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="qswap-lower">Active range lower price (token B per token A)</label>
+        <input id="qswap-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="qswap-upper">Active range upper price (token B per token A)</label>
+        <input id="qswap-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="qswap-price">Current price (token B per token A)</label>
+        <input id="qswap-price" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="qswap-dir">Direction</label>
+        <select id="qswap-dir">
+          <option value="ab">Pay token A, receive token B (price falls)</option>
+          <option value="ba">Pay token B, receive token A (price rises)</option>
+        </select>
+        <label for="qswap-ain">Amount in</label>
+        <input id="qswap-ain" inputmode="decimal" placeholder="e.g. 500" autocomplete="off">
+        <label for="qswap-fee">Fee, basis points (25 = 0.25%)</label>
+        <input id="qswap-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="qswap-liq2">Second range liquidity L (model)</label>
+        <input id="qswap-liq2" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="qswap-outer">Second range outer edge price (beyond the shared edge, on the side the price walks toward)</label>
+        <input id="qswap-outer" inputmode="decimal" placeholder="e.g. 0.64 paying A, 1.5625 paying B" autocomplete="off">
+        <label for="qswap-liq3">Third range liquidity L (model)</label>
+        <input id="qswap-liq3" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="qswap-outer3">Third range outer edge price (beyond the second range's outer edge, on the same side)</label>
+        <input id="qswap-outer3" inputmode="decimal" placeholder="e.g. 0.512 paying A, 1.953125 paying B" autocomplete="off">
+        <label for="qswap-liq4">Fourth range liquidity L (model)</label>
+        <input id="qswap-liq4" inputmode="decimal" placeholder="e.g. 947.2136" autocomplete="off">
+        <label for="qswap-outer4">Fourth range outer edge price (beyond the third range's outer edge, on the same side)</label>
+        <input id="qswap-outer4" inputmode="decimal" placeholder="e.g. 0.4096 paying A, 2.44140625 paying B" autocomplete="off">
+        <label for="qswap-out">Amount out (model)</label>
+        <input id="qswap-out" readonly placeholder="—" autocomplete="off">
+        <label for="qswap-newprice">Price after the swap, B per A (model)</label>
+        <input id="qswap-newprice" readonly placeholder="—" autocomplete="off">
+        <label for="qswap-used">Amount in actually used (model)</label>
+        <input id="qswap-used" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Price this four-range CLMM swap</button>
+        <p id="qswap-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1921,6 +1963,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=102"></script>
+<script src="app.js?v=103"></script>
 </body>
 </html>
