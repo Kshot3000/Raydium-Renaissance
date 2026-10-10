@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=105"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=106"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5106,7 +5106,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v105", html.includes("app.js?v=105"));
+check("app.js cache key bumped to v106", html.includes("app.js?v=106"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -5640,6 +5640,96 @@ check("qcis handler wired to its own form", appSrc.includes('getElementById("qci
 check("qcis honesty: fourth wall, fee floor and not-live labels", html.includes("emptying all four ranges costs exactly 75% impact at zero fee") && html.includes("a cap at or below the fee tier admits no trade at all") && html.includes("not live pool data, not a live quote, not financial advice"));
 check("guide covers CLMM four-range impact sizing", guide.includes("size the trade across the fourth range too"));
 check("README lists tool 85", readme.includes("85. **CLMM four-range price-impact sizer**"));
+
+/* ---------- Tool 86: CLMM four-range exact-out swap model (QXO) ---------- */
+const QXO_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
+const qxSmall = app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "230", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.4096");
+const txoRef = app.clmmTripleSwapExactOut(QXO_L, "0.8", "1.25", "1", "230", 25, "ab", QXO_L, "0.64", QXO_L, "0.512");
+check("QXO target inside three ranges does not enter the fourth", qxSmall !== null && qxSmall.enteredFourth === false && qxSmall.hitFourthBoundary === false);
+check("QXO uncrossed answer is tool 47 verbatim", qxSmall.amountIn === txoRef.amountIn && qxSmall.newPrice === txoRef.newPrice && qxSmall.feePaid === txoRef.feePaid && qxSmall.leg1In === txoRef.leg1In && qxSmall.leg2In === txoRef.leg2In && qxSmall.leg3In === txoRef.leg3In);
+check("QXO uncrossed fourth leg is zero", qxSmall.leg4In === 0 && qxSmall.leg4Out === 0);
+near("QXO combined ceiling is the four holdings summed", qxSmall.maxOut, 340.9968943799847, 1e-9);
+near("QXO fourth range holding", qxSmall.fourthMaxOut, 71.55417527999325, 1e-9);
+near("QXO third range holding", qxSmall.thirdMaxOut, 80, 1e-9);
+const qx = app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "300", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.4096");
+check("QXO headline enters the fourth range without filling it", qx !== null && qx.enteredFourth === true && qx.hitFourthBoundary === false && qx.crossed === true && qx.enteredThird === true);
+near("QXO headline amount in", qx.amountIn, 440.15804257516425, 1e-9);
+near("QXO headline new price", qx.newPrice, 0.46687370800100936, 1e-9);
+near("QXO headline impact", qx.priceImpactPct, 31.84266309327517, 1e-9);
+near("QXO headline leg 1 in is tool 47's edge price", qx.leg1In, 112.0836078947263, 1e-9);
+near("QXO headline leg 1 out is the first range's holding", qx.leg1Out, 100, 1e-12);
+near("QXO headline leg 2 in", qx.leg2In, 125.31328320801993, 1e-9);
+near("QXO headline leg 2 out is the second range's holding", qx.leg2Out, 89.4427190999915, 1e-9);
+near("QXO headline leg 3 in", qx.leg3In, 140.10450986840783, 1e-9);
+near("QXO headline leg 3 out is the third range's holding", qx.leg3Out, 80, 1e-9);
+near("QXO headline leg 4 in", qx.leg4In, 62.65664160401019, 1e-9);
+near("QXO headline leg 4 out is the target past the three-range ceiling", qx.leg4Out, 30.557280900008493, 1e-9);
+near("QXO headline legs conserve the input", qx.leg1In + qx.leg2In + qx.leg3In + qx.leg4In, qx.amountIn, 1e-9);
+near("QXO headline legs conserve the output", qx.leg1Out + qx.leg2Out + qx.leg3Out + qx.leg4Out, qx.amountOut, 1e-9);
+near("QXO headline fee is the tier's share of the total input", qx.feePaid, qx.amountIn * 0.0025, 1e-9);
+near("QXO headline leg 4 out is the fourth range's shed holding", qx.leg4Out, Number(QXO_L) * (Math.sqrt(0.512) - Math.sqrt(qx.newPrice)), 1e-9);
+const txoCeil = app.clmmTripleSwapExactOut(QXO_L, "0.8", "1.25", "1", String(qx.firstMaxOut + qx.secondMaxOut + qx.thirdMaxOut), 25, "ab", QXO_L, "0.64", QXO_L, "0.512");
+check("QXO first three legs are tool 47's combined-ceiling legs verbatim", txoCeil !== null && qx.leg1In === txoCeil.leg1In && qx.leg2In === txoCeil.leg2In && qx.leg3In === txoCeil.leg3In && qx.leg1Out === txoCeil.leg1Out && qx.leg2Out === txoCeil.leg2Out && qx.leg3Out === txoCeil.leg3Out);
+const qxRt = app.clmmQuadSwap(QXO_L, "0.8", "1.25", "1", String(qx.amountIn), 25, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.4096");
+near("QXO headline round-trips through tool 83 to the target", qxRt.amountOut, 300, 1e-7);
+near("QXO headline round-trip lands at the same price", qxRt.newPrice, qx.newPrice, 1e-9);
+const qxCeil = app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", String(qx.maxOut), 25, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.4096");
+check("QXO combined-ceiling target fills the fourth range exactly", qxCeil !== null && qxCeil.enteredFourth === true && qxCeil.hitFourthBoundary === true);
+near("QXO ceiling walks to the fourth outer edge", qxCeil.newPrice, 0.4096, 1e-12);
+near("QXO ceiling amount in", qxCeil.amountIn, 534.143004981179, 1e-7);
+near("QXO ceiling amount in is tool 83's four-range drain used in", qxCeil.amountIn, app.clmmQuadSwap(QXO_L, "0.8", "1.25", "1", "100000", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.4096").usedIn, 1e-7);
+near("QXO ceiling leg 4 out is the fourth range's whole holding", qxCeil.leg4Out, 71.55417527999325, 1e-9);
+check("QXO rejects a target above the four ranges' combined holding", app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "341", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.4096") === null);
+const qxBa = app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "300", 25, "ba", QXO_L, "1.5625", QXO_L, "1.953125", QXO_L, "2.44140625");
+near("QXO pay-B mirror amount in", qxBa.amountIn, qx.amountIn, 1e-9);
+near("QXO mirror prices are reciprocal", 1 / qxBa.newPrice, qx.newPrice, 1e-9);
+near("QXO pay-B mirror leg 4 out", qxBa.leg4Out, qx.leg4Out, 1e-9);
+const qxZero = app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "300", 0, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.4096");
+near("QXO zero-fee amount in", qxZero.amountIn, 439.0576474687264, 1e-9);
+check("QXO zero fee charges no fee", qxZero.feePaid === 0 && qxZero.amountIn === qxZero.netIn);
+const qxThin = app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "275", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", String(Number(QXO_L) / 10), "0.4096");
+const qxEq275 = app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "275", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.4096");
+check("QXO thin fourth range charges more for the same remainder", qxThin !== null && qxThin.amountIn > qxEq275.amountIn && qxThin.leg4In > qxEq275.leg4In);
+near("QXO thin fourth amount in", qxThin.amountIn, 389.35454958466516, 1e-9);
+near("QXO thin fourth ceiling", qxThin.maxOut, 276.5981366279908, 1e-9);
+check("QXO thin fourth range makes the headline target impossible outright", app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "300", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", String(Number(QXO_L) / 10), "0.4096") === null);
+const qxDeep = app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "300", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", String(Number(QXO_L) * 10), "0.4096");
+check("QXO deep fourth range charges less for the same remainder", qxDeep !== null && qxDeep.amountIn < qx.amountIn && qxDeep.leg4In < qx.leg4In);
+near("QXO deep fourth amount in", qxDeep.amountIn, 437.60414269269296, 1e-9);
+near("QXO deep fourth new price walks barely into the fourth range", qxDeep.newPrice, 0.5073937060720343, 1e-9);
+const qxDust = app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "269.4427196", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", "1e12", "0.4096");
+check("QXO dust remainder past the third wall against a deep fourth range still settles", qxDust !== null && qxDust.enteredFourth === true && qxDust.leg4In > 0);
+near("QXO dust remainder leg 4 out", qxDust && qxDust.leg4Out, 5.000084684070316e-7, 1e-12);
+near("QXO dust remainder amount in", qxDust && qxDust.amountIn, 377.50140195018065, 1e-9);
+check("QXO rejects a fourth outer edge on the wrong side or at the third edge", app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "300", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.6") === null && app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "300", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.512") === null && app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "300", 25, "ba", QXO_L, "1.5625", QXO_L, "1.953125", QXO_L, "1.9") === null && app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "300", 25, "ba", QXO_L, "1.5625", QXO_L, "1.953125", QXO_L, "1.953125") === null);
+check("QXO rejects bad fourth ranges and inherited bad inputs", app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "300", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", "0", "0.4096") === null && app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "300", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "abc") === null && app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "300", 25, "xx", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.4096") === null && app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "300", 10000, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.4096") === null && app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1.25", "300", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.4096") === null && app.clmmQuadSwapExactOut(QXO_L, "0.8", "1.25", "1", "0", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.4096") === null);
+for (const [liq, lo, hi, px, aout, fee, dir, liq2, outer, liq3, outer3, liq4, outer4] of [
+  [QXO_L, "0.8", "1.25", "1", "300", 25, "ab", QXO_L, "0.64", QXO_L, "0.512", QXO_L, "0.4096"],
+  ["5000", "0.5", "2", "1.1", "2450", 30, "ab", "2500", "0.25", "1200", "0.125", "900", "0.0625"],
+  ["5000", "0.5", "2", "0.9", "3950", 5, "ba", "8000", "4", "3000", "8", "2000", "16"],
+  ["123.456", "2.4", "2.6", "2.5", "10", 60, "ab", "60", "2.25", "30", "2.025", "20", "1.8225"],
+  ["1000000", "0.99", "1.01", "1", "13000", 1, "ba", "1000000", "1.0201", "500000", "1.030301", "250000", "1.04060401"]
+]) {
+  const x = app.clmmQuadSwapExactOut(liq, lo, hi, px, aout, fee, dir, liq2, outer, liq3, outer3, liq4, outer4);
+  const tag = "QXO sweep " + dir + " " + aout + " @ " + px + " in " + lo + "-" + hi;
+  check(tag + " settles entering the fourth range", x !== null && x.enteredFourth === true);
+  if (x === null) continue;
+  const ceil3 = app.clmmTripleSwapExactOut(liq, lo, hi, px, String(x.firstMaxOut + x.secondMaxOut + x.thirdMaxOut), fee, dir, liq2, outer, liq3, outer3);
+  check(tag + " first three legs are tool 47's ceiling legs verbatim", ceil3 !== null && x.leg1In === ceil3.leg1In && x.leg2In === ceil3.leg2In && x.leg3In === ceil3.leg3In && x.leg1Out === ceil3.leg1Out && x.leg2Out === ceil3.leg2Out && x.leg3Out === ceil3.leg3Out);
+  check(tag + " legs conserve the output", Math.abs(x.leg1Out + x.leg2Out + x.leg3Out + x.leg4Out - x.amountOut) <= x.amountOut * 1e-12);
+  check(tag + " legs conserve the input", Math.abs(x.leg1In + x.leg2In + x.leg3In + x.leg4In - x.amountIn) <= x.amountIn * 1e-12);
+  check(tag + " fee is the tier's share of the total input", Math.abs(x.feePaid - x.amountIn * fee / 10000) <= x.amountIn * 1e-12);
+  const fwd = app.clmmQuadSwap(liq, lo, hi, px, String(x.amountIn), fee, dir, liq2, outer, liq3, outer3, liq4, outer4);
+  check(tag + " round-trips through tool 83 to the target", fwd !== null && Math.abs(fwd.amountOut - x.amountOut) <= x.amountOut * 1e-9 && Math.abs(fwd.newPrice - x.newPrice) <= x.newPrice * 1e-9);
+  check(tag + " new price stays inside the fourth range", x.newPrice >= x.fourthLowerPrice - 1e-12 && x.newPrice <= x.fourthUpperPrice + 1e-12);
+}
+check("QXO composes Tool 47 in source", appSrc.includes("function clmmQuadSwapExactOut") && appSrc.includes("clmmTripleSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, String(sum123), feeBps, direction, secondLiquidityStr, secondOuterStr, thirdLiquidityStr, thirdOuterStr)"));
+check("all qxo controls labelled", ["qxo-liq", "qxo-lower", "qxo-upper", "qxo-price", "qxo-dir", "qxo-aout", "qxo-fee", "qxo-liq2", "qxo-outer", "qxo-liq3", "qxo-outer3", "qxo-liq4", "qxo-outer4", "qxo-ain", "qxo-newprice", "qxo-maxout"].every(id => html.includes(`for="${id}"`)));
+check("qxo tool present in index.html", html.includes('id="qxo-calc"') && html.includes('id="qxo-result"'));
+check("qxo handler wired to its own form", appSrc.includes('getElementById("qxo-calc")') && appSrc.includes('getElementById("qxo-result")'));
+check("qxo honesty: fourth ceiling and not-live labels", html.includes("supply that fourth range too") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("does not invent either"));
+check("guide covers CLMM four-range exact-out swap", guide.includes("Exact-out keeps going past the third wall too"));
+check("README lists tool 86", readme.includes("86. **CLMM four-range exact-out swap model**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
