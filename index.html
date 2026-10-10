@@ -2212,6 +2212,27 @@
         <button type="submit" class="btn primary">Model this exact-out transfer-fee swap</button>
         <p id="tfxo-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="jit-calc">
+        <h3>94 · Just-in-time (JIT) liquidity model</h3>
+        <p>Every deposit tool here plans a position you stay in. A just-in-time provider is in for exactly one trade: they deposit in the pool's own ratio (tool 5's maths) in the same block as a large pending swap, the swap runs against the temporarily deeper pool, and they withdraw their whole share (tool 7's pro-rata maths) straight after. The trader is better off — the deeper pool moves less against them. The provider's round trip is a race between their share of the swap fee (the pool vault receives the full input; the curve prices on the after-fee amount and the fee stays in the reserves for the LPs) and their share of the pool's impermanent loss on that one trade, valued against simply holding the deposit at the post-swap price. The fee is linear in the trade and the loss quadratic, so size decides the sign: on balanced 1,000/1,000 reserves, a 1,000 in-ratio deposit (a 50% share) at a 25 bps fee makes ≈0.0010006 on a 1-token trade, loses ≈0.0124 on a 10-token trade and loses ≈2.3688 on a 100-token trade — capturing 0.125 of that trade's 0.25 fee and still finishing behind, while the victim gains ≈4.3089 of extra output. At a zero fee the same 100 trade loses exactly 2.5: nothing to capture, pure impermanent loss. That arithmetic is the honest reason real JIT liquidity lives on concentrated (CLMM) pools, where a narrow range multiplies the fee share per unit of capital in a way a full-range slice cannot. The profit shown is gross — no priority fees, competition or failed-bundle costs — and the deposit and withdrawal are assumed to land immediately around the one trade with nothing in between. This prices a block-level strategy so LPs and traders can see who it pays and who it costs; it is not a how-to. Educational model only — your reserves, deposit and trade, not live pool data, not a live quote, not financial advice.</p>
+        <label for="jit-rin">Reserve in (tokens)</label>
+        <input id="jit-rin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="jit-rout">Reserve out (tokens)</label>
+        <input id="jit-rout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="jit-dep">JIT deposit of the input token (the matching out-token amount follows the pool's ratio)</label>
+        <input id="jit-dep" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="jit-vic">Victim amount in (tokens)</label>
+        <input id="jit-vic" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="jit-fee">Pool swap fee (basis points, 25 = 0.25%)</label>
+        <input id="jit-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="jit-vout">What the victim actually receives (model)</label>
+        <input id="jit-vout" readonly placeholder="—" autocomplete="off">
+        <label for="jit-profit">JIT provider net result, in the input token, vs holding the deposit at the post-swap price (model)</label>
+        <input id="jit-profit" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model this JIT round trip</button>
+        <p id="jit-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2239,6 +2260,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=115"></script>
+<script src="app.js?v=116"></script>
 </body>
 </html>

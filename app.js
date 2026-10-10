@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus ninety-three fully
+/* Raydium Renaissance hub logic: project filtering plus ninety-four fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -63,8 +63,9 @@
    deposit planner, a weighted-pool
    withdrawal planner, a Token-2022
    transfer-fee swap model, a sandwich
-   (MEV) attack model, and a Token-2022
-   transfer-fee exact-out swap model.
+   (MEV) attack model, a Token-2022
+   transfer-fee exact-out swap model,
+   and a just-in-time (JIT) liquidity model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -4246,6 +4247,107 @@ function transferFeeSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, pool
   };
 }
 
+/* ---------- 94 · Just-in-time (JIT) liquidity model ---------- */
+/* Tools 5 and 7 plan a deposit and a withdrawal as separate,
+   stay-in-the-pool decisions. A just-in-time provider does both
+   around ONE trade: deposit in the pool's own ratio (tool 5's
+   maths) in the same block as a victim swap, let the swap run
+   against the temporarily deeper pool (tool 1's curve on the
+   enlarged reserves), then withdraw the whole minted share from
+   the post-swap reserves (tool 7's pro-rata maths at 100%). The
+   victim is BETTER off — deeper liquidity means less price
+   impact, and the model reports exactly how much more output the
+   same input buys. The provider's side is a race between two
+   slices of the same trade: their share of the swap fee (the
+   pool vault receives the victim's FULL input — the curve prices
+   on the after-fee amount and the fee stays in the reserves for
+   the LPs, which is the entire point of being in for the trade)
+   against their share of the pool's impermanent loss on that
+   trade, valued the way tool 2 values it: the withdrawn basket
+   against the deposited basket, both at the post-swap spot
+   price. The fee is linear in the trade and the loss is
+   quadratic, so the size of the victim trade decides the sign:
+   on balanced 1,000/1,000 reserves with a 1,000 in-ratio deposit
+   (a 50% share) at 25 bps, a 1-token victim trade leaves the
+   provider ≈ +0.0010006 in profit, a 10-token trade ≈ −0.0124,
+   and a 100-token trade ≈ −2.3688 — the provider captured
+   0.125 of that trade's 0.25 fee and still lost, because their
+   slice of the trade's impermanent loss runs to roughly 2.5 at
+   that size. At a zero fee the same 100 trade loses exactly
+   2.5: with no fee there is nothing to capture and the round
+   trip is pure impermanent loss. A bigger
+   share helps the victim more (a 90% share lifts the 100 trade's
+   output from 90.70243237 to 98.764820911) but scales the
+   provider's loss almost as fast, which is the honest reason
+   real JIT liquidity lives on concentrated (CLMM) pools, where
+   a narrow range multiplies the fee share per unit of capital
+   in a way a full-range constant-product slice cannot.
+   Model only — one pool, one victim trade, the deposit and the
+   withdrawal land immediately around it with nothing in between,
+   and the profit is GROSS: no priority fees, no failed-bundle
+   or competition costs, and no price movement except the victim
+   trade's own. Educational model only — your reserves, deposit
+   and trade, not live pool data, not a live quote, not
+   financial advice, and not a how-to: it prices a block-level
+   strategy so LPs and traders can see who it pays and who it
+   costs. */
+function jitLiquidity(reserveInStr, reserveOutStr, jitInStr, victimInStr, feeBps) {
+  var rin = parseScaled(reserveInStr), rout = parseScaled(reserveOutStr);
+  var dep = parseScaled(jitInStr), vic = parseScaled(victimInStr);
+  var fee = Number(feeBps);
+  if (rin === null || rout === null || dep === null || vic === null) return null;
+  if (rin <= 0n || rout <= 0n || dep <= 0n || vic <= 0n) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  function leg(rIn, rOut, aIn) {
+    var inAfterFee = aIn * BigInt(10000 - fee) / 10000n;
+    if (inAfterFee <= 0n) return null;
+    var out = rOut * inAfterFee / (rIn + inAfterFee);
+    if (out <= 0n) return null;
+    return { out: out, inAfterFee: inAfterFee };
+  }
+  var depOut = rout * dep / rin;
+  if (depOut <= 0n) return null;
+  var baseline = leg(rin, rout, vic);
+  if (baseline === null) return null;
+  var midIn = rin + dep, midOut = rout + depOut;
+  var swap = leg(midIn, midOut, vic);
+  if (swap === null) return null;
+  var postIn = midIn + vic, postOut = midOut - swap.out;
+  var den = rin + dep;
+  var wIn = postIn * dep / den, wOut = postOut * dep / den;
+  if (wIn <= 0n || wOut <= 0n) return null;
+  var feeAmt = vic - swap.inAfterFee;
+  var feeShare = feeAmt * dep / den;
+  var spotAfter = scaledToNumber(postIn) / scaledToNumber(postOut);
+  var returnedValue = scaledToNumber(wIn) + scaledToNumber(wOut) * spotAfter;
+  var depositValue = scaledToNumber(dep) + scaledToNumber(depOut) * spotAfter;
+  var profit = returnedValue - depositValue;
+  var gain = swap.out - baseline.out;
+  return {
+    reserveIn: formatScaled(rin),
+    reserveOut: formatScaled(rout),
+    jitIn: formatScaled(dep),
+    jitOut: formatScaled(depOut),
+    sharePct: scaledToNumber(dep) / scaledToNumber(den) * 100,
+    victimIn: formatScaled(vic),
+    victimOut: formatScaled(swap.out),
+    victimOutNoJit: formatScaled(baseline.out),
+    victimGain: formatScaled(gain),
+    victimGainPct: scaledToNumber(gain) / scaledToNumber(baseline.out) * 100,
+    postReserveIn: formatScaled(postIn),
+    postReserveOut: formatScaled(postOut),
+    jitReturnedIn: formatScaled(wIn),
+    jitReturnedOut: formatScaled(wOut),
+    poolFeeAmount: formatScaled(feeAmt),
+    jitFeeShare: formatScaled(feeShare),
+    jitProfitIn: profit,
+    jitProfitPct: profit / depositValue * 100,
+    profitable: profit > 0,
+    priceInPerOutAfter: spotAfter,
+    feePct: fee / 100
+  };
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -7219,7 +7321,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -9110,6 +9212,28 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: to receive exactly " + res.targetOut + " you must send " + res.amountIn + ". The out-token's transfer fee is grossed up first: the curve must pay " + res.grossOutNeeded + " gross, of which the fee withholds " + res.transferFeeOut + ". On the way in, the transfer fee withholds " + res.transferFeeIn + " of your " + res.amountIn + ", so the pool receives " + res.netAmountIn + " and the pool fee takes a further " + res.poolFeeAmount + " of that; tool 91's own model run on this input receives " + res.amountOut + " (an excess of " + res.excessOut + " over the target — the smallest sufficient input at 9-decimal granularity, never a hair short). With no transfer fees the same target costs " + res.noTransferFeeIn + " in tool 6's model, so the two transfer fees add ≈ " + fmt(res.extraCostPct, 4) + "% to the input. The withheld fees sit in the receiving accounts until the mint's fee authority collects them — they are not burned and do not reach the pool's LPs. A Token-2022 transfer-fee exact-out model, not a live Raydium quote. Not financial advice.";
         document.getElementById("tfxo-ain").value = res.amountIn;
         document.getElementById("tfxo-received").value = res.amountOut;
+      }
+    });
+
+    /* --- just-in-time (JIT) liquidity model --- */
+    document.getElementById("jit-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = jitLiquidity(
+        document.getElementById("jit-rin").value,
+        document.getElementById("jit-rout").value,
+        document.getElementById("jit-dep").value,
+        document.getElementById("jit-vic").value,
+        document.getElementById("jit-fee").value
+      );
+      var out = document.getElementById("jit-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves, a positive in-ratio JIT deposit of the input token, a positive victim trade, and a pool fee of 0–9,999 bps. A deposit or trade so small that the model's 9-decimal flooring leaves it nothing is rejected rather than zeroed.";
+        document.getElementById("jit-vout").value = "";
+        document.getElementById("jit-profit").value = "";
+      } else {
+        out.textContent = "Model output: the JIT deposit of " + res.jitIn + " in also needs " + res.jitOut + " of the out token (the pool's own ratio) and is a " + fmt(res.sharePct, 4) + "% share of the enlarged pool. The victim's " + res.victimIn + " trade receives " + res.victimOut + " instead of the " + res.victimOutNoJit + " it returns without the JIT liquidity — " + res.victimGain + " more (≈ " + fmt(res.victimGainPct, 4) + "%), because the deeper pool moves less against it. The provider then withdraws the whole share and gets back " + res.jitReturnedIn + " in and " + res.jitReturnedOut + " out. Their share of the trade's " + res.poolFeeAmount + " pool fee is " + res.jitFeeShare + ", and valued against simply holding the deposit at the post-swap price, the round trip nets " + fmt(res.jitProfitIn, 9) + " in the input token (≈ " + fmt(res.jitProfitPct, 4) + "%) — the fee share minus the slice of impermanent loss, gross of priority fees, competition and failed bundles, none of which are modelled. A just-in-time liquidity model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("jit-vout").value = res.victimOut;
+        document.getElementById("jit-profit").value = fmt(res.jitProfitIn, 9);
       }
     });
 

@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=115"));
+check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=116"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1358,7 +1358,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists ninety-three tools", readme.includes("ninety-three pool tools") || readme.includes("all ninety-three"));
+check("README lists ninety-four tools", readme.includes("ninety-four pool tools") || readme.includes("all ninety-four"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2001,8 +2001,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts ninety-three tools and names the newest tools",
-  appSrc.includes("plus ninety-three fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, a Token-2022\n   transfer-fee swap model, a sandwich\n   (MEV) attack model, and a Token-2022\n   transfer-fee exact-out swap model.\n   These are educational MODELS"));
+check("app.js header counts ninety-four tools and names the newest tools",
+  appSrc.includes("plus ninety-four fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, a Token-2022\n   transfer-fee swap model, a sandwich\n   (MEV) attack model, a Token-2022\n   transfer-fee exact-out swap model,\n   and a just-in-time (JIT) liquidity model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v115", html.includes("app.js?v=115"));
+check("app.js cache key bumped to v116", html.includes("app.js?v=116"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6412,6 +6412,77 @@ check("tfxo handler wired to its own form", appSrc.includes('getElementById("tfx
 check("tfxo honesty: smallest-sufficient, not-burned and not-live labels", html.includes("smallest at 9-decimal granularity") && html.includes("not burned") && html.includes("not live pool data, not a live quote, not financial advice"));
 check("guide covers transfer-fee exact-out gross-ups", guide.includes("gross up both transfer fees"));
 check("README lists tool 93", readme.includes("93. **Token-2022 transfer-fee exact-out swap model**"));
+
+/* ---------- 94 · Just-in-time (JIT) liquidity model (JIT) ---------- */
+const jit1 = app.jitLiquidity("1000", "1000", "1000", "100", 25);
+check("JIT headline is not null", jit1 !== null);
+check("JIT headline deposit follows the pool ratio (tool 5)", jit1.jitOut === "1000" && jit1.jitOut === app.depositPlan("1000", "1000", "1000").requiredB);
+check("JIT headline share is 50%", jit1.sharePct === 50);
+check("JIT headline victim output is tool 1 on the enlarged reserves", jit1.victimOut === "95.01131087" && jit1.victimOut === app.cpSwap("2000", "2000", "100", 25).out);
+check("JIT headline victim baseline is tool 1 on the original reserves", jit1.victimOutNoJit === "90.70243237" && jit1.victimOutNoJit === app.cpSwap("1000", "1000", "100", 25).out);
+check("JIT headline victim gain", jit1.victimGain === "4.3088785");
+near("JIT headline victim gain pct", jit1.victimGainPct, 4.3088785 / 90.70243237 * 100, 1e-9);
+check("JIT headline post-swap reserves keep the full victim input (the fee stays in the pool)", jit1.postReserveIn === "2100" && jit1.postReserveOut === "1904.98868913");
+check("JIT headline provider withdrawal is tool 7 pro-rata at 100%", jit1.jitReturnedIn === "1050" && jit1.jitReturnedOut === "952.494344565"
+  && jit1.jitReturnedIn === app.withdrawPlan("2100", "1904.98868913", "50", "100").outA
+  && jit1.jitReturnedOut === app.withdrawPlan("2100", "1904.98868913", "50", "100").outB);
+check("JIT headline fee and the provider's share of it", jit1.poolFeeAmount === "0.25" && jit1.jitFeeShare === "0.125");
+near("JIT headline net result: the 0.125 fee share loses to the impermanent-loss slice", jit1.jitProfitIn, -2.36875, 1e-6);
+near("JIT headline net result pct", jit1.jitProfitPct, -0.11267052936372358, 1e-9);
+check("JIT headline is not profitable", jit1.profitable === false);
+const jitSmall = app.jitLiquidity("1000", "1000", "1000", "1", 25);
+check("JIT a 1-token victim trade leaves the provider ahead", jitSmall !== null && jitSmall.profitable === true);
+near("JIT small-trade profit", jitSmall.jitProfitIn, 0.0010006254412928683, 1e-12);
+check("JIT small-trade victim output", jitSmall.victimOut === "0.997002744");
+const jitMid = app.jitLiquidity("1000", "1000", "1000", "10", 25);
+near("JIT a 10-token victim trade already leaves the provider behind", jitMid.jitProfitIn, -0.012437500109854227, 1e-12);
+check("JIT profit falls as the victim trade grows (the loss is quadratic, the fee linear)",
+  jitSmall.jitProfitIn > 0 && jitMid.jitProfitIn < jitSmall.jitProfitIn && jit1.jitProfitIn < jitMid.jitProfitIn);
+const jitNoFee = app.jitLiquidity("1000", "1000", "1000", "100", 0);
+near("JIT at a zero fee the round trip is pure impermanent loss: exactly -2.5", jitNoFee.jitProfitIn, -2.5, 1e-9);
+check("JIT zero-fee fee share is zero and the victim still gains from the depth", jitNoFee.jitFeeShare === "0" && jitNoFee.victimOut === "95.238095238");
+const jitHighFee = app.jitLiquidity("1000", "1000", "1000", "100", 100);
+near("JIT a 100 bps fee softens but does not save the 100 trade", jitHighFee.jitProfitIn, -1.9750000005142283, 1e-9);
+check("JIT provider profit rises with the fee tier", jitNoFee.jitProfitIn < jit1.jitProfitIn && jit1.jitProfitIn < jitHighFee.jitProfitIn && jitHighFee.jitFeeShare === "0.5");
+const jitThin = app.jitLiquidity("1000", "1000", "100", "100", 25);
+check("JIT a tenth-size deposit still helps the victim, by less", jitThin !== null && jitThin.victimOut === "91.456553448" && jitThin.victimGain === "0.754121078");
+const jitHuge = app.jitLiquidity("1000", "1000", "9000", "100", 25);
+check("JIT a 90% share lifts the victim most", jitHuge !== null && jitHuge.sharePct === 90 && jitHuge.victimOut === "98.764820911");
+check("JIT the victim's gain grows with the JIT share", jitThin.victimGain !== jit1.victimGain
+  && app.parseScaled(jitThin.victimGain) < app.parseScaled(jit1.victimGain)
+  && app.parseScaled(jit1.victimGain) < app.parseScaled(jitHuge.victimGain));
+const jitUnbal = app.jitLiquidity("2000", "500", "500", "50", 25);
+check("JIT unbalanced pool: the deposit follows its ratio and the share is 20%", jitUnbal !== null && jitUnbal.jitOut === "125" && jitUnbal.sharePct === 20);
+check("JIT unbalanced victim output and provider withdrawal", jitUnbal.victimOut === "12.224863963" && jitUnbal.jitReturnedIn === "510" && jitUnbal.jitReturnedOut === "122.555027207");
+near("JIT unbalanced net result", jitUnbal.jitProfitIn, -0.17450000088376783, 1e-9);
+const jitSweep = [
+  ["1000", "1000", "1000", "100", 25],
+  ["2000", "500", "500", "50", 25],
+  ["1000", "1000", "9000", "100", 25],
+  ["3000", "1500", "1000", "250", 30]
+];
+for (const c of jitSweep) {
+  const tag = "JIT sweep " + c[0] + "/" + c[1] + " dep " + c[2] + " vic " + c[3];
+  const j = app.jitLiquidity(c[0], c[1], c[2], c[3], c[4]);
+  const dp = app.depositPlan(c[0], c[1], c[2]);
+  check(tag + " composes: deposit leg is tool 5 verbatim", j !== null && dp !== null && j.jitOut === dp.requiredB && Math.abs(j.sharePct - dp.sharePct) < 1e-9);
+  check(tag + " composes: victim leg is tool 1 on the enlarged reserves, baseline on the original", j.victimOut === app.cpSwap(dp.newReserveA, dp.newReserveB, c[3], c[4]).out && j.victimOutNoJit === app.cpSwap(c[0], c[1], c[3], c[4]).out);
+  check(tag + " composes: withdrawal is tool 7 pro-rata at 100% of the share", j.jitReturnedIn === app.withdrawPlan(j.postReserveIn, j.postReserveOut, String(j.sharePct), "100").outA && j.jitReturnedOut === app.withdrawPlan(j.postReserveIn, j.postReserveOut, String(j.sharePct), "100").outB);
+  check(tag + ": the victim never loses from the extra depth", app.parseScaled(j.victimGain) >= 0n);
+  check(tag + ": the provider's fee share is their share of the pool fee", j.jitFeeShare === app.formatScaled(app.parseScaled(j.poolFeeAmount) * app.parseScaled(c[2]) / (app.parseScaled(c[0]) + app.parseScaled(c[2]))));
+}
+check("JIT rejects zero or negative reserves, deposit and victim trade", app.jitLiquidity("0", "1000", "1000", "100", 25) === null && app.jitLiquidity("1000", "1000", "0", "100", 25) === null && app.jitLiquidity("1000", "1000", "1000", "0", 25) === null);
+check("JIT rejects a pool fee of 10000 bps and fractional bps", app.jitLiquidity("1000", "1000", "1000", "100", 10000) === null && app.jitLiquidity("1000", "1000", "1000", "100", 2.5) === null);
+check("JIT rejects unparseable and over-precise inputs", app.jitLiquidity("abc", "1000", "1000", "100", 25) === null && app.jitLiquidity("1000", "1000", "1000", "0.0000000001", 25) === null);
+check("JIT rejects a dust victim trade whose after-fee input floors to nothing", app.jitLiquidity("1000", "1000", "1000", "0.000000001", 25) === null);
+check("JIT rejects a dust deposit that needs zero of the out token", app.jitLiquidity("1000000000", "1", "0.000000001", "100", 25) === null);
+check("JIT source composes the deposit, swap and withdrawal legs", appSrc.includes("function jitLiquidity") && appSrc.includes("postIn = midIn + vic"));
+check("all jit controls labelled", ["jit-rin", "jit-rout", "jit-dep", "jit-vic", "jit-fee", "jit-vout", "jit-profit"].every(id => html.includes(`for="${id}"`)));
+check("jit tool present in index.html", html.includes('id="jit-calc"') && html.includes('id="jit-result"'));
+check("jit handler wired to its own form", appSrc.includes('getElementById("jit-calc")') && appSrc.includes('getElementById("jit-result")'));
+check("jit honesty: gross profit, CLMM contrast and not-live labels", html.includes("The profit shown is gross") && html.includes("real JIT liquidity lives on concentrated (CLMM) pools") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers just-in-time liquidity", guide.includes("in for exactly one trade"));
+check("README lists tool 94", readme.includes("94. **Just-in-time (JIT) liquidity model**"));
 
 /* ---------- Accessibility guards (global — every tool, present and future) ---------- */
 /* The per-tool "all X controls labelled" checks above only cover the
