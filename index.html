@@ -2137,6 +2137,33 @@
         <button type="submit" class="btn primary">Plan this weighted-pool withdrawal</button>
         <p id="wwd-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="tfswap-calc">
+        <h3>91 · Token-2022 transfer-fee swap model</h3>
+        <p>Every other swap tool here prices the curve as if what leaves your wallet is what enters the pool. A Token-2022 mint with the transfer-fee extension — the mints Raydium's CP-Swap pools exist partly to support — breaks that twice on one swap: the fee is withheld from the receiver on every transfer, so the pool receives your amount in minus the in-token's transfer fee, the curve runs on that net amount (tool 1's maths, pool fee off the net input first), and you receive the curve's output minus the out-token's transfer fee. Each fee is the token program's own formula, fee = the lesser of ceil(amount × rate ÷ 10,000) and the mint's maximum fee, so the rounding is up, never down — at this model's 9-decimal scale a 1 bp fee on 1.000000001 is 0.000100001, not 0.0001 — and a maximum fee of 0 means no fee can be charged at all, whatever the rate. Headline: reserves 1,000,000/1,000,000, 10,000 in at a 25 bps pool fee with a 1% transfer fee in and 2% out — the pool receives 9,900, the curve pays ≈9,778.6831 gross, and you actually receive ≈9,583.1094, ≈2.9704% less than the ≈9,876.4821 the same trade returns with no transfer fees. Caps bite unevenly: a 5% in-fee capped at 10 costs 10, not 500. The withheld fees are not burned and do not reach the pool's LPs — they sit in the receiving accounts until the mint's fee authority collects them. A 100% fee on either side leaves nothing to trade or receive and is rejected, not zeroed. Educational model only — your reserves, trade and the two mints' fee configs, not live pool data, not a live quote, not financial advice.</p>
+        <label for="tfswap-rin">Reserve in (tokens)</label>
+        <input id="tfswap-rin" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="tfswap-rout">Reserve out (tokens)</label>
+        <input id="tfswap-rout" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="tfswap-ain">Amount in (tokens you send)</label>
+        <input id="tfswap-ain" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="tfswap-poolfee">Pool swap fee (basis points, 25 = 0.25%)</label>
+        <input id="tfswap-poolfee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="tfswap-tfin">Transfer fee on the token in (basis points, 100 = 1%)</label>
+        <input id="tfswap-tfin" inputmode="numeric" value="100" autocomplete="off">
+        <label for="tfswap-tfincap">Maximum fee cap on the token in (blank = no cap, 0 = no fee)</label>
+        <input id="tfswap-tfincap" inputmode="decimal" placeholder="blank = no cap" autocomplete="off">
+        <label for="tfswap-tfout">Transfer fee on the token out (basis points, 200 = 2%)</label>
+        <input id="tfswap-tfout" inputmode="numeric" value="200" autocomplete="off">
+        <label for="tfswap-tfoutcap">Maximum fee cap on the token out (blank = no cap, 0 = no fee)</label>
+        <input id="tfswap-tfoutcap" inputmode="decimal" placeholder="blank = no cap" autocomplete="off">
+        <label for="tfswap-netin">What the pool actually receives (model)</label>
+        <input id="tfswap-netin" readonly placeholder="—" autocomplete="off">
+        <label for="tfswap-out">What you actually receive (model)</label>
+        <input id="tfswap-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model this transfer-fee swap</button>
+        <p id="tfswap-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2164,6 +2191,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=112"></script>
+<script src="app.js?v=113"></script>
 </body>
 </html>

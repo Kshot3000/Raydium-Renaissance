@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus ninety fully
+/* Raydium Renaissance hub logic: project filtering plus ninety-one fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -60,8 +60,9 @@
    sizer, a CLMM four-range exact-out swap model,
    a stableswap deposit planner, a stableswap
    withdrawal planner, a weighted-pool
-   deposit planner, and a weighted-pool
-   withdrawal planner.
+   deposit planner, a weighted-pool
+   withdrawal planner, and a Token-2022
+   transfer-fee swap model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3940,6 +3941,102 @@ function weightedWithdrawPlan(reserveAStr, reserveBStr, weightAPctStr, totalSupp
   return result;
 }
 
+/* ---------- 91 · Token-2022 transfer-fee swap model ---------- */
+/* Every swap tool on this hub prices the curve as if the amount
+   that leaves a wallet is the amount that enters the pool. A
+   Token-2022 mint with the transfer-fee extension breaks that
+   identity twice on one swap: the fee is withheld from the
+   RECEIVER on every transfer, so the pool's vault receives
+   amountIn minus the in-token's transfer fee, the curve runs on
+   that net amount (tool 1's own maths, pool fee off the net
+   input first), and the trader receives the curve's output
+   minus the out-token's transfer fee. Each fee follows the
+   token program's own calculate_fee exactly:
+     fee = min(ceil(amount x bps / 10000), maximum_fee),
+   zero when the rate or the amount is zero — the ceiling is
+   visible at this model's 9 dp scale (a 1 bp fee on
+   1.000000001 is 0.000100001, not 0.0001), and a maximum fee
+   of 0 means no fee can ever be charged, whatever the rate.
+   Headline, verified against a hand-worked vector: reserves
+   1,000,000/1,000,000, 10,000 in, pool fee 25 bps, a 1% fee on
+   the way in and 2% on the way out — the pool receives 9,900,
+   the curve pays 9,778.68306011 gross, and the trader actually
+   receives 9,583.109398907: 2.9704% less than the 9,876.48209114
+   the same trade returns with no transfer fees, on top of the
+   price impact both share. Caps bite asymmetrically: a 5% in
+   fee capped at 10 costs 10, not 500, and the trade lands
+   within 0.099% of the no-transfer-fee line, while a 10% out
+   fee capped at 100 on a 5,000 trade into a 500,000/2,000,000
+   pool still takes its full 100 cap out of a 19,645.414540941
+   gross payout. A 100% fee on either side leaves nothing to
+   trade or to receive and is rejected, not zeroed. Honest
+   edges: the withheld fees sit in the receiving accounts until
+   the mint's withdraw authority collects them — they are not
+   burned and do not reach the pool's LPs; a real Raydium quote
+   for a fee-bearing mint nets these fees the same way, but
+   routing, other mints' extensions (a permanent delegate is a
+   different risk entirely) and live reserves are outside this
+   model. Educational model only — your reserves, trade and
+   the two mints' fee configs, not live pool data, not a live
+   quote, not financial advice. */
+function transferFee(amountScaled, bps, capScaled) {
+  if (bps === 0 || amountScaled <= 0n) return 0n;
+  var fee = (amountScaled * BigInt(bps) + 9999n) / 10000n;
+  if (capScaled !== null && fee > capScaled) fee = capScaled;
+  return fee;
+}
+function transferFeeSwap(reserveInStr, reserveOutStr, amountInStr, poolFeeBps, tfInBps, tfInCapStr, tfOutBps, tfOutCapStr) {
+  var rin = parseScaled(reserveInStr), rout = parseScaled(reserveOutStr), ain = parseScaled(amountInStr);
+  var poolFee = Number(poolFeeBps), tfIn = Number(tfInBps), tfOut = Number(tfOutBps);
+  if (rin === null || rout === null || ain === null) return null;
+  if (rin <= 0n || rout <= 0n || ain <= 0n) return null;
+  if (!Number.isInteger(poolFee) || poolFee < 0 || poolFee > 9999) return null;
+  if (!Number.isInteger(tfIn) || tfIn < 0 || tfIn > 10000) return null;
+  if (!Number.isInteger(tfOut) || tfOut < 0 || tfOut > 10000) return null;
+  var capIn = null, capOut = null;
+  if (tfInCapStr != null && String(tfInCapStr).trim() !== "") {
+    capIn = parseScaled(tfInCapStr);
+    if (capIn === null || capIn < 0n) return null;
+  }
+  if (tfOutCapStr != null && String(tfOutCapStr).trim() !== "") {
+    capOut = parseScaled(tfOutCapStr);
+    if (capOut === null || capOut < 0n) return null;
+  }
+  var feeIn = transferFee(ain, tfIn, capIn);
+  var netIn = ain - feeIn;
+  if (netIn <= 0n) return null;
+  var inAfterPoolFee = netIn * BigInt(10000 - poolFee) / 10000n;
+  if (inAfterPoolFee <= 0n) return null;
+  var poolFeeAmount = netIn - inAfterPoolFee;
+  var grossOut = rout * inAfterPoolFee / (rin + inAfterPoolFee);
+  if (grossOut <= 0n) return null;
+  var feeOut = transferFee(grossOut, tfOut, capOut);
+  var received = grossOut - feeOut;
+  if (received <= 0n) return null;
+  var spot = scaledToNumber(rout) / scaledToNumber(rin);
+  var effective = scaledToNumber(received) / scaledToNumber(ain);
+  var priceImpactPct = (1 - effective / spot) * 100;
+  var base = cpSwap(reserveInStr, reserveOutStr, amountInStr, poolFeeBps);
+  var baseOut = base === null ? null : parseScaled(base.out);
+  return {
+    amountIn: formatScaled(ain),
+    transferFeeIn: formatScaled(feeIn),
+    netAmountIn: formatScaled(netIn),
+    poolFeeAmount: formatScaled(poolFeeAmount),
+    grossOut: formatScaled(grossOut),
+    transferFeeOut: formatScaled(feeOut),
+    amountOut: formatScaled(received),
+    spotPrice: spot,
+    effectivePrice: effective,
+    priceImpactPct: priceImpactPct,
+    poolFeePct: poolFee / 100,
+    tfInPct: tfIn / 100,
+    tfOutPct: tfOut / 100,
+    noTransferFeeOut: base === null ? null : base.out,
+    transferDragPct: baseOut === null ? null : (1 - scaledToNumber(received) / scaledToNumber(baseOut)) * 100
+  };
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -6913,7 +7010,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -8733,6 +8830,30 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: burning " + fmt(res.burn, 4) + " LP tokens (" + fmt(res.burnSharePct, 4) + "% of the supply) shrinks the weighted invariant from " + fmt(res.invariantV, 4) + " to " + fmt(res.newInvariantV, 4) + ". Pro-rata, it pays " + fmt(res.proOutA, 4) + " A and " + fmt(res.proOutB, 4) + " B — the pool's own ratio, worth " + fmt(res.proRataValueA, 4) + " A at the starting spot of " + fmt(res.spotBInA, 4) + " A per B. Taken entirely in A it pays ≈ " + fmt(res.singleOutA, 4) + " A (≈ " + fmt(-res.singleAVsProRataPct, 4) + "% under the pro-rata value), and entirely in B ≈ " + fmt(res.singleOutB, 4) + " B (≈ " + fmt(-res.singleBVsProRataPct, 4) + "% under, struck at the same spot), because a single-sided exit walks the spot away from you as it pays out — cheaper in the token with the heavier weight, dearer in the lighter one, and dearer the larger the share burned. No withdrawal fee is modelled — some weighted designs charge one or route a one-sided exit through a swap, so a real single-sided exit pays a little less again. A weighted-pool withdrawal model, not a live Raydium quote. Not financial advice.";
         document.getElementById("wwd-outa").value = fmt(res.proOutA, 4);
         document.getElementById("wwd-outb").value = fmt(res.proOutB, 4);
+      }
+    });
+
+    document.getElementById("tfswap-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = transferFeeSwap(
+        document.getElementById("tfswap-rin").value,
+        document.getElementById("tfswap-rout").value,
+        document.getElementById("tfswap-ain").value,
+        document.getElementById("tfswap-poolfee").value,
+        document.getElementById("tfswap-tfin").value,
+        document.getElementById("tfswap-tfincap").value,
+        document.getElementById("tfswap-tfout").value,
+        document.getElementById("tfswap-tfoutcap").value
+      );
+      var out = document.getElementById("tfswap-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves and an amount in, a pool fee of 0–9,999 bps, transfer fees of 0–10,000 bps on each side, and — only if a mint sets one — a maximum fee cap of 0 or more on a side (leave it blank for no cap). A 100% transfer fee on either side leaves nothing to trade or receive, so it is rejected rather than zeroed.";
+        document.getElementById("tfswap-netin").value = "";
+        document.getElementById("tfswap-out").value = "";
+      } else {
+        out.textContent = "Model output: of the " + res.amountIn + " you send, the in-token's transfer fee withholds " + res.transferFeeIn + ", so the pool actually receives " + res.netAmountIn + "; the pool fee takes a further " + res.poolFeeAmount + " of that, and the curve pays out " + res.grossOut + " gross. The out-token's transfer fee then withholds " + res.transferFeeOut + ", so you actually receive " + res.amountOut + " — " + fmt(res.transferDragPct, 4) + "% less than the " + res.noTransferFeeOut + " the same trade returns in tool 1 with no transfer fees, at an effective price of ≈ " + fmt(res.effectivePrice, 6) + " against a spot of ≈ " + fmt(res.spotPrice, 6) + " (≈ " + fmt(res.priceImpactPct, 4) + "% total drag versus spot, transfer fees included). The withheld fees sit in the receiving accounts until the mint's fee authority collects them — they are not burned and do not reach the pool's LPs. A Token-2022 transfer-fee swap model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("tfswap-netin").value = res.netAmountIn;
+        document.getElementById("tfswap-out").value = res.amountOut;
       }
     });
 

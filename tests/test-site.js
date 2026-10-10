@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=112"));
+check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=113"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1358,7 +1358,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists ninety tools", readme.includes("ninety pool tools") || readme.includes("all ninety"));
+check("README lists ninety-one tools", readme.includes("ninety-one pool tools") || readme.includes("all ninety-one"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2001,8 +2001,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts ninety tools and names the newest tools",
-  appSrc.includes("plus ninety fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, and a weighted-pool\n   withdrawal planner.\n   These are educational MODELS"));
+check("app.js header counts ninety-one tools and names the newest tools",
+  appSrc.includes("plus ninety-one fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, and a Token-2022\n   transfer-fee swap model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v112", html.includes("app.js?v=112"));
+check("app.js cache key bumped to v113", html.includes("app.js?v=113"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6125,6 +6125,122 @@ check("wwd handler wired to its own form", appSrc.includes('getElementById("wwd-
 check("wwd honesty: no withdrawal fee modelled and not-live labels", html.includes("No withdrawal fee is modelled") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers weighted-pool withdrawals", guide.includes("Leave a weighted pool in the pool's own ratio"));
 check("README lists tool 90", readme.includes("90. **Weighted-pool withdrawal planner**"));
+
+/* ---------- 91 · Token-2022 transfer-fee swap model (TFSWAP) ---------- */
+/* A Token-2022 transfer fee is withheld from the RECEIVER on every
+   transfer, so one swap is taxed twice: the pool receives
+   amountIn - feeIn, tool 1's curve runs on that net amount, and
+   the trader receives grossOut - feeOut. Each fee is the token
+   program's calculate_fee: min(ceil(amount * bps / 10000), cap),
+   zero at a zero rate, and a cap of 0 means no fee at all.
+   Vectors verified in a clean prototype BEFORE these tests were
+   written; the zero-fee case must be tool 1 verbatim. */
+const tf1 = app.transferFeeSwap("1000000", "1000000", "10000", 25, 100, "", 200, "");
+check("TFSWAP headline is not null", tf1 !== null);
+check("TFSWAP headline transfer fee in is exact", tf1.transferFeeIn === "100");
+check("TFSWAP headline net in", tf1.netAmountIn === "9900");
+check("TFSWAP headline pool fee is taken off the NET input", tf1.poolFeeAmount === "24.75");
+check("TFSWAP headline gross out", tf1.grossOut === "9778.68306011");
+check("TFSWAP headline transfer fee out rounds UP", tf1.transferFeeOut === "195.573661203");
+check("TFSWAP headline amount out", tf1.amountOut === "9583.109398907");
+near("TFSWAP headline spot", tf1.spotPrice, 1, 1e-12);
+near("TFSWAP headline effective price", tf1.effectivePrice, 0.9583109398906999, 1e-12);
+near("TFSWAP headline total drag vs spot", tf1.priceImpactPct, 4.168906010930007, 1e-9);
+check("TFSWAP headline no-transfer-fee baseline is tool 1 verbatim", tf1.noTransferFeeOut === app.cpSwap("1000000", "1000000", "10000", 25).out && tf1.noTransferFeeOut === "9876.48209114");
+near("TFSWAP headline drag vs the no-fee trade", tf1.transferDragPct, 2.9704168906070305, 1e-9);
+near("TFSWAP headline fee pcts echo", tf1.poolFeePct + tf1.tfInPct + tf1.tfOutPct, 0.25 + 1 + 2, 1e-12);
+
+const tfZero = app.transferFeeSwap("1000000", "1000000", "10000", 25, 0, "", 0, "");
+check("TFSWAP zero transfer fees reproduce tool 1 exactly", tfZero !== null && tfZero.amountOut === tfZero.noTransferFeeOut && tfZero.transferFeeIn === "0" && tfZero.transferFeeOut === "0" && tfZero.netAmountIn === "10000" && tfZero.grossOut === tfZero.amountOut);
+near("TFSWAP zero-fee drag is zero", tfZero.transferDragPct, 0, 1e-12);
+const tfZero2 = app.transferFeeSwap("123456", "7890", "999.5", 30, 0, "", 0, "");
+check("TFSWAP zero-fee identity holds on an unbalanced pool too", tfZero2 !== null && tfZero2.amountOut === app.cpSwap("123456", "7890", "999.5", 30).out);
+
+const tfInOnly = app.transferFeeSwap("1000000", "1000000", "10000", 25, 100, "", 0, "");
+check("TFSWAP in-fee only: amount out is the gross out", tfInOnly !== null && tfInOnly.amountOut === tfInOnly.grossOut && tfInOnly.transferFeeOut === "0");
+check("TFSWAP in-fee only: the curve saw the net input (tool 1 on 9900)", tfInOnly.grossOut === app.cpSwap("1000000", "1000000", "9900", 25).out);
+const tfOutOnly = app.transferFeeSwap("1000000", "1000000", "10000", 25, 0, "", 200, "");
+check("TFSWAP out-fee only: gross out is tool 1 verbatim", tfOutOnly !== null && tfOutOnly.grossOut === tfOutOnly.noTransferFeeOut && tfOutOnly.netAmountIn === "10000");
+check("TFSWAP out-fee only: received is gross minus the ceiling fee", tfOutOnly.amountOut === "9678.952449317" && tfOutOnly.transferFeeOut === "197.529641823");
+
+const tfCap = app.transferFeeSwap("1000000", "1000000", "10000", 25, 500, "10", 0, "");
+check("TFSWAP cap binds: a 5% in-fee capped at 10 costs 10, not 500", tfCap !== null && tfCap.transferFeeIn === "10" && tfCap.netAmountIn === "9990");
+check("TFSWAP capped amount out", tfCap.amountOut === "9866.703057365");
+near("TFSWAP capped drag is under 0.1%", tfCap.transferDragPct, 0.09901332969328713, 1e-9);
+const tfCapEq = app.transferFeeSwap("1000000", "1000000", "10000", 25, 500, "500", 0, "");
+check("TFSWAP cap exactly at the raw fee changes nothing", tfCapEq !== null && tfCapEq.transferFeeIn === "500");
+const tfCapAbove = app.transferFeeSwap("1000000", "1000000", "10000", 25, 500, "600", 0, "");
+check("TFSWAP cap above the raw fee changes nothing", tfCapAbove !== null && tfCapAbove.transferFeeIn === "500" && tfCapAbove.amountOut === tfCapEq.amountOut);
+const tfCap0 = app.transferFeeSwap("1000000", "1000000", "10000", 25, 500, "0", 0, "");
+check("TFSWAP a maximum fee of 0 means no fee, whatever the rate", tfCap0 !== null && tfCap0.transferFeeIn === "0" && tfCap0.amountOut === tfCap0.noTransferFeeOut);
+const tfOutCap = app.transferFeeSwap("500000", "2000000", "5000", 30, 50, "", 1000, "100");
+check("TFSWAP out-cap vector", tfOutCap !== null && tfOutCap.transferFeeIn === "25" && tfOutCap.grossOut === "19645.414540941" && tfOutCap.transferFeeOut === "100" && tfOutCap.amountOut === "19545.414540941");
+near("TFSWAP out-cap spot", tfOutCap.spotPrice, 4, 1e-12);
+
+const tfCeil = app.transferFeeSwap("1000000", "1000000", "1.000000001", 0, 1, "", 0, "");
+check("TFSWAP the fee ceiling is visible at 9 dp: 1 bp on 1.000000001 is 0.000100001, not 0.0001", tfCeil !== null && tfCeil.transferFeeIn === "0.000100001" && tfCeil.netAmountIn === "0.9999" && tfCeil.amountOut === "0.999899");
+
+const tfBig = app.transferFeeSwap("100000", "100000", "50000", 25, 100, "", 100, "");
+check("TFSWAP big trade amount out", tfBig !== null && tfBig.amountOut === "32724.403979882");
+near("TFSWAP big trade total drag vs spot", tfBig.priceImpactPct, 34.551192040236, 1e-9);
+const tfMirrorA = app.transferFeeSwap("4000000", "250000", "10000", 25, 100, "", 200, "");
+const tfMirrorB = app.transferFeeSwap("250000", "4000000", "10000", 25, 100, "", 200, "");
+check("TFSWAP mirror pools pin", tfMirrorA !== null && tfMirrorA.amountOut === "603.369456443" && tfMirrorB !== null && tfMirrorB.amountOut === "148959.856700474");
+near("TFSWAP mirror spots are reciprocal", tfMirrorA.spotPrice * tfMirrorB.spotPrice, 1, 1e-12);
+
+/* Conservation + composition across a sweep: fees and net always
+   reassemble the gross amounts exactly (scaled BigInt), the curve
+   leg is tool 1 run on the net input, and raising any of the three
+   fees never raises what the trader receives. */
+const tfSweep = [
+  ["1000000", "1000000", "10000", 25, 100, "", 200, ""],
+  ["500000", "2000000", "5000", 30, 50, "", 1000, "100"],
+  ["250000", "4000000", "777.25", 5, 33, "1.5", 77, ""],
+  ["100000", "100000", "50000", 25, 100, "", 100, ""],
+  ["2000000", "50000", "1234.567891", 100, 250, "", 250, "3.25"],
+  ["1000000", "1000000", "1.000000001", 0, 1, "", 0, ""]
+];
+for (const c of tfSweep) {
+  const tag = "TFSWAP sweep " + c[0] + "/" + c[1] + " in " + c[2];
+  const r = app.transferFeeSwap(c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]);
+  check(tag + " is not null", r !== null);
+  check(tag + " feeIn + netIn reassembles the amount in exactly",
+    app.parseScaled(r.transferFeeIn) + app.parseScaled(r.netAmountIn) === app.parseScaled(r.amountIn));
+  check(tag + " feeOut + received reassembles the gross out exactly",
+    app.parseScaled(r.transferFeeOut) + app.parseScaled(r.amountOut) === app.parseScaled(r.grossOut));
+  check(tag + " curve leg is tool 1 on the net input verbatim",
+    r.grossOut === app.cpSwap(c[0], c[1], r.netAmountIn, c[3]).out);
+  check(tag + " baseline is tool 1 on the gross input verbatim",
+    r.noTransferFeeOut === app.cpSwap(c[0], c[1], c[2], c[3]).out);
+  check(tag + " received never beats the no-transfer-fee trade",
+    app.parseScaled(r.amountOut) <= app.parseScaled(r.noTransferFeeOut));
+  const moreIn = app.transferFeeSwap(c[0], c[1], c[2], c[3], Math.min(c[4] + 50, 10000), c[5], c[6], c[7]);
+  const moreOut = app.transferFeeSwap(c[0], c[1], c[2], c[3], c[4], c[5], Math.min(c[6] + 50, 10000), c[7]);
+  const morePool = app.transferFeeSwap(c[0], c[1], c[2], Math.min(c[3] + 25, 9999), c[4], c[5], c[6], c[7]);
+  check(tag + " a higher in-fee never pays more", moreIn === null || app.parseScaled(moreIn.amountOut) <= app.parseScaled(r.amountOut));
+  check(tag + " a higher out-fee never pays more", moreOut === null || app.parseScaled(moreOut.amountOut) <= app.parseScaled(r.amountOut));
+  check(tag + " a higher pool fee never pays more", morePool === null || app.parseScaled(morePool.amountOut) <= app.parseScaled(r.amountOut));
+}
+
+check("TFSWAP blank, null and missing caps all mean no cap",
+  app.transferFeeSwap("1000000", "1000000", "10000", 25, 100, "", 200, "").amountOut ===
+  app.transferFeeSwap("1000000", "1000000", "10000", 25, 100, null, 200, null).amountOut &&
+  app.transferFeeSwap("1000000", "1000000", "10000", 25, 100, undefined, 200, undefined).amountOut === "9583.109398907");
+check("TFSWAP rejects a 100% in-fee (nothing reaches the pool)", app.transferFeeSwap("1000000", "1000000", "10000", 25, 10000, "", 0, "") === null);
+check("TFSWAP rejects a 100% out-fee (nothing is received)", app.transferFeeSwap("1000000", "1000000", "10000", 25, 0, "", 10000, "") === null);
+check("TFSWAP rejects a pool fee of 10000 bps", app.transferFeeSwap("1000000", "1000000", "10000", 10000, 0, "", 0, "") === null);
+check("TFSWAP rejects a transfer fee above 10000 bps", app.transferFeeSwap("1000000", "1000000", "10000", 25, 10001, "", 0, "") === null && app.transferFeeSwap("1000000", "1000000", "10000", 25, 0, "", 10001, "") === null);
+check("TFSWAP rejects negative and fractional bps", app.transferFeeSwap("1000000", "1000000", "10000", 25, -1, "", 0, "") === null && app.transferFeeSwap("1000000", "1000000", "10000", 25, 1.5, "", 0, "") === null && app.transferFeeSwap("1000000", "1000000", "10000", 2.5, 0, "", 0, "") === null);
+check("TFSWAP rejects unparseable and negative caps", app.transferFeeSwap("1000000", "1000000", "10000", 25, 100, "abc", 0, "") === null && app.transferFeeSwap("1000000", "1000000", "10000", 25, 100, "-5", 0, "") === null && app.transferFeeSwap("1000000", "1000000", "10000", 25, 0, "", 0, "1.0000000001") === null);
+check("TFSWAP rejects zero/negative reserves and amounts", app.transferFeeSwap("0", "1000000", "10000", 25, 0, "", 0, "") === null && app.transferFeeSwap("1000000", "1000000", "0", 25, 0, "", 0, "") === null && app.transferFeeSwap("1000000", "1000000", "abc", 25, 0, "", 0, "") === null);
+check("TFSWAP dust in with no fees floors to no output, like tool 1", app.transferFeeSwap("1000000", "1000000", "0.000000001", 0, 0, "", 0, "") === null);
+check("TFSWAP source forms the ceiling fee in scaled BigInt", appSrc.includes("function transferFeeSwap") && appSrc.includes("(amountScaled * BigInt(bps) + 9999n) / 10000n"));
+check("all tfswap controls labelled", ["tfswap-rin", "tfswap-rout", "tfswap-ain", "tfswap-poolfee", "tfswap-tfin", "tfswap-tfincap", "tfswap-tfout", "tfswap-tfoutcap", "tfswap-netin", "tfswap-out"].every(id => html.includes(`for="${id}"`)));
+check("tfswap tool present in index.html", html.includes('id="tfswap-calc"') && html.includes('id="tfswap-result"'));
+check("tfswap handler wired to its own form", appSrc.includes('getElementById("tfswap-calc")') && appSrc.includes('getElementById("tfswap-result")'));
+check("tfswap honesty: receiver-withheld, not-burned and not-live labels", html.includes("withheld from the receiver") && html.includes("not burned") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers Token-2022 transfer-fee swaps", guide.includes("A transfer-fee token is taxed on both legs of a swap"));
+check("README lists tool 91", readme.includes("91. **Token-2022 transfer-fee swap model**"));
 
 /* ---------- Accessibility guards (global — every tool, present and future) ---------- */
 /* The per-tool "all X controls labelled" checks above only cover the
