@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus eighty-eight fully
+/* Raydium Renaissance hub logic: project filtering plus eighty-nine fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -58,8 +58,9 @@
    four-range swap model, a CLMM four-range
    arbitrage model, a CLMM four-range price-impact
    sizer, a CLMM four-range exact-out swap model,
-   a stableswap deposit planner, and a stableswap
-   withdrawal planner.
+   a stableswap deposit planner, a stableswap
+   withdrawal planner, and a weighted-pool
+   deposit planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3703,6 +3704,120 @@ function stableWithdrawPlan(reserveAStr, reserveBStr, ampStr, totalSupplyStr, bu
   return result;
 }
 
+/* ---------- 89 · Weighted-pool deposit planner ---------- */
+/* Tools 5, 8 and 87 plan deposits into constant-product, CLMM
+   and stableswap pools; the weighted pools of tool 56 had
+   swap-side tools only. A weighted pool's invariant is the
+   weighted geometric mean of its reserves,
+     V = reserveA^wA x reserveB^wB   (wA + wB = 1),
+   and a deposit is minted against its growth, the way
+   Balancer-style pools mint:
+     minted = totalSupply x (V_new / V_old - 1)
+            = totalSupply x (((A + depA) / A)^wA
+                             x ((B + depB) / B)^wB - 1),
+   so the minted share of the new supply is exactly the
+   deposit's share of the invariant's growth. Two consequences
+   are asserted in tests, not just claimed: a deposit in the
+   pool's own reserve ratio scales both reserves by the same
+   factor (1 + t), V scales by exactly (1 + t) because the
+   weights sum to 1, and the mint is exactly t x supply at
+   every weight (balanced 1,000/1,000 with 2,000 LP
+   outstanding: 100/100 mints exactly 200, a 9.0909% share;
+   2,000/1,000 at an 80% A weight: 200/100 mints exactly 300
+   of 3,000). And a single-sided deposit mints LESS than the
+   same value — valued at the pool's starting spot price of B
+   in A, (A / wA) / (B / wB) — deposited in ratio: depositing
+   only A grows that reserve by a fraction x and mints
+   supply x ((1 + x)^wA - 1) against a proportional
+   supply x wA x x, and (1 + x)^wA - 1 < wA x x for any
+   0 < wA < 1 — the concavity tax. Its size is set by the
+   deposit's size relative to its OWN reserve and by that
+   token's weight: 100 A alone into balanced 1,000/1,000
+   mints 97.6177 at a 50% weight (-2.3823%), 158.4607
+   against a proportional 160 at 80% (-0.9621% — a heavier
+   token is taxed less, because its exponent sits closer to
+   the proportional line) and only 38.4898 against 40 at
+   20% (-3.7756%); the mirror is exact, so 100 B alone at an
+   80% A weight mints exactly the 20% figure. On an
+   unbalanced pool the same rule, not scarcity, sets the
+   tax: on 1,500/500 at 50/50 (spot 3 A per B) 100 A mints
+   65.5911 (-1.6133%) while 100 B mints 190.8902 (-4.5549%)
+   — the B deposit grows its own reserve by 20% against the
+   A deposit's 6.67%, and the bigger relative growth pays
+   the bigger tax. Precision: the growth is formed as
+   expm1(wA x log1p(depA / A) + wB x log1p(depB / B)), never
+   as a difference of two near-equal powers — for a dust
+   deposit the naive form rounds the mint away (a 1e-9
+   deposit of A into balanced 1,000/1,000 at a 50% weight
+   mints 9.9999999999975e-10 here, with a vs-proportional
+   figure of ~-2.5e-11%, i.e. no phantom shortfall).
+   Honest edges: NO join fee is modelled — some weighted
+   designs charge one, or route the non-proportional part
+   of a join through a swap that pays fee and impact the
+   way tool 56 shows, so a real single-sided deposit can
+   mint a little less than this; the value benchmark is
+   struck at the STARTING spot, the only price that exists
+   before the deposit moves it; and the mint buys a share
+   of the invariant, not a fixed claim on either token.
+   Weighted pools are a generalised design used elsewhere —
+   Raydium's own constant-product pools are the 50/50 case.
+   Educational model only — your reserves, weight, supply
+   and deposits, not live pool data, not a live quote, not
+   financial advice. */
+function weightedDepositPlan(reserveAStr, reserveBStr, weightAPctStr, totalSupplyStr, depositAStr, depositBStr) {
+  var raw = [reserveAStr, reserveBStr, weightAPctStr, totalSupplyStr, depositAStr, depositBStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var reserveA = Number(reserveAStr), reserveB = Number(reserveBStr);
+  var weightAPct = Number(weightAPctStr), totalSupply = Number(totalSupplyStr);
+  var depositA = Number(depositAStr), depositB = Number(depositBStr);
+  if (![reserveA, reserveB, weightAPct, totalSupply, depositA, depositB].every(Number.isFinite)) return null;
+  if (reserveA <= 0 || reserveB <= 0 || totalSupply <= 0) return null;
+  if (weightAPct <= 0 || weightAPct >= 100) return null;
+  if (depositA < 0 || depositB < 0 || depositA + depositB <= 0) return null;
+  var wA = weightAPct / 100, wB = 1 - wA;
+  var invariantV = Math.exp(wA * Math.log(reserveA) + wB * Math.log(reserveB));
+  if (!Number.isFinite(invariantV) || !(invariantV > 0)) return null;
+  /* The invariant's growth, cancellation-free (see the
+     header's precision note): the log growth is a sum of
+     log1p terms at deposit scale, and expm1 turns it back
+     into a growth fraction without ever subtracting two
+     near-equal reserve-scale powers. */
+  var growth = Math.expm1(wA * Math.log1p(depositA / reserveA) + wB * Math.log1p(depositB / reserveB));
+  if (!Number.isFinite(growth) || !(growth > 0)) return null;
+  var minted = totalSupply * growth;
+  if (!(minted > 0)) return null;
+  var newReserveA = reserveA + depositA, newReserveB = reserveB + depositB;
+  var spotBInA = (reserveA / wA) / (reserveB / wB);
+  if (!Number.isFinite(spotBInA) || !(spotBInA > 0)) return null;
+  var newSpotBInA = (newReserveA / wA) / (newReserveB / wB);
+  var depositValueA = depositA + spotBInA * depositB;
+  var poolValueA = reserveA + spotBInA * reserveB;
+  var proportionalMinted = totalSupply * depositValueA / poolValueA;
+  if (!(proportionalMinted > 0)) return null;
+  var result = {
+    reserveA: reserveA, reserveB: reserveB,
+    weightAPct: weightAPct, weightBPct: 100 - weightAPct,
+    totalSupply: totalSupply, depositA: depositA, depositB: depositB,
+    invariantV: invariantV, newInvariantV: invariantV * (1 + growth),
+    growthPct: growth * 100,
+    minted: minted,
+    newTotalSupply: totalSupply + minted,
+    shareAfterPct: minted / (totalSupply + minted) * 100,
+    newReserveA: newReserveA, newReserveB: newReserveB,
+    spotBInA: spotBInA, newSpotBInA: newSpotBInA,
+    depositValueA: depositValueA, poolValueA: poolValueA,
+    proportionalMinted: proportionalMinted,
+    vsProportionalPct: (minted / proportionalMinted - 1) * 100
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (!Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -6676,7 +6791,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -8445,6 +8560,32 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: burning " + fmt(res.burn, 4) + " LP tokens (" + fmt(res.burnSharePct, 4) + "% of the supply) shrinks the invariant from " + fmt(res.invariantD, 4) + " to " + fmt(res.newInvariantD, 4) + ". Pro-rata, it pays " + fmt(res.proOutA, 4) + " A and " + fmt(res.proOutB, 4) + " B — the pool's own ratio, worth " + fmt(res.proRataValueA, 4) + " A at the starting spot of " + fmt(res.spotBInA, 4) + " A per B. Taken entirely in A it pays ≈ " + fmt(res.singleOutA, 4) + " A (≈ " + fmt(-res.singleAVsProRataPct, 4) + "% under the pro-rata value), and entirely in B ≈ " + fmt(res.singleOutB, 4) + " B (≈ " + fmt(-res.singleBVsProRataPct, 4) + "% under, struck at the same spot), because a single-sided exit walks the spot away from you as it pays out — cheaper in the plentiful token, dearer in the scarce one, and dearer the larger the share burned. No withdrawal or imbalance fee is modelled — real Curve-style pools may charge one, so a real single-sided exit pays a little less again. A stableswap withdrawal model, not a live Raydium quote. Not financial advice.";
         document.getElementById("swd-outa").value = fmt(res.proOutA, 4);
         document.getElementById("swd-outb").value = fmt(res.proOutB, 4);
+      }
+    });
+
+    document.getElementById("wdep-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = weightedDepositPlan(
+        document.getElementById("wdep-ra").value,
+        document.getElementById("wdep-rb").value,
+        document.getElementById("wdep-wa").value,
+        document.getElementById("wdep-supply").value,
+        document.getElementById("wdep-da").value,
+        document.getElementById("wdep-db").value
+      );
+      var out = document.getElementById("wdep-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, a token A weight above 0 and below 100%, an LP supply above 0, and deposits of 0 or more in each token with at least one deposit above 0.";
+        document.getElementById("wdep-out").value = "";
+        document.getElementById("wdep-share").value = "";
+      } else if (Math.abs(res.vsProportionalPct) < 1e-9) {
+        out.textContent = "Model output: depositing " + fmt(res.depositA, 4) + " A and " + fmt(res.depositB, 4) + " B grows the weighted invariant from " + fmt(res.invariantV, 4) + " to " + fmt(res.newInvariantV, 4) + ", minting exactly " + fmt(res.minted, 4) + " LP tokens — exactly the in-ratio mint for this deposit's value at the pool's starting spot of " + fmt(res.spotBInA, 4) + " A per B, because a deposit in the pool's own ratio scales the invariant by its own fraction at any weight, and the spot does not move. Your share after the deposit is ≈ " + fmt(res.shareAfterPct, 4) + "% of " + fmt(res.newTotalSupply, 4) + " LP outstanding. No join fee is modelled. A weighted-pool deposit model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("wdep-out").value = fmt(res.minted, 4);
+        document.getElementById("wdep-share").value = fmt(res.shareAfterPct, 4) + "%";
+      } else {
+        out.textContent = "Model output: depositing " + fmt(res.depositA, 4) + " A and " + fmt(res.depositB, 4) + " B grows the weighted invariant from " + fmt(res.invariantV, 4) + " to " + fmt(res.newInvariantV, 4) + ", minting ≈ " + fmt(res.minted, 4) + " LP tokens — ≈ " + fmt(-res.vsProportionalPct, 4) + "% less than the ≈ " + fmt(res.proportionalMinted, 4) + " the same value, struck at the pool's starting spot of " + fmt(res.spotBInA, 4) + " A per B, would mint in the pool's own ratio, because a one-sided deposit grows its own reserve along a concave curve: the tax rises with the deposit's size relative to its own reserve and falls as that token's weight rises. The spot moves to ≈ " + fmt(res.newSpotBInA, 4) + " A per B. Your share after the deposit is ≈ " + fmt(res.shareAfterPct, 4) + "% of " + fmt(res.newTotalSupply, 4) + " LP outstanding. No join fee is modelled — some weighted designs charge one or route the non-proportional part through a swap, so a real deposit this shape can mint a little less again. A weighted-pool deposit model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("wdep-out").value = fmt(res.minted, 4);
+        document.getElementById("wdep-share").value = fmt(res.shareAfterPct, 4) + "%";
       }
     });
 

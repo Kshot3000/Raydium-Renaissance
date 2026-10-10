@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=110"));
+check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=111"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1358,7 +1358,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists eighty-eight tools", readme.includes("eighty-eight pool tools") || readme.includes("all eighty-eight"));
+check("README lists eighty-nine tools", readme.includes("eighty-nine pool tools") || readme.includes("all eighty-nine"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2001,8 +2001,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts eighty-eight tools and names the newest tools",
-  appSrc.includes("plus eighty-eight fully") && appSrc.includes("a CLMM four-range exact-out swap model,\n   a stableswap deposit planner, and a stableswap\n   withdrawal planner.\n   These are educational MODELS"));
+check("app.js header counts eighty-nine tools and names the newest tools",
+  appSrc.includes("plus eighty-nine fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, and a weighted-pool\n   deposit planner.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v110", html.includes("app.js?v=110"));
+check("app.js cache key bumped to v111", html.includes("app.js?v=111"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -5915,6 +5915,97 @@ check("swd handler wired to its own form", appSrc.includes('getElementById("swd-
 check("swd honesty: no withdrawal fee modelled and not-live labels", html.includes("No withdrawal or imbalance fee is modelled") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers stableswap withdrawals", guide.includes("Leave a stable pool in its own ratio"));
 check("README lists tool 88", readme.includes("88. **Stableswap withdrawal planner**"));
+
+/* ---------- 89 · Weighted-pool deposit planner (WDEP) ---------- */
+/* Prototype-verified before these tests were written (clean
+   foreground run, 50-digit Decimal oracle): balanced 1,000/1,000
+   with 2,000 LP outstanding, 100/100 in ratio mints exactly 200;
+   100 A alone mints 97.61769634030309 at a 50% A weight
+   (-2.382303659696906% vs proportional), 158.46069059778153 at
+   80% (-0.9620683763865427%) and 38.48975298291324 at 20%
+   (-3.7756175427168967%); a 1e-9 dust deposit mints
+   9.9999999999975e-10 with no phantom shortfall. */
+const wd1 = app.weightedDepositPlan("1000", "1000", "50", "2000", "100", "100");
+check("WDEP headline is not null", wd1 !== null);
+near("WDEP headline in-ratio minted is exact", wd1.minted, 200, 1e-9);
+near("WDEP headline share", wd1.shareAfterPct, 100 / 11, 1e-9);
+near("WDEP headline invariant V", wd1.invariantV, 1000, 1e-9);
+near("WDEP headline new V", wd1.newInvariantV, 1100, 1e-9);
+near("WDEP headline growth", wd1.growthPct, 10, 1e-9);
+near("WDEP headline spot", wd1.spotBInA, 1, 1e-12);
+near("WDEP headline spot unmoved by an in-ratio deposit", wd1.newSpotBInA, 1, 1e-12);
+near("WDEP headline vs proportional is zero", wd1.vsProportionalPct, 0, 1e-9);
+near("WDEP headline new supply", wd1.newTotalSupply, 2200, 1e-9);
+const wdS = app.weightedDepositPlan("1000", "1000", "50", "2000", "100", "0");
+near("WDEP single A at 50% minted", wdS.minted, 97.61769634030309, 1e-9);
+near("WDEP single A at 50% proportional", wdS.proportionalMinted, 100, 1e-9);
+near("WDEP single A at 50% vs proportional", wdS.vsProportionalPct, -2.382303659696906, 1e-9);
+near("WDEP single A at 80% minted", app.weightedDepositPlan("1000", "1000", "80", "2000", "100", "0").minted, 158.46069059778153, 1e-9);
+near("WDEP single A at 80% vs proportional", app.weightedDepositPlan("1000", "1000", "80", "2000", "100", "0").vsProportionalPct, -0.9620683763865427, 1e-9);
+near("WDEP single A at 20% minted", app.weightedDepositPlan("1000", "1000", "20", "2000", "100", "0").minted, 38.48975298291324, 1e-9);
+near("WDEP single A at 20% vs proportional", app.weightedDepositPlan("1000", "1000", "20", "2000", "100", "0").vsProportionalPct, -3.7756175427168967, 1e-9);
+near("WDEP spot at 80% A weight", app.weightedDepositPlan("1000", "1000", "80", "2000", "100", "0").spotBInA, 0.25, 1e-12);
+near("WDEP spot at 20% A weight", app.weightedDepositPlan("1000", "1000", "20", "2000", "100", "0").spotBInA, 4, 1e-12);
+check("WDEP single-sided tax falls as the deposited token's weight rises",
+  app.weightedDepositPlan("1000", "1000", "20", "2000", "100", "0").vsProportionalPct <
+  wdS.vsProportionalPct &&
+  wdS.vsProportionalPct <
+  app.weightedDepositPlan("1000", "1000", "80", "2000", "100", "0").vsProportionalPct);
+near("WDEP mirror: 100 B at an 80% A weight mints the 20% A figure",
+  app.weightedDepositPlan("1000", "1000", "80", "2000", "0", "100").minted, 38.48975298291324, 1e-9);
+near("WDEP in-ratio at an 80% weight mints exactly its fraction",
+  app.weightedDepositPlan("2000", "1000", "80", "3000", "200", "100").minted, 300, 1e-9);
+const wdU = app.weightedDepositPlan("1500", "500", "50", "2000", "100", "0");
+near("WDEP unbalanced spot", wdU.spotBInA, 3, 1e-12);
+near("WDEP unbalanced plentiful A minted", wdU.minted, 65.59111797728901, 1e-9);
+near("WDEP unbalanced plentiful A vs proportional", wdU.vsProportionalPct, -1.6133230340664919, 1e-9);
+const wdU2 = app.weightedDepositPlan("1500", "500", "50", "2000", "0", "100");
+near("WDEP unbalanced B minted", wdU2.minted, 190.89023002066445, 1e-9);
+near("WDEP unbalanced B vs proportional", wdU2.vsProportionalPct, -4.554884989667773, 1e-9);
+check("WDEP bigger relative growth pays the bigger tax", wdU2.vsProportionalPct < wdU.vsProportionalPct);
+/* sweeps: an in-ratio deposit mints exactly its fraction of the
+   supply at every weight and leaves the spot unmoved; a
+   single-sided deposit always mints below its proportional
+   benchmark; the minted share is the invariant growth's share */
+for (const [ra, rb, wa, supply, t] of [[1000, 1000, 50, 2000, 0.1], [2000, 1000, 80, 3000, 0.1], [1000, 4000, 20, 2000, 0.05], [1500, 500, 65, 2500, 0.2], [750, 1250, 35, 1500, 0.333], [10000, 10000, 90, 20000, 0.01]]) {
+  const r = app.weightedDepositPlan(String(ra), String(rb), String(wa), String(supply), String(ra * t), String(rb * t));
+  const tag = "WDEP in-ratio sweep " + ra + "/" + rb + " @w" + wa + " t " + t;
+  check(tag + " not null", r !== null);
+  near(tag + " minted is exactly t x supply", r.minted, supply * t, 1e-6);
+  near(tag + " vs proportional is zero", r.vsProportionalPct, 0, 1e-7);
+  near(tag + " spot unmoved", r.newSpotBInA, r.spotBInA, 1e-9);
+}
+for (const [ra, rb, wa, supply, da, db] of [[1000, 1000, 50, 2000, 100, 0], [1000, 1000, 80, 2000, 0, 250], [1500, 500, 30, 2000, 500, 0], [500, 2000, 70, 4000, 0, 100], [2000, 800, 45, 3000, 40, 900], [10000, 10000, 10, 20000, 1, 0]]) {
+  const r = app.weightedDepositPlan(String(ra), String(rb), String(wa), String(supply), String(da), String(db));
+  const tag = "WDEP off-ratio sweep " + ra + "/" + rb + " @w" + wa + " dep " + da + "/" + db;
+  check(tag + " not null", r !== null);
+  check(tag + " mints below proportional", r.vsProportionalPct < 0 && r.minted < r.proportionalMinted);
+  near(tag + " share is the growth's share", r.shareAfterPct, (r.growthPct / 100) / (1 + r.growthPct / 100) * 100, 1e-9);
+  near(tag + " invariant ratio identity", r.newInvariantV / r.invariantV, 1 + r.growthPct / 100, 1e-9);
+}
+near("WDEP 10x scale mints exactly 10x", app.weightedDepositPlan("10000", "10000", "50", "20000", "1000", "0").minted, wdS.minted * 10, 1e-9);
+/* dust deposits: the growth is formed with expm1/log1p, not
+   subtracted — the plain power difference would round the mint
+   away and wear a phantom shortfall (50-digit oracle pins). */
+near("WDEP dust deposit 1e-9 minted matches the oracle",
+  app.weightedDepositPlan("1000", "1000", "50", "2000", "0.000000001", "0").minted, 9.9999999999975e-10, 1e-18);
+near("WDEP dust deposit 1e-9 has no phantom shortfall",
+  app.weightedDepositPlan("1000", "1000", "50", "2000", "0.000000001", "0").vsProportionalPct, 0, 1e-9);
+check("WDEP rejects weight 0", app.weightedDepositPlan("1000", "1000", "0", "2000", "1", "1") === null);
+check("WDEP rejects weight 100", app.weightedDepositPlan("1000", "1000", "100", "2000", "1", "1") === null);
+check("WDEP rejects both deposits zero", app.weightedDepositPlan("1000", "1000", "50", "2000", "0", "0") === null);
+check("WDEP rejects a negative deposit", app.weightedDepositPlan("1000", "1000", "50", "2000", "-5", "10") === null);
+check("WDEP rejects zero supply", app.weightedDepositPlan("1000", "1000", "50", "0", "1", "1") === null);
+check("WDEP rejects zero reserve", app.weightedDepositPlan("0", "1000", "50", "2000", "1", "1") === null);
+check("WDEP rejects empty input", app.weightedDepositPlan("", "1000", "50", "2000", "1", "1") === null);
+check("WDEP rejects non-numeric input", app.weightedDepositPlan("1000", "1000", "50", "2000", "abc", "1") === null);
+check("WDEP forms the growth cancellation-free in source", appSrc.includes("function weightedDepositPlan") && appSrc.includes("Math.expm1(wA * Math.log1p(depositA / reserveA)"));
+check("all wdep controls labelled", ["wdep-ra", "wdep-rb", "wdep-wa", "wdep-supply", "wdep-da", "wdep-db", "wdep-out", "wdep-share"].every(id => html.includes(`for="${id}"`)));
+check("wdep tool present in index.html", html.includes('id="wdep-calc"') && html.includes('id="wdep-result"'));
+check("wdep handler wired to its own form", appSrc.includes('getElementById("wdep-calc")') && appSrc.includes('getElementById("wdep-result")'));
+check("wdep honesty: no join fee modelled and not-live labels", html.includes("No join fee is modelled") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers weighted-pool deposits", guide.includes("Deposit into a weighted pool in the pool's own ratio"));
+check("README lists tool 89", readme.includes("89. **Weighted-pool deposit planner**"));
 
 /* ---------- Accessibility guards (global — every tool, present and future) ---------- */
 /* The per-tool "all X controls labelled" checks above only cover the
