@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=92"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=93"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1357,7 +1357,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists seventy-four tools", readme.includes("seventy-four pool tools") || readme.includes("all seventy-four"));
+check("README lists seventy-five tools", readme.includes("seventy-five pool tools") || readme.includes("all seventy-five"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2000,8 +2000,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts seventy-four tools and names the curve comparison exact-out model",
-  appSrc.includes("plus seventy-four fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, and a curve\n   comparison exact-out model.\n   These are educational MODELS"));
+check("app.js header counts seventy-five tools and names the weighted-pool IL tolerance band",
+  appSrc.includes("plus seventy-five fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, a curve\n   comparison exact-out model, and a weighted-pool\n   IL tolerance band.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -4553,6 +4553,72 @@ check("ccx honesty: split rankings and not-live labels", html.includes("cheapest
 check("guide covers curve comparison exact-out", guide.includes("read the spot before ranking the cost"));
 check("README lists tool 74", readme.includes("74. **Curve comparison exact-out model**"));
 
+
+/* ---------- Tool 75: Weighted-pool IL tolerance band (WBAND) ---------- */
+const wband = app.weightedIlBand("80", "1000", "50");
+check("WBAND headline exists", wband !== null);
+near("WBAND headline high edge", wband.priceRatioHigh, 1.9113813402601416, 1e-9);
+near("WBAND headline low edge", wband.priceRatioLow, 0.34065281594534413, 1e-9);
+near("WBAND headline move up %", wband.moveUpPct, 91.13813402601416, 1e-7);
+near("WBAND headline move down %", wband.moveDownPct, 65.93471840546559, 1e-7);
+near("WBAND headline max downside hurdle (B side's share)", wband.maxDownHurdle, 200, 1e-9);
+near("WBAND headline fee % of deposit", wband.feePctOfDeposit, 5, 1e-12);
+check("WBAND headline weights reported", wband.weightAPct === 80 && wband.weightBPct === 20 && wband.downUnbounded === false);
+/* both edges are Tool 60's own hurdle equalling the fees fed in,
+   across a weight / deposit / fee sweep */
+for (const [w, d, f] of [[80, 1000, 50], [50, 1000, 50], [20, 1000, 50], [80, 1000, 10], [10, 1000, 100], [90, 500, 25], [35, 2000, 75], [65, 500, 5]]) {
+  const x = app.weightedIlBand(String(w), String(d), String(f));
+  check("WBAND band exists @" + w + "/" + d + "/" + f, x !== null && x.downUnbounded === false);
+  near("WBAND Tool 60 hurdle at high edge @" + w + "/" + f, app.weightedImpermanentLoss(String(w), String(x.priceRatioHigh), String(d)).feesNeeded, f, 1e-6);
+  near("WBAND Tool 60 hurdle at low edge @" + w + "/" + f, app.weightedImpermanentLoss(String(w), String(x.priceRatioLow), String(d)).feesNeeded, f, 1e-6);
+  check("WBAND band straddles 1 @" + w + "/" + f, x.priceRatioLow < 1 && x.priceRatioHigh > 1);
+}
+/* at a 50% weight the band is Tool 21's closed form exactly */
+for (const f of [10, 50, 100, 200, 499]) {
+  const x = app.weightedIlBand("50", "1000", String(f));
+  const t = app.ilToleranceBand("1000", String(f));
+  near("WBAND equals Tool 21 high @fees " + f, x.priceRatioHigh, t.priceRatioHigh, 1e-9);
+  near("WBAND equals Tool 21 low @fees " + f, x.priceRatioLow, t.priceRatioLow, 1e-6);
+}
+/* the band widens with the fees, on both sides */
+{
+  const small = app.weightedIlBand("80", "1000", "10"), big = app.weightedIlBand("80", "1000", "100");
+  check("WBAND band widens with fees", big.priceRatioHigh > small.priceRatioHigh && big.priceRatioLow < small.priceRatioLow);
+  near("WBAND small-fee high edge", small.priceRatioHigh, 1.3781451867380252, 1e-9);
+  near("WBAND small-fee low edge", small.priceRatioLow, 0.6719309644575064, 1e-9);
+}
+/* scale-free: the band depends on fees/deposit and the weight only */
+near("WBAND scale-free high", app.weightedIlBand("80", "250", "12.5").priceRatioHigh, wband.priceRatioHigh, 1e-9);
+near("WBAND scale-free low", app.weightedIlBand("80", "250", "12.5").priceRatioLow, wband.priceRatioLow, 1e-9);
+/* downside cap: fees at or above (1 - w) of the deposit cover any fall */
+{
+  const atCap = app.weightedIlBand("80", "1000", "200");
+  check("WBAND down-unbounded at the cap (80% weight, $200)", atCap.downUnbounded === true && atCap.priceRatioLow === null && atCap.moveDownPct === null);
+  near("WBAND unbounded high edge still solved", atCap.priceRatioHigh, 3.0517578124999987, 1e-9);
+  check("WBAND down-unbounded above the cap", app.weightedIlBand("80", "1000", "250").downUnbounded === true);
+  check("WBAND down-unbounded at the 20% weight cap ($800)", app.weightedIlBand("20", "1000", "800").downUnbounded === true);
+  check("WBAND bounded just below the cap", app.weightedIlBand("80", "1000", "199").downUnbounded === false);
+  near("WBAND max downside hurdle at 20% weight", app.weightedIlBand("20", "1000", "50").maxDownHurdle, 800, 1e-9);
+}
+/* zero fees collapse the band to exactly 1x */
+{
+  const zero = app.weightedIlBand("80", "1000", "0");
+  check("WBAND zero fees collapse to 1x", zero.priceRatioHigh === 1 && zero.priceRatioLow === 1 && zero.moveUpPct === 0 && zero.moveDownPct === 0 && zero.downUnbounded === false);
+}
+/* rejections */
+check("WBAND rejects blank and junk", app.weightedIlBand("", "1000", "50") === null && app.weightedIlBand("80", "1000", "abc") === null && app.weightedIlBand("80", " ", "50") === null);
+check("WBAND rejects weight at the edges", app.weightedIlBand("0", "1000", "50") === null && app.weightedIlBand("100", "1000", "50") === null && app.weightedIlBand("-5", "1000", "50") === null);
+check("WBAND rejects non-positive deposit", app.weightedIlBand("80", "0", "50") === null && app.weightedIlBand("80", "-100", "50") === null);
+check("WBAND rejects negative fees", app.weightedIlBand("80", "1000", "-1") === null);
+check("WBAND composes Tool 60 in source", appSrc.includes("function weightedIlBand") && appSrc.includes("weightedImpermanentLoss(weightAPctStr, String(r), depositStr)"));
+check("all wband controls labelled",
+  ["wband-weight", "wband-deposit", "wband-fees", "wband-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("wband tool present in index.html", html.includes('id="wband-calc"') && html.includes('id="wband-result"'));
+check("wband handler wired to its own form", appSrc.includes('getElementById("wband-calc")') && appSrc.includes('getElementById("wband-result")'));
+check("wband honesty: downside cap and not-live labels", html.includes("fees at or above that share cover any fall at all") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers weighted IL tolerance band", guide.includes("the downside hurdle is capped, the upside hurdle is not"));
+check("README lists tool 75", readme.includes("75. **Weighted-pool IL tolerance band**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

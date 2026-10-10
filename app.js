@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus seventy-four fully
+/* Raydium Renaissance hub logic: project filtering plus seventy-five fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -47,8 +47,9 @@
    required-volume planner, a stableswap
    required-volume planner, a weighted-pool
    break-even days calculator, a stableswap
-   break-even days calculator, and a curve
-   comparison exact-out model.
+   break-even days calculator, a curve
+   comparison exact-out model, and a weighted-pool
+   IL tolerance band.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -4986,8 +4987,104 @@ function stableBreakEvenDays(reserveAStr, reserveBStr, ampStr, priceBStr, shareP
   };
 }
 
+/* ---------- 75 · Weighted-pool IL tolerance band (Tool 60 inverted) ---------- */
+/* Tools 21 and 30 ask "how far can the price move before the fees
+   I have earned stop covering the impermanent loss?" for a 50/50
+   constant-product pool and for a CLMM position; the weighted
+   pools of Tool 56 had no such band. The hurdle here is Tool 60's
+   own feesNeeded as a fraction of the deposit,
+     g(r) = w·r + (1 − w) − r^w,
+   which has no closed form off a 50% weight (at 50% it collapses
+   to Tool 21's (√r − 1)²/2 exactly, asserted in tests), so both
+   edges are found by geometric bisection directly on Tool 60's
+   weightedImpermanentLoss, and the hurdle at each reported edge
+   equals the fees fed in. Headline: at an 80% weight on token A,
+   $50 of fees on a $1,000 deposit covers a band of ≈0.3407x to
+   ≈1.9114x — a ≈65.93% fall but a ≈91.14% rise, because the
+   heavy side tracks holding more closely on the way up. The
+   band's honest asymmetry is on the downside: as r → 0 the
+   hurdle approaches (1 − w) of the deposit and never passes it
+   (the position's token A is worthless but its token B side is
+   untouched, and holding loses exactly that same B side's
+   complement) — so fees at or above (1 − w) × deposit cover ANY
+   fall, reported as down-unbounded exactly as Tool 21 reports
+   its 50%-of-deposit cap. At an 80% weight that cap is just
+   $200 of a $1,000 deposit; at a 20% weight it is $800, because
+   a light weight on the collapsing token leaves most of the
+   position in the other token either way. Zero fees collapse
+   the band to exactly 1x on both sides, honestly. Validation
+   rides on Tool 60: the weight must lie strictly between 0 and
+   100 and the deposit above 0 exactly as that tool requires,
+   and the fees must be finite and non-negative. The band
+   assumes the fees are already earned and held outside the
+   position and that the weight stays fixed — a live weighted
+   pool rebalances continuously and fees compound into it.
+   Weighted pools are a generalised design used elsewhere —
+   Raydium's own constant-product pools are the 50/50 case
+   Tool 21 covers. Educational model only — your weight,
+   deposit and fees inputs; not live pool data, not a live
+   quote, not financial advice. */
+function weightedIlBand(weightAPctStr, depositStr, feesStr) {
+  var required = [weightAPctStr, depositStr, feesStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var fees = Number(feesStr);
+  if (!Number.isFinite(fees) || fees < 0) return null;
+  var atEntry = weightedImpermanentLoss(weightAPctStr, "1", depositStr);
+  if (atEntry === null || atEntry.deposit == null || !(atEntry.deposit > 0)) return null;
+  var w = atEntry.weightAPct / 100, dep = atEntry.deposit;
+  var f = fees / dep;
+  var base = {
+    weightAPct: atEntry.weightAPct, weightBPct: atEntry.weightBPct,
+    deposit: dep, feesEarned: fees, feePctOfDeposit: f * 100,
+    maxDownHurdle: dep * (1 - w), maxDownHurdlePctOfDeposit: (1 - w) * 100
+  };
+  if (fees === 0) {
+    return Object.assign(base, {
+      priceRatioHigh: 1, priceRatioLow: 1, moveUpPct: 0, moveDownPct: 0,
+      downUnbounded: false
+    });
+  }
+  function hurdleFrac(r) {
+    var wil = weightedImpermanentLoss(weightAPctStr, String(r), depositStr);
+    return wil === null ? null : wil.feesNeeded / dep;
+  }
+  /* upper edge: the hurdle grows without bound as r rises (the
+     hold side grows linearly, the LP side only as r^w), so a
+     doubling bracket always finds it; bisect geometrically */
+  var lo = 1, hi = 2;
+  while (hurdleFrac(hi) < f && hi < 1e300) hi *= 2;
+  if (hurdleFrac(hi) < f) return null;
+  for (var a = 0; a < 200; a++) {
+    var mid = Math.sqrt(lo * hi);
+    if (hurdleFrac(mid) < f) lo = mid; else hi = mid;
+  }
+  var priceHigh = Math.sqrt(lo * hi);
+  var result = Object.assign(base, {
+    priceRatioHigh: priceHigh, moveUpPct: (priceHigh - 1) * 100
+  });
+  /* lower edge: the hurdle caps at (1 − w) of the deposit as
+     r → 0, so fees at or above the cap cover any fall */
+  if (f >= 1 - w) {
+    return Object.assign(result, { downUnbounded: true, priceRatioLow: null, moveDownPct: null });
+  }
+  var loD = 0.5, hiD = 1;
+  while (hurdleFrac(loD) < f && loD > 1e-300) loD /= 2;
+  if (hurdleFrac(loD) < f) return null;
+  for (var b = 0; b < 200; b++) {
+    var midD = Math.sqrt(loD * hiD);
+    if (hurdleFrac(midD) < f) hiD = midD; else loD = midD;
+  }
+  var priceLow = Math.sqrt(loD * hiD);
+  return Object.assign(result, {
+    downUnbounded: false, priceRatioLow: priceLow,
+    moveDownPct: (1 - priceLow) * 100
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -7220,6 +7317,29 @@ if (typeof document !== "undefined") {
       } else {
         out.textContent = "Model output: with token B at " + fmt(res.priceB, 4) + " A, your " + fmt(res.sharePct, 2) + "% share is ≈ " + fmt(res.feesNeeded, 4) + " A behind holding (depeg loss " + fmt(res.lossPct, 2) + "% on the pool). At ≈ " + fmt(res.dailyFees, 4) + " A of fees a day to you (your share of a " + fmt(res.feeBps, 0) + " bps tier), that takes ≈ " + fmt(res.daysToBreakEven, 2) + " days. Amplification sets the hurdle before volume enters it — a higher A defends par longer and drains further, so the count grows with A. One honest shape: the day count does not depend on your share — a bigger share owes a bigger slice of the hurdle but takes the same bigger slice of every fee, so the two cancel. A stableswap break-even days model, not a live Raydium quote — it assumes the volume, tier, share, price and amplification all hold still. Not financial advice.";
         document.getElementById("sbed-out").value = fmt(res.daysToBreakEven, 2);
+      }
+    });
+
+    document.getElementById("wband-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = weightedIlBand(
+        document.getElementById("wband-weight").value,
+        document.getElementById("wband-deposit").value,
+        document.getElementById("wband-fees").value
+      );
+      var out = document.getElementById("wband-result");
+      if (res === null) {
+        out.textContent = "Enter a token A weight strictly between 0 and 100%, a deposit above $0, and fees earned of $0 or more.";
+        document.getElementById("wband-out").value = "";
+      } else if (res.feesEarned === 0) {
+        out.textContent = "Model output: with $0 of fees earned there is nothing to cover any impermanent loss, so the tolerance band collapses to exactly 1x on both sides — any move at all leaves the position behind holding. A weighted-pool IL tolerance band model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("wband-out").value = "1x to 1x";
+      } else if (res.downUnbounded) {
+        out.textContent = "Model output: at a " + fmt(res.weightAPct, 2) + "% weight on token A, $" + fmt(res.feesEarned, 4) + " of fees on a $" + fmt(res.deposit, 2) + " deposit covers a rise to ≈ " + fmt(res.priceRatioHigh, 4) + "x (+" + fmt(res.moveUpPct, 2) + "%), and covers ANY fall: the worst possible downside hurdle is ≈ $" + fmt(res.maxDownHurdle, 4) + " (" + fmt(res.maxDownHurdlePctOfDeposit, 2) + "% of the deposit — the token B side's share), because as token A's price falls toward zero the position's B side is untouched and holding loses exactly that same share. A weighted-pool IL tolerance band model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("wband-out").value = "any fall to " + fmt(res.priceRatioHigh, 4) + "x";
+      } else {
+        out.textContent = "Model output: at a " + fmt(res.weightAPct, 2) + "% weight on token A, $" + fmt(res.feesEarned, 4) + " of fees on a $" + fmt(res.deposit, 2) + " deposit covers price multiples from ≈ " + fmt(res.priceRatioLow, 4) + "x (−" + fmt(res.moveDownPct, 2) + "%) to ≈ " + fmt(res.priceRatioHigh, 4) + "x (+" + fmt(res.moveUpPct, 2) + "%). The band is not symmetric: the downside hurdle caps at ≈ $" + fmt(res.maxDownHurdle, 4) + " (" + fmt(res.maxDownHurdlePctOfDeposit, 2) + "% of the deposit) while the upside hurdle grows without bound, and the weight sets both shapes. At either edge the fees exactly equal tool 60's hurdle. A weighted-pool IL tolerance band model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("wband-out").value = fmt(res.priceRatioLow, 4) + "x to " + fmt(res.priceRatioHigh, 4) + "x";
       }
     });
 

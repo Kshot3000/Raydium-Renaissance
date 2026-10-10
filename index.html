@@ -1698,6 +1698,21 @@
         <button type="submit" class="btn primary">Count the break-even days</button>
         <p id="sbed-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="wband-calc">
+        <h3>75 · Weighted-pool IL tolerance band</h3>
+        <p>Tools 21 and 30 ask how far the price can move before the fees you have earned stop covering the impermanent loss — for a 50/50 constant-product pool and for a CLMM position; this asks it for the weighted pools of tool 56, with the hurdle taken from tool 60's own calculator at every candidate price. At an 80% weight on token A, $50 of fees on a $1,000 deposit covers a band of ≈0.3407x to ≈1.9114x — a ≈65.93% fall but a ≈91.14% rise, because the heavy side tracks holding more closely on the way up. At a 50% weight the band is tool 21's exactly, because that is what a 50/50 weighted pool is. The band's honest asymmetry is on the downside: the worst possible downside hurdle is the token B side's share of the deposit (≈$200 at an 80% weight, ≈$800 at a 20% weight), so fees at or above that share cover any fall at all — while the upside hurdle grows without bound. Weighted pools are a generalised design used elsewhere — Raydium's own constant-product pools are the 50/50 case tool 21 covers. Educational model only — your weight, deposit and fees inputs; not live pool data, not a live quote, not financial advice.</p>
+        <label for="wband-weight">Token A weight (percent of position value, strictly between 0 and 100)</label>
+        <input id="wband-weight" inputmode="decimal" placeholder="e.g. 80" autocomplete="off">
+        <label for="wband-deposit">Deposit value in $</label>
+        <input id="wband-deposit" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="wband-fees">Fees earned so far in $ (0 or more)</label>
+        <input id="wband-fees" inputmode="decimal" placeholder="e.g. 50" autocomplete="off">
+        <label for="wband-out">Price-multiple band your fees cover (model)</label>
+        <input id="wband-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Find the tolerance band</button>
+        <p id="wband-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1725,6 +1740,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=92"></script>
+<script src="app.js?v=93"></script>
 </body>
 </html>
