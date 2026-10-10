@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus seventy-one fully
+/* Raydium Renaissance hub logic: project filtering plus seventy-two fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -44,8 +44,9 @@
    comparison model, a weighted-pool net
    return calculator, a stableswap net
    return calculator, a weighted-pool
-   required-volume planner, and a stableswap
-   required-volume planner.
+   required-volume planner, a stableswap
+   required-volume planner, and a weighted-pool
+   break-even days calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -4764,8 +4765,74 @@ function stableRequiredVolume(reserveAStr, reserveBStr, ampStr, priceBStr, share
   });
 }
 
+/* ---------- 72 · Weighted-pool break-even days calculator (Tools 60 + 3) ---------- */
+/* Tools 15 and 40 ask "at this daily volume, how many days until
+   the fees cover the break-even hurdle?" for a CLMM position and a
+   50/50 constant-product pool; weighted pools had the inverse
+   question (Tool 70's required volume) but not this one. The
+   hurdle is Tool 60's own feesNeeded for the weighted position,
+   and the fee rate is Tool 3's own dailyFees at the user's
+   volume, fee tier and share, so the answer is simply
+     days = hurdle / daily fees
+   and the two tools are exact inverses: feeding Tool 70's
+   required daily volume for a 30-day target back through this
+   calculator returns exactly 30 days (asserted in tests).
+   Headline: an 80% weight on the token that doubled leaves a
+   $1,000 deposit $58.8989 behind holding (Tool 60's figure); at
+   $10,000 of pool volume a day, a 25 bps tier and a 10% share
+   ($2.50 of fees a day to you) that is 23.5595 days — against
+   34.3146 days for the 50/50 pool at the same move and volume,
+   whose hurdle is $85.7864. At a 50% weight every figure equals
+   Tool 40's cpBreakEvenDays exactly (asserted in tests), because
+   the 50/50 weighted pool IS Tool 40's pool. The mirror move
+   (a 20% weight on a token that halved) carries the identical
+   impermanent-loss percentage as the headline but half the
+   dollar hurdle — hold value scales the hurdle — so it breaks
+   even in exactly half the days at the same daily fees. Two
+   honest edges, mirroring Tool 40: at no price move there is
+   no hurdle, so the answer is honestly 0 days even at a zero
+   fee tier or zero volume; and with a real hurdle but no daily
+   fees (zero volume or a 0 bps tier) the answer is Infinity —
+   never breaks even at that rate — not a large made-up number.
+   Validation rides on the source tools: the weight, ratio and
+   deposit are rejected exactly as Tool 60 rejects them (a zero
+   deposit is not a position at all), and the volume, fee tier
+   and share exactly as Tool 3 rejects them. The day count
+   assumes the volume, tier, share and post-move price all hold
+   still — in a live pool none of them will, and further moves
+   reopen the hurdle. Weighted pools are a generalised design
+   used elsewhere; Raydium's own constant-product pools are the
+   50/50 case Tool 40 covers. Educational model only — your
+   weight, price-move, deposit, volume, share and fee inputs,
+   not live pool data, not a live quote, not financial advice. */
+function weightedBreakEvenDays(weightAPctStr, priceRatioStr, depositStr, volumeStr, feeBps, yourStr, tvlStr) {
+  var required = [weightAPctStr, priceRatioStr, depositStr, volumeStr, yourStr, tvlStr, feeBps];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var wil = weightedImpermanentLoss(weightAPctStr, priceRatioStr, depositStr);
+  if (wil === null || wil.deposit == null || !(wil.deposit > 0)) return null;
+  var est = lpFees(volumeStr, feeBps, yourStr, tvlStr);
+  if (est === null) return null;
+  var days;
+  if (wil.feesNeeded <= 1e-12) days = 0;
+  else if (est.dailyFees > 0) days = wil.feesNeeded / est.dailyFees;
+  else days = Infinity;
+  return {
+    weightAPct: wil.weightAPct, weightBPct: wil.weightBPct,
+    priceRatio: wil.priceRatio, deposit: wil.deposit,
+    holdValue: wil.holdValue, lpValue: wil.lpValue,
+    ilPct: wil.ilPct, feesNeeded: wil.feesNeeded,
+    feesNeededPctOfDeposit: wil.feesNeededPctOfDeposit,
+    sharePct: est.sharePct, dailyFees: est.dailyFees,
+    monthlyFees: est.monthlyFees, aprPct: est.aprPct,
+    feeBps: Number(feeBps), feePct: est.feePct,
+    daysToBreakEven: days
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -6919,6 +6986,33 @@ if (typeof document !== "undefined") {
       } else {
         out.textContent = "Model output: with token B at " + fmt(res.priceB, 4) + " A, your " + fmt(res.sharePct, 2) + "% share is ≈ " + fmt(res.feesNeeded, 4) + " A behind holding (depeg loss " + fmt(res.lossPct, 2) + "% on the pool). To earn that in " + fmt(res.days, 0) + " days at a " + fmt(res.feeBps, 0) + " bps tier, the pool needs ≈ " + fmt(res.requiredPoolFeesPerDay, 4) + " A of fees a day — ≈ " + fmt(res.requiredVolumePerDay, 2) + " A of volume a day, of which your share is ≈ " + fmt(res.requiredFeesPerDay, 4) + " A a day. Amplification sets the hurdle before volume enters it, and one honest shape: the required pool volume does not depend on your share — a bigger share owes a bigger slice of the hurdle but takes the same bigger slice of every fee, so the two cancel; your share only changes the fees you must personally earn each day. A stableswap required-volume model, not a live Raydium quote and not a volume forecast — it assumes the volume, tier, share, price and amplification all hold still. Not financial advice.";
         document.getElementById("srv-out").value = fmt(res.requiredVolumePerDay, 2);
+      }
+    });
+
+    document.getElementById("wbed-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = weightedBreakEvenDays(
+        document.getElementById("wbed-weight").value,
+        document.getElementById("wbed-ratio").value,
+        document.getElementById("wbed-deposit").value,
+        document.getElementById("wbed-volume").value,
+        document.getElementById("wbed-fee").value,
+        document.getElementById("wbed-your").value,
+        document.getElementById("wbed-tvl").value
+      );
+      var out = document.getElementById("wbed-result");
+      if (res === null) {
+        out.textContent = "Enter a token A weight strictly between 0 and 100%, a price multiple above 0, a deposit above $0, a daily pool volume of $0 or more, your liquidity and the pool TVL in $ (yours no larger than the TVL), and a fee tier from 0 to 10,000 bps.";
+        document.getElementById("wbed-out").value = "";
+      } else if (res.daysToBreakEven === 0) {
+        out.textContent = "Model output: at a price multiple of " + fmt(res.priceRatio, 4) + " there is no impermanent loss to cover, so the position breaks even in honestly 0 days — not a small number — whatever the volume or fee tier. A weighted-pool break-even days model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("wbed-out").value = "0";
+      } else if (!isFinite(res.daysToBreakEven)) {
+        out.textContent = "Model output: the move leaves the position ≈ $" + fmt(res.feesNeeded, 4) + " behind holding (impermanent loss " + fmt(res.ilPct, 2) + "%), but at this volume and fee tier your daily fees are $0, so it never breaks even at that rate. A weighted-pool break-even days model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("wbed-out").value = "never at this fee rate";
+      } else {
+        out.textContent = "Model output: at a " + fmt(res.weightAPct, 2) + "% weight on token A and a price multiple of " + fmt(res.priceRatio, 4) + ", the position is ≈ $" + fmt(res.feesNeeded, 4) + " behind holding (impermanent loss " + fmt(res.ilPct, 2) + "%). At ≈ $" + fmt(res.dailyFees, 4) + " of fees a day to you (your " + fmt(res.sharePct, 4) + "% share of a " + fmt(res.feeBps, 0) + " bps tier), that takes ≈ " + fmt(res.daysToBreakEven, 2) + " days. The weight moves the hurdle before volume enters it — and the mirror move (a " + fmt(res.weightBPct, 2) + "% weight on a token that moved the other way by the reciprocal multiple) carries the same impermanent-loss percentage but a hurdle scaled by its hold value. A weighted-pool break-even days model, not a live Raydium quote — it assumes the volume, tier, share and price all hold still. Not financial advice.";
+        document.getElementById("wbed-out").value = fmt(res.daysToBreakEven, 2);
       }
     });
 

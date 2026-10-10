@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=89"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=90"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1357,7 +1357,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists seventy-one tools", readme.includes("seventy-one pool tools") || readme.includes("all seventy-one"));
+check("README lists seventy-two tools", readme.includes("seventy-two pool tools") || readme.includes("all seventy-two"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2000,8 +2000,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts seventy-one tools and names the stableswap required-volume planner",
-  appSrc.includes("plus seventy-one fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, and a stableswap\n   required-volume planner.\n   These are educational MODELS"));
+check("app.js header counts seventy-two tools and names the weighted-pool break-even days calculator",
+  appSrc.includes("plus seventy-two fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, and a weighted-pool\n   break-even days calculator.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -4242,6 +4242,95 @@ check("srv handler wired to its own form", appSrc.includes('getElementById("srv-
 check("srv honesty: amplification-hurdle and not-live labels", html.includes("amplification sets the hurdle before volume enters it") && html.includes("not a volume forecast, not financial advice"));
 check("guide covers stableswap required volume", guide.includes("the amplification sets the hurdle before volume enters it"));
 check("README lists tool 71", readme.includes("71. **Stableswap required-volume planner**"));
+
+/* ---------- 72 · Weighted-pool break-even days calculator ---------- */
+const wbed = app.weightedBreakEvenDays("80", "2", "1000", "10000", 25, "1000", "10000");
+check("WBED headline exists", wbed !== null);
+near("WBED headline hurdle (Tool 60's figure)", wbed.feesNeeded, 58.89887340783126, 1e-9);
+near("WBED headline hold value", wbed.holdValue, 1800, 1e-9);
+near("WBED headline LP value", wbed.lpValue, 1741.1011265921687, 1e-9);
+near("WBED headline IL % (Tool 60's figure)", wbed.ilPct, -3.272159633761127, 1e-9);
+near("WBED headline daily fees (Tool 3's figure)", wbed.dailyFees, 2.5, 1e-12);
+near("WBED headline days", wbed.daysToBreakEven, 23.559549363132504, 1e-9);
+check("WBED headline weights/share/fee reported", wbed.weightAPct === 80 && wbed.weightBPct === 20 && wbed.sharePct === 10 && wbed.feeBps === 25 && wbed.feePct === 0.25);
+/* Composition: hurdle = Tool 60 verbatim and daily fees = Tool 3 verbatim
+   across a sweep, so days can never drift from the source tools */
+{
+  const combos = [
+    ["80", "2", "1000", "10000", 25, "1000", "10000"],
+    ["20", "0.5", "1000", "10000", 25, "1000", "10000"],
+    ["10", "4", "1000", "50000", 100, "5000", "20000"],
+    ["90", "0.25", "2500", "7777", 30, "1234", "9876"],
+    ["35", "1.5", "500", "123456", 5, "999", "100000"],
+    ["65", "3", "10000", "0", 25, "1000", "10000"]
+  ];
+  for (const [w, r, dep, vol, fee, your, tvl] of combos) {
+    const x = app.weightedBreakEvenDays(w, r, dep, vol, fee, your, tvl);
+    const wil = app.weightedImpermanentLoss(w, r, dep);
+    const est = app.lpFees(vol, fee, your, tvl);
+    check("WBED composes Tools 60+3 @" + w + "/" + r + "/" + vol, x !== null && wil !== null && est !== null &&
+      x.feesNeeded === wil.feesNeeded && x.holdValue === wil.holdValue && x.lpValue === wil.lpValue &&
+      x.dailyFees === est.dailyFees && x.sharePct === est.sharePct);
+    if (x !== null && est !== null && est.dailyFees > 0) {
+      near("WBED days = hurdle / daily fees @" + w + "/" + r + "/" + vol, x.daysToBreakEven * est.dailyFees, wil.feesNeeded, 1e-6);
+    }
+  }
+}
+/* At a 50% weight every shared figure equals Tool 40's cpBreakEvenDays
+   exactly — the 50/50 weighted pool IS Tool 40's pool */
+{
+  const combos = [[2, "1000", "10000"], [0.5, "1000", "10000"], [4, "2500", "77777"], [1.5, "500", "12345"], [3, "100", "999999"], [0.25, "10000", "5000"]];
+  for (const [r, dep, vol] of combos) {
+    const x = app.weightedBreakEvenDays("50", String(r), dep, vol, 25, "1000", "10000");
+    const cp = app.cpBreakEvenDays(r, dep, vol, 25, "1000", "10000");
+    check("WBED @50% = Tool 40 verbatim @r" + r, x !== null && cp !== null &&
+      x.feesNeeded === cp.feesNeeded && x.holdValue === cp.holdValue && x.lpValue === cp.lpValue &&
+      x.ilPct === cp.ilPct && x.dailyFees === cp.dailyFees && x.daysToBreakEven === cp.daysToBreakEven);
+  }
+}
+/* Exact inverse of Tool 70: feeding its required volume for a target
+   day count back through this calculator returns that count */
+{
+  for (const days of ["1", "7", "30", "90", "365"]) {
+    const wrv = app.weightedRequiredVolume("80", "2", "1000", "1000", "10000", 25, days);
+    const back = app.weightedBreakEvenDays("80", "2", "1000", String(wrv.requiredVolumePerDay), 25, "1000", "10000");
+    near("WBED inverts Tool 70 @" + days + "d", back.daysToBreakEven, Number(days), 1e-6);
+  }
+}
+/* Mirror: (w, r) vs (100-w, 1/r) — identical IL %, hurdle scaled by
+   hold value, so the mirror breaks even in proportionally fewer days */
+{
+  const a = app.weightedBreakEvenDays("80", "2", "1000", "10000", 25, "1000", "10000");
+  const b = app.weightedBreakEvenDays("20", "0.5", "1000", "10000", 25, "1000", "10000");
+  near("WBED mirror IL", a.ilPct, b.ilPct, 1e-9);
+  near("WBED mirror hurdle is half (hold 1800 vs 900)", b.feesNeeded, a.feesNeeded / 2, 1e-9);
+  near("WBED mirror days are half", b.daysToBreakEven, a.daysToBreakEven / 2, 1e-9);
+  near("WBED w10 @4x days", app.weightedBreakEvenDays("10", "4", "1000", "10000", 25, "1000", "10000").daysToBreakEven, 60.520658001, 1e-6);
+}
+/* Scaling: doubling volume or share halves the days */
+near("WBED doubling volume halves days",
+  app.weightedBreakEvenDays("80", "2", "1000", "20000", 25, "1000", "10000").daysToBreakEven * 2, wbed.daysToBreakEven, 1e-9);
+near("WBED doubling share halves days",
+  app.weightedBreakEvenDays("80", "2", "1000", "10000", 25, "2000", "10000").daysToBreakEven * 2, wbed.daysToBreakEven, 1e-9);
+/* Honest edges: no move -> honestly 0 even at zero fee/volume; real
+   hurdle with no daily fees -> Infinity, never a made-up count */
+check("WBED no move is 0 days", app.weightedBreakEvenDays("80", "1", "1000", "10000", 25, "1000", "10000").daysToBreakEven === 0);
+check("WBED no move at zero fee and zero volume is still 0", app.weightedBreakEvenDays("80", "1", "1000", "0", 0, "1000", "10000").daysToBreakEven === 0);
+check("WBED real hurdle with zero volume never breaks even", app.weightedBreakEvenDays("80", "2", "1000", "0", 25, "1000", "10000").daysToBreakEven === Infinity);
+check("WBED real hurdle with zero fee tier never breaks even", app.weightedBreakEvenDays("80", "2", "1000", "10000", 0, "1000", "10000").daysToBreakEven === Infinity);
+check("WBED rejects bad weights via Tool 60", app.weightedBreakEvenDays("0", "2", "1000", "10000", 25, "1000", "10000") === null && app.weightedBreakEvenDays("100", "2", "1000", "10000", 25, "1000", "10000") === null && app.weightedBreakEvenDays("", "2", "1000", "10000", 25, "1000", "10000") === null && app.weightedBreakEvenDays("abc", "2", "1000", "10000", 25, "1000", "10000") === null);
+check("WBED rejects bad ratio/deposit", app.weightedBreakEvenDays("80", "0", "1000", "10000", 25, "1000", "10000") === null && app.weightedBreakEvenDays("80", "-2", "1000", "10000", 25, "1000", "10000") === null && app.weightedBreakEvenDays("80", "2", "0", "10000", 25, "1000", "10000") === null && app.weightedBreakEvenDays("80", "2", "", "10000", 25, "1000", "10000") === null && app.weightedBreakEvenDays("80", "2", null, "10000", 25, "1000", "10000") === null);
+check("WBED rejects bad volume/share/fee via Tool 3", app.weightedBreakEvenDays("80", "2", "1000", "-1", 25, "1000", "10000") === null && app.weightedBreakEvenDays("80", "2", "1000", "", 25, "1000", "10000") === null && app.weightedBreakEvenDays("80", "2", "1000", "10000", 25, "20000", "10000") === null && app.weightedBreakEvenDays("80", "2", "1000", "10000", 25, "0", "10000") === null && app.weightedBreakEvenDays("80", "2", "1000", "10000", 10001, "1000", "10000") === null && app.weightedBreakEvenDays("80", "2", "1000", "10000", 25.5, "1000", "10000") === null && app.weightedBreakEvenDays("80", "2", "1000", "10000", "", "1000", "10000") === null);
+check("WBED composes Tools 60+3 in source", appSrc.includes("var wil = weightedImpermanentLoss(weightAPctStr, priceRatioStr, depositStr);") && appSrc.includes("var est = lpFees(volumeStr, feeBps, yourStr, tvlStr);"));
+check("all wbed controls labelled",
+  ["wbed-weight", "wbed-ratio", "wbed-deposit", "wbed-volume", "wbed-your", "wbed-tvl", "wbed-fee", "wbed-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("wbed tool present in index.html", html.includes('id="wbed-calc"') && html.includes('id="wbed-result"'));
+check("wbed handler wired to its own form", appSrc.includes('getElementById("wbed-calc")') && appSrc.includes('getElementById("wbed-result")'));
+check("wbed honesty: mirror-half and not-live labels", html.includes("breaks even in half the days") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers weighted break-even days", guide.includes("the weight sets the hurdle before the days are counted"));
+check("README lists tool 72", readme.includes("72. **Weighted-pool break-even days calculator**"));
+
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
