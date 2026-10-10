@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus eighty-one fully
+/* Raydium Renaissance hub logic: project filtering plus eighty-two fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -52,8 +52,9 @@
    IL tolerance band, a stableswap IL
    tolerance band, a CLMM arbitrage model, a CLMM
    price-impact sizer, a CLMM two-range arbitrage
-   model, a CLMM three-range arbitrage model, and a
-   CLMM two-range price-impact sizer.
+   model, a CLMM three-range arbitrage model, a CLMM
+   two-range price-impact sizer, and a CLMM
+   three-range price-impact sizer.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -5516,6 +5517,154 @@ function clmmCrossImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImp
   return result;
 }
 
+/* ---------- 82 · CLMM three-range price-impact sizer ---------- */
+/* Tool 81 sizes a trade by an impact cap across two CLMM ranges and
+   stops honestly at the two ranges' combined ceiling: a cap above
+   it sizes only the trade that empties both, because the model has
+   no third range to continue into. This supplies that third range,
+   the way tool 46 did for tool 43's swaps and tool 80 for tool 79's
+   arbitrage. Everything up to the second wall is tool 81's own
+   clmmCrossImpactSizer verbatim (asserted field by field): a cap
+   that fits inside two ranges returns tool 81's answer untouched
+   and the third range is never entered. Past the two-range ceiling
+   the largest input at the cap is bisected on tool 46's own
+   priceImpactPct, so every candidate is priced by the three-range
+   swap model itself and the sizer cannot drift from it; the tests
+   feed the reported input back through tool 46 and assert it lands
+   on the cap across a sweep. Two honest edges, both stated on the
+   tool. First, the third wall: impact across three ranges is still
+   bounded — emptying all three headline ranges costs exactly
+   ≈64.64% at zero fee — so a cap at or above the three-range
+   ceiling sizes the trade that empties all three (exactly
+   18,284.2712 in for 6,464.4661 out at the headline ranges), at the
+   ceiling's impact rather than your cap, and a thinner third range
+   lowers that ceiling (a tenth-depth third caps it at ≈52.47%):
+   an impact cap is not a drain cap, three times over. Second, the
+   fee floor every sizer here shares: a cap at or below the fee tier
+   admits no trade at any size, because the measure counts the fee.
+   Three ranges only, floating point like every CLMM tool here.
+   Model only: a real CLMM pool's liquidity varies tick by tick and
+   its live quote is on the pool page. */
+function clmmTripleImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpactPctStr, feeBps, direction, secondLiquidityStr, secondOuterStr, thirdLiquidityStr, thirdOuterStr) {
+  var raw = [liquidityStr, lowerStr, upperStr, priceStr, maxImpactPctStr, feeBps, direction, secondLiquidityStr, secondOuterStr, thirdLiquidityStr, thirdOuterStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var liquidity = Number(liquidityStr), lower = Number(lowerStr), upper = Number(upperStr);
+  var price = Number(priceStr), capPct = Number(maxImpactPctStr), fee = Number(feeBps);
+  var liquidity2 = Number(secondLiquidityStr), outer = Number(secondOuterStr);
+  var liquidity3 = Number(thirdLiquidityStr), outer3 = Number(thirdOuterStr);
+  if (![liquidity, lower, upper, price, capPct, liquidity2, outer, liquidity3, outer3].every(Number.isFinite)) return null;
+  if (liquidity <= 0 || lower <= 0 || upper <= 0 || price <= 0 || liquidity2 <= 0 || outer <= 0 || liquidity3 <= 0 || outer3 <= 0) return null;
+  if (lower >= upper) return null;
+  if (price <= lower || price >= upper) return null;
+  if (capPct <= 0 || capPct >= 100) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  if (direction !== "ab" && direction !== "ba") return null;
+  if (direction === "ab" && !(outer < lower && outer3 < outer)) return null;
+  if (direction === "ba" && !(outer > upper && outer3 > outer)) return null;
+  var cross = clmmCrossImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpactPctStr, feeBps, direction, secondLiquidityStr, secondOuterStr);
+  if (cross === null) return null;
+  var f = fee / 10000;
+  var secondBoundary = direction === "ab" ? cross.secondLowerPrice : cross.secondUpperPrice;
+  var base = { liquidity: liquidity, lowerPrice: lower, upperPrice: upper,
+    secondLiquidity: liquidity2,
+    secondLowerPrice: cross.secondLowerPrice, secondUpperPrice: cross.secondUpperPrice,
+    thirdLiquidity: liquidity3,
+    thirdLowerPrice: direction === "ab" ? outer3 : outer,
+    thirdUpperPrice: direction === "ab" ? outer : outer3,
+    boundaryPrice: cross.boundaryPrice, secondBoundaryPrice: secondBoundary,
+    price: price, direction: direction,
+    inToken: cross.inToken, outToken: cross.outToken,
+    spotRate: cross.spotRate, maxImpactPct: capPct, feeBps: fee, feePct: fee / 100,
+    feeImpactPct: cross.feeImpactPct, boundaryImpactPct: cross.boundaryImpactPct,
+    secondBoundaryImpactPct: cross.secondBoundaryImpactPct };
+  if (!cross.feasible) {
+    return Object.assign(base, { feasible: false, crossed: false,
+      hitBoundary: false, hitSecondBoundary: false, enteredThird: false,
+      hitThirdBoundary: false, thirdBoundaryImpactPct: null,
+      maxAmountIn: 0, netIn: 0, feePaid: 0, amountOut: 0, effectiveRate: 0,
+      actualImpactPct: cross.actualImpactPct, newPrice: price,
+      leg1UsedIn: 0, leg1Out: 0, leg2UsedIn: 0, leg2Out: 0, leg3UsedIn: 0, leg3Out: 0 });
+  }
+  /* The three-range ceiling: the impact of the trade that empties
+     all three ranges, priced by tool 46 itself at the exact total
+     capacity. Each range's capacity is computed from the range
+     geometry (the lesson tool 81's fix taught: never build a total
+     on a cap-sized trade). */
+  var sP = Math.sqrt(price), sB1 = Math.sqrt(cross.boundaryPrice), sB2 = Math.sqrt(secondBoundary), sO3 = Math.sqrt(outer3);
+  var netMax1 = direction === "ab" ? liquidity * (1 / sB1 - 1 / sP) : liquidity * (sB1 - sP);
+  var netMax2 = direction === "ab" ? liquidity2 * (1 / sB2 - 1 / sB1) : liquidity2 * (sB2 - sB1);
+  var netMax3 = direction === "ab" ? liquidity3 * (1 / sO3 - 1 / sB2) : liquidity3 * (sO3 - sB2);
+  var grossTotal = (netMax1 + netMax2 + netMax3) / (1 - f);
+  var drain = clmmTripleSwap(liquidityStr, lowerStr, upperStr, priceStr, String(grossTotal), feeBps, direction, secondLiquidityStr, secondOuterStr, thirdLiquidityStr, thirdOuterStr);
+  if (drain === null) return null;
+  var ceiling = drain.priceImpactPct;
+  var result;
+  if (!cross.hitSecondBoundary) {
+    result = Object.assign(base, { feasible: true, crossed: cross.crossed,
+      hitBoundary: cross.hitBoundary, hitSecondBoundary: false, enteredThird: false,
+      hitThirdBoundary: false, thirdBoundaryImpactPct: ceiling,
+      maxAmountIn: cross.maxAmountIn, netIn: cross.netIn, feePaid: cross.feePaid,
+      amountOut: cross.amountOut, effectiveRate: cross.effectiveRate,
+      actualImpactPct: cross.actualImpactPct, newPrice: cross.newPrice,
+      leg1UsedIn: cross.leg1UsedIn, leg1Out: cross.leg1Out,
+      leg2UsedIn: cross.leg2UsedIn, leg2Out: cross.leg2Out, leg3UsedIn: 0, leg3Out: 0 });
+  } else if (capPct >= ceiling) {
+    result = Object.assign(base, { feasible: true, crossed: true,
+      hitBoundary: true, hitSecondBoundary: true, enteredThird: true,
+      hitThirdBoundary: true, thirdBoundaryImpactPct: ceiling,
+      maxAmountIn: drain.usedIn, netIn: drain.usedIn - drain.feePaid,
+      feePaid: drain.feePaid, amountOut: drain.amountOut,
+      effectiveRate: drain.effectiveRate, actualImpactPct: drain.priceImpactPct,
+      newPrice: drain.newPrice,
+      leg1UsedIn: drain.leg1UsedIn, leg1Out: drain.leg1Out,
+      leg2UsedIn: drain.leg2UsedIn, leg2Out: drain.leg2Out,
+      leg3UsedIn: drain.leg3UsedIn, leg3Out: drain.leg3Out });
+  } else {
+    var loIn = cross.maxAmountIn, hiIn = grossTotal;
+    for (var k = 0; k < 200; k++) {
+      var mid = (loIn + hiIn) / 2;
+      var trial = clmmTripleSwap(liquidityStr, lowerStr, upperStr, priceStr, String(mid), feeBps, direction, secondLiquidityStr, secondOuterStr, thirdLiquidityStr, thirdOuterStr);
+      if (trial === null) return null;
+      if (trial.priceImpactPct <= capPct) loIn = mid; else hiIn = mid;
+    }
+    var sized = clmmTripleSwap(liquidityStr, lowerStr, upperStr, priceStr, String(loIn), feeBps, direction, secondLiquidityStr, secondOuterStr, thirdLiquidityStr, thirdOuterStr);
+    if (sized === null || !sized.enteredThird || sized.leg3UsedIn <= grossTotal * 1e-12) {
+      /* The cap sits on (or within float noise of) the two-range
+         ceiling: at the second edge the impact curve is flat to
+         float precision, so the bisection can drift a dust-scale
+         third leg past it. That is noise, not an entry — the sized
+         trade is tool 81's two-ranges-emptying trade. */
+      result = Object.assign(base, { feasible: true, crossed: cross.crossed,
+        hitBoundary: true, hitSecondBoundary: true, enteredThird: false,
+        hitThirdBoundary: false, thirdBoundaryImpactPct: ceiling,
+        maxAmountIn: cross.maxAmountIn, netIn: cross.netIn, feePaid: cross.feePaid,
+        amountOut: cross.amountOut, effectiveRate: cross.effectiveRate,
+        actualImpactPct: cross.actualImpactPct, newPrice: cross.newPrice,
+        leg1UsedIn: cross.leg1UsedIn, leg1Out: cross.leg1Out,
+        leg2UsedIn: cross.leg2UsedIn, leg2Out: cross.leg2Out, leg3UsedIn: 0, leg3Out: 0 });
+    } else {
+      result = Object.assign(base, { feasible: true, crossed: true,
+        hitBoundary: true, hitSecondBoundary: true, enteredThird: true,
+        hitThirdBoundary: false, thirdBoundaryImpactPct: ceiling,
+        maxAmountIn: sized.usedIn, netIn: sized.usedIn - sized.feePaid,
+        feePaid: sized.feePaid, amountOut: sized.amountOut,
+        effectiveRate: sized.effectiveRate, actualImpactPct: sized.priceImpactPct,
+        newPrice: sized.newPrice,
+        leg1UsedIn: sized.leg1UsedIn, leg1Out: sized.leg1Out,
+        leg2UsedIn: sized.leg2UsedIn, leg2Out: sized.leg2Out,
+        leg3UsedIn: sized.leg3UsedIn, leg3Out: sized.leg3Out });
+    }
+  }
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    var v = result[fields[j]];
+    if (typeof v === "number" && !Number.isFinite(v)) return null;
+  }
+  return result;
+}
+
 /* ---------- 79 · CLMM two-range arbitrage model ---------- */
 /* Tool 77 prices the spot-aligning trade for one CLMM range and
    stops honestly at the range wall: an external price beyond the
@@ -5750,7 +5899,7 @@ function clmmTripleArbitrage(liquidityStr, lowerStr, upperStr, priceStr, externa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmCrossImpactSizer, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -8126,6 +8275,44 @@ if (typeof document !== "undefined") {
         }
         out.textContent = "Model output: the largest trade at a " + fmt(res.maxImpactPct, 4) + "% impact cap pays ≈ " + fmt(res.maxAmountIn, 6) + " of token " + res.inToken + " in (≈ " + fmt(res.netIn, 6) + " after the fees reach the ranges) and takes ≈ " + fmt(res.amountOut, 6) + " of token " + res.outToken + " out, leaving the price at ≈ " + fmt(res.newPrice, 6) + " B per A with an actual impact of ≈ " + fmt(res.actualImpactPct, 4) + "%." + crossText + " A CLMM two-range price-impact sizer model — not live pool data, not a live quote, not financial advice.";
         document.getElementById("xcis-out").value = fmt(res.maxAmountIn, 6);
+      }
+    });
+
+    document.getElementById("tcis-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmTripleImpactSizer(
+        document.getElementById("tcis-l").value,
+        document.getElementById("tcis-lower").value,
+        document.getElementById("tcis-upper").value,
+        document.getElementById("tcis-price").value,
+        document.getElementById("tcis-cap").value,
+        document.getElementById("tcis-fee").value,
+        document.getElementById("tcis-dir").value,
+        document.getElementById("tcis-l2").value,
+        document.getElementById("tcis-outer").value,
+        document.getElementById("tcis-l3").value,
+        document.getElementById("tcis-outer3").value
+      );
+      var out = document.getElementById("tcis-result");
+      if (res === null) {
+        out.textContent = "Enter liquidity above 0 for all three ranges, a range with lower below upper, a current price strictly inside the first range, an impact cap above 0 and below 100%, a fee tier in whole basis points (0–9999), and outer edges that step outward in order on the side your trade walks toward.";
+        document.getElementById("tcis-out").value = "";
+      } else if (!res.feasible) {
+        out.textContent = "Model output: no trade fits — a cap of " + fmt(res.maxImpactPct, 4) + "% is at or below the " + fmt(res.feeImpactPct, 4) + "% fee itself, and tool 46's impact measure counts the fee, so even a dust trade already carries that much impact. Raise the cap above the fee tier. A CLMM three-range price-impact sizer model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("tcis-out").value = fmt(0, 6);
+      } else {
+        var crossText;
+        if (!res.enteredThird && !res.hitSecondBoundary) {
+          crossText = " Your cap fits inside the first two ranges, whose combined ceiling impact (emptying both) is ≈ " + fmt(res.secondBoundaryImpactPct, 4) + "%: this is tool 81's two-range answer and the third range is untouched.";
+        } else if (!res.enteredThird) {
+          crossText = " Your cap sits on the two ranges' combined ceiling impact of ≈ " + fmt(res.secondBoundaryImpactPct, 4) + "% — the impact of emptying both — so the largest trade empties both ranges and stops at the second wall: this is tool 81's ceiling answer and the third range is untouched.";
+        } else if (res.hitThirdBoundary) {
+          crossText = " Your cap is at or above the three ranges' combined ceiling impact of ≈ " + fmt(res.thirdBoundaryImpactPct, 4) + "% — the impact of emptying all three ranges — so the largest trade empties all three: leg 1 pays ≈ " + fmt(res.leg1UsedIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg1Out, 6) + " " + res.outToken + " out, leg 2 pays ≈ " + fmt(res.leg2UsedIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg2Out, 6) + " " + res.outToken + " out, leg 3 pays ≈ " + fmt(res.leg3UsedIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg3Out, 6) + " " + res.outToken + " out to the third range's outer edge. Its actual impact is that ceiling, not your cap, and any larger input would go unfilled past the third wall rather than fill at a worse price.";
+        } else {
+          crossText = " The sized trade crosses both walls (leg 1: ≈ " + fmt(res.leg1UsedIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg1Out, 6) + " " + res.outToken + " out; leg 2: ≈ " + fmt(res.leg2UsedIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg2Out, 6) + " " + res.outToken + " out; leg 3: ≈ " + fmt(res.leg3UsedIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg3Out, 6) + " " + res.outToken + " out) and lands exactly on your cap inside the third range, whose combined ceiling impact (emptying all three ranges) is ≈ " + fmt(res.thirdBoundaryImpactPct, 4) + "%.";
+        }
+        out.textContent = "Model output: the largest trade at a " + fmt(res.maxImpactPct, 4) + "% impact cap pays ≈ " + fmt(res.maxAmountIn, 6) + " of token " + res.inToken + " in (≈ " + fmt(res.netIn, 6) + " after the fees reach the ranges) and takes ≈ " + fmt(res.amountOut, 6) + " of token " + res.outToken + " out, leaving the price at ≈ " + fmt(res.newPrice, 6) + " B per A with an actual impact of ≈ " + fmt(res.actualImpactPct, 4) + "%." + crossText + " A CLMM three-range price-impact sizer model — not live pool data, not a live quote, not financial advice.";
+        document.getElementById("tcis-out").value = fmt(res.maxAmountIn, 6);
       }
     });
 

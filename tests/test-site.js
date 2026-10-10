@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=101"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=102"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1357,7 +1357,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists eighty-one tools", readme.includes("eighty-one pool tools") || readme.includes("all eighty-one"));
+check("README lists eighty-two tools", readme.includes("eighty-two pool tools") || readme.includes("all eighty-two"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2000,8 +2000,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts eighty-one tools and names the CLMM two-range price-impact sizer",
-  appSrc.includes("plus eighty-one fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, a curve\n   comparison exact-out model, a weighted-pool\n   IL tolerance band, a stableswap IL\n   tolerance band, a CLMM arbitrage model, a CLMM\n   price-impact sizer, a CLMM two-range arbitrage\n   model, a CLMM three-range arbitrage model, and a\n   CLMM two-range price-impact sizer.\n   These are educational MODELS"));
+check("app.js header counts eighty-two tools and names the CLMM three-range price-impact sizer",
+  appSrc.includes("plus eighty-two fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, a curve\n   comparison exact-out model, a weighted-pool\n   IL tolerance band, a stableswap IL\n   tolerance band, a CLMM arbitrage model, a CLMM\n   price-impact sizer, a CLMM two-range arbitrage\n   model, a CLMM three-range arbitrage model, a CLMM\n   two-range price-impact sizer, and a CLMM\n   three-range price-impact sizer.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5106,7 +5106,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v101", html.includes("app.js?v=101"));
+check("app.js cache key bumped to v101", html.includes("app.js?v=102"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -5228,6 +5228,109 @@ check("xcis handler wired to its own form", appSrc.includes('getElementById("xci
 check("xcis honesty: second wall, fee floor and not-live labels", html.includes("emptying both ranges costs exactly 50% impact at zero fee") && html.includes("a cap at or below the fee tier admits no trade at all") && html.includes("not live pool data, not a live quote, not financial advice"));
 check("guide covers CLMM two-range impact sizing", guide.includes("size the trade by its impact cap across the wall"));
 check("README lists tool 81", readme.includes("81. **CLMM two-range price-impact sizer**"));
+
+/* ---------- Tool 82: CLMM three-range price-impact sizer (TCIS) ---------- */
+const tcis = app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "60", 0, "ba", "10000", "4", "10000", "8");
+check("TCIS headline exists and enters the third range", tcis !== null && tcis.feasible === true && tcis.enteredThird === true && tcis.hitSecondBoundary === true && tcis.hitThirdBoundary === false);
+check("TCIS headline tokens and boundaries", tcis.inToken === "B" && tcis.outToken === "A" && tcis.boundaryPrice === 2 && tcis.secondBoundaryPrice === 4);
+near("TCIS headline max in is exactly 15000", tcis.maxAmountIn, 15000, 1e-6);
+near("TCIS headline amount out is exactly 6000", tcis.amountOut, 6000, 1e-6);
+near("TCIS headline lands on the cap", tcis.actualImpactPct, 60, 1e-9);
+near("TCIS headline new price is exactly 6.25", tcis.newPrice, 6.25, 1e-9);
+near("TCIS headline leg 3 in is exactly 5000", tcis.leg3UsedIn, 5000, 1e-6);
+near("TCIS headline leg 3 out is exactly 1000", tcis.leg3Out, 1000, 1e-6);
+near("TCIS headline three-range ceiling", tcis.thirdBoundaryImpactPct, 64.64466094067262, 1e-9);
+near("TCIS headline two-range ceiling is exactly 50", tcis.secondBoundaryImpactPct, 50, 1e-9);
+check("TCIS headline ranges chain 0.5-2, 2-4, 4-8", tcis.secondLowerPrice === 2 && tcis.secondUpperPrice === 4 && tcis.thirdLowerPrice === 4 && tcis.thirdUpperPrice === 8);
+/* mirror direction: same sizes, reciprocal landing price */
+{
+  const m = app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "60", 0, "ab", "10000", "0.25", "10000", "0.125");
+  check("TCIS mirror enters the third range downward", m !== null && m.enteredThird === true && m.inToken === "A" && m.thirdLowerPrice === 0.125 && m.thirdUpperPrice === 0.25);
+  near("TCIS mirror max in", m.maxAmountIn, 15000, 1e-6);
+  near("TCIS mirror amount out", m.amountOut, 6000, 1e-6);
+  near("TCIS mirror new price", m.newPrice, 0.16, 1e-9);
+  near("TCIS mirror lands on the cap", m.actualImpactPct, 60, 1e-9);
+  near("TCIS mirror ceiling", m.thirdBoundaryImpactPct, 64.64466094067262, 1e-9);
+}
+/* inside two ranges the answer is tool 81's verbatim */
+{
+  const caps = [["5", 0], ["40", 0], ["40", 25], ["49", 100]];
+  check("TCIS inside two ranges equals Tool 81 field by field", caps.every(([c, f]) => {
+    const t = app.clmmTripleImpactSizer("10000", "0.5", "2", "1", c, f, "ba", "10000", "4", "10000", "8");
+    const x = app.clmmCrossImpactSizer("10000", "0.5", "2", "1", c, f, "ba", "10000", "4");
+    return t !== null && t.enteredThird === false && t.leg3UsedIn === 0 && t.leg3Out === 0 &&
+      t.maxAmountIn === x.maxAmountIn && t.netIn === x.netIn && t.amountOut === x.amountOut &&
+      t.effectiveRate === x.effectiveRate && t.actualImpactPct === x.actualImpactPct && t.newPrice === x.newPrice &&
+      t.leg1UsedIn === x.leg1UsedIn && t.leg2UsedIn === x.leg2UsedIn;
+  }));
+}
+/* a cap exactly on the two-range ceiling stays at the second wall */
+{
+  const x = app.clmmCrossImpactSizer("10000", "0.5", "2", "1", "50", 0, "ba", "10000", "4");
+  const t = app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "50", 0, "ba", "10000", "4", "10000", "8");
+  check("TCIS cap on the two-range ceiling stays unentered", t !== null && t.enteredThird === false && t.hitSecondBoundary === true && t.maxAmountIn === x.maxAmountIn && t.amountOut === x.amountOut);
+}
+/* the sized input through tool 46 itself lands on the cap across a sweep */
+{
+  let ok = true;
+  for (const dir of ["ab", "ba"]) for (const cap of [5, 40, 55, 60, 64]) for (const fee of [0, 25]) for (const L3 of [1000, 10000, 50000]) {
+    const o2 = dir === "ab" ? "0.25" : "4", o3 = dir === "ab" ? "0.125" : "8";
+    const t = app.clmmTripleImpactSizer("10000", "0.5", "2", "1", String(cap), fee, dir, "10000", o2, String(L3), o3);
+    if (t === null || !t.feasible) { ok = false; break; }
+    const sw = app.clmmTripleSwap("10000", "0.5", "2", "1", String(t.maxAmountIn), fee, dir, "10000", o2, String(L3), o3);
+    if (sw === null || Math.abs(sw.priceImpactPct - t.actualImpactPct) > 1e-9) ok = false;
+    if (t.actualImpactPct > cap + 1e-9) ok = false;
+    if (!t.hitThirdBoundary && Math.abs(t.actualImpactPct - cap) > 1e-6) ok = false;
+    if (t.hitThirdBoundary && Math.abs(t.actualImpactPct - t.thirdBoundaryImpactPct) > 1e-9) ok = false;
+    if (t.enteredThird !== sw.enteredThird) ok = false;
+  }
+  check("TCIS composes Tool 46 across a 120-combo sweep", ok);
+}
+/* at or above the three-range ceiling the trade empties all three ranges */
+{
+  const d = app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "90", 0, "ba", "10000", "4", "10000", "8");
+  check("TCIS ceiling case empties all three ranges", d !== null && d.hitThirdBoundary === true && d.enteredThird === true);
+  near("TCIS ceiling case max in", d.maxAmountIn, 18284.271247461904, 1e-6);
+  near("TCIS ceiling case amount out", d.amountOut, 6464.466094067263, 1e-6);
+  near("TCIS ceiling case actual impact is the ceiling, not the cap", d.actualImpactPct, 64.64466094067262, 1e-9);
+  near("TCIS ceiling case new price is the third edge", d.newPrice, 8, 1e-9);
+  const thin = app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "90", 0, "ba", "10000", "4", "1000", "8");
+  check("TCIS a thin third range lowers the ceiling", thin !== null && thin.hitThirdBoundary === true && thin.thirdBoundaryImpactPct < 64.64466094067262);
+  near("TCIS thin ceiling value", thin.thirdBoundaryImpactPct, 52.47281484080399, 1e-9);
+  near("TCIS thin ceiling max in", thin.maxAmountIn, 10828.42712474619, 1e-6);
+}
+/* fee floor and a fee-bearing entry into the third range */
+{
+  const fl = app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "0.2", 25, "ba", "10000", "4", "10000", "8");
+  check("TCIS cap at or below the fee is infeasible", fl !== null && fl.feasible === false && fl.maxAmountIn === 0 && fl.enteredThird === false);
+  const f55 = app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "55", 25, "ba", "10000", "4", "10000", "8");
+  check("TCIS fee-bearing entry exists", f55 !== null && f55.enteredThird === true && f55.hitThirdBoundary === false);
+  near("TCIS fee-bearing entry lands on the cap", f55.actualImpactPct, 55, 1e-9);
+  near("TCIS fee-bearing max in", f55.maxAmountIn, 12197.159565580618, 1e-6);
+  check("TCIS fee is charged across all three legs", f55.feePaid > 0 && Math.abs(f55.netIn - (f55.maxAmountIn - f55.feePaid)) < 1e-9 && Math.abs(f55.leg1UsedIn + f55.leg2UsedIn + f55.leg3UsedIn - f55.maxAmountIn) < 1e-9);
+}
+/* rejections */
+check("TCIS rejects bad inputs", [
+  () => app.clmmTripleImpactSizer("", "0.5", "2", "1", "60", 0, "ba", "10000", "4", "10000", "8"),
+  () => app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "60", 0, "ba", "10000", "4", "0", "8"),
+  () => app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "60", 0, "ba", "10000", "4", "10000", "4"),
+  () => app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "60", 0, "ba", "10000", "4", "10000", "2"),
+  () => app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "60", 0, "ab", "10000", "0.25", "10000", "0.5"),
+  () => app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "60", 0, "ab", "10000", "0.25", "10000", "8"),
+  () => app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "0", 0, "ba", "10000", "4", "10000", "8"),
+  () => app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "100", 0, "ba", "10000", "4", "10000", "8"),
+  () => app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "60", 25.5, "ba", "10000", "4", "10000", "8"),
+  () => app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "60", 0, "xx", "10000", "4", "10000", "8")
+].every(fn => fn() === null));
+check("TCIS composes Tools 81 and 46 in source", appSrc.includes("function clmmTripleImpactSizer") && appSrc.includes("clmmCrossImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpactPctStr, feeBps, direction, secondLiquidityStr, secondOuterStr)") && appSrc.includes("clmmTripleSwap(liquidityStr, lowerStr, upperStr, priceStr, String(grossTotal), feeBps, direction, secondLiquidityStr, secondOuterStr, thirdLiquidityStr, thirdOuterStr)"));
+check("all tcis controls labelled",
+  ["tcis-l", "tcis-lower", "tcis-upper", "tcis-price", "tcis-dir", "tcis-cap", "tcis-fee", "tcis-l2", "tcis-outer", "tcis-l3", "tcis-outer3", "tcis-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("tcis tool present in index.html", html.includes('id="tcis-calc"') && html.includes('id="tcis-result"'));
+check("tcis handler wired to its own form", appSrc.includes('getElementById("tcis-calc")') && appSrc.includes('getElementById("tcis-result")'));
+check("tcis honesty: third wall, fee floor and not-live labels", html.includes("emptying all three ranges costs ≈64.6447% impact at zero fee") && html.includes("a cap at or below the fee tier admits no trade at all") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers CLMM three-range impact sizing", guide.includes("size the trade across the third range too"));
+check("README lists tool 82", readme.includes("82. **CLMM three-range price-impact sizer**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
