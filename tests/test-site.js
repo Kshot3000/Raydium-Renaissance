@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=109"));
+check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=110"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v109", html.includes("app.js?v=109"));
+check("app.js cache key bumped to v110", html.includes("app.js?v=110"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -5851,6 +5851,9 @@ check("SWD single-sided cost grows with the share burned",
   sw1.singleAVsProRataPct &&
   sw1.singleAVsProRataPct <
   app.stableWithdrawPlan("1000", "1000", "100", "2000", "2").singleAVsProRataPct);
+near("SWD dust burn single A (direct payout solve, oracle 50-digit)", app.stableWithdrawPlan("1000", "1000", "100", "2000", "0.000000002").singleOutA, 1.99999999999999e-9, 1e-9);
+check("SWD dust burn shows no phantom single-sided cost", Math.abs(app.stableWithdrawPlan("1000", "1000", "100", "2000", "0.000000002").singleAVsProRataPct) < 1e-9 && Math.abs(app.stableWithdrawPlan("1000", "1000", "100", "2000", "0.000002").singleAVsProRataPct) < 1e-9);
+near("SWD near-full huge burn remaining A (direct remaining quotient, oracle 50-digit)", app.stableWithdrawPlan("510994936071.77057", "3118575585664.7417", "1232.3177641265247", "27355630159361.652", "27303064171210.086").singleRemainingA, 3.54179580412312, 1e-9);
 near("SWD half exit single A", app.stableWithdrawPlan("1000", "1000", "100", "2000", "1000").singleOutA, 967.0563828031054, 1e-9);
 near("SWD 95% exit single A", app.stableWithdrawPlan("1000", "1000", "100", "2000", "1900").singleOutA, 999.9986118844274, 1e-9);
 const swU = app.stableWithdrawPlan("1500", "500", "100", "2000", "200");

@@ -3553,12 +3553,24 @@ function stableDepositPlan(reserveAStr, reserveBStr, ampStr, totalSupplyStr, dep
    and D is homogeneous. The three exits off that one fact:
      pro-rata:      outA = reserveA * f, outB = reserveB * f —
                     the pool's own ratio, no price paid;
-     single-sided:  the other reserve stays put and tool 58's own
-                    stableSolveY finds the reserve that satisfies
-                    D_new against it — taking everything in one
-                    token walks the spot away from you as it pays
-                    out, the mirror of tool 87's single-sided
-                    deposit costing mint.
+     single-sided:  the other reserve stays put and the paying
+                    reserve is solved against D_new — taking
+                    everything in one token walks the spot away from
+                    you as it pays out, the mirror of tool 87's
+                    single-sided deposit costing mint. The payout
+                    itself is solved DIRECTLY from the invariant
+                    differenced against the pre-exit state (a
+                    quadratic in the payout whose constant term is
+                    f·D·[(Ann−1)·reserveOut + (D_new² + D_new·D +
+                    D²)/(4·reserveOther)], every factor a product of
+                    accurately known quantities), never as a
+                    difference of two near-equal reserves: for a dust
+                    burn the remaining reserve sits within a few ulps
+                    of the full reserve, and subtracting it back out
+                    (the plain stableSolveY route, kept as fallback)
+                    left a phantom ≈0.0011% single-sided cost on a
+                    2e-9-of-2000 burn whose true cost is ≈0 — the
+                    Tool 87 dust lesson on the exit side.
    Both single-sided payouts are struck against the pro-rata
    payout's value at the pool's STARTING spot (tool 61's own
    stableSpotBInA), the only price that exists before the exit
@@ -3623,13 +3635,56 @@ function stableWithdrawPlan(reserveAStr, reserveBStr, ampStr, totalSupplyStr, bu
       singleAVsProRataPct: null, singleBVsProRataPct: null
     });
   }
-  var remSingleA = stableSolveY(reserveB, reserveA, amp, newD);
-  var remSingleB = stableSolveY(reserveA, reserveB, amp, newD);
+  /* Solve each single-sided payout directly (see the header's
+     precision note): with x the paying reserve, y the reserve held
+     put, S = x + y and Ann = 2·amp, the invariant at D_new reads
+     (C − Ann·δ)(x − δ) = D_new³/(4y), where C = Ann·S − (Ann−1)·D_new
+     splits as C0 + (Ann−1)·f·D with C0 = D³/(4xy) (the pre-exit
+     invariant rearranged — a single positive term, no cancellation).
+     That is the quadratic Ann·δ² − (C + Ann·x)·δ + K = 0 with
+     K = f·D·[(Ann−1)·x + (D_new² + D_new·D + D²)/(4y)]; exactly one
+     root lies in (0, x), the small root taken in its stable form
+     2K/(B + √disc) and the large one as (B + √disc)/(2·Ann), so
+     neither root is ever a difference of near-equals. On any
+     non-finite or out-of-range result, fall back to tool 58's own
+     stableSolveY difference. */
+  var Ann = 2 * amp;
+  function singlePayout(reserveOut, reserveOther) {
+    var C0 = D * D * D / (4 * reserveOut * reserveOther);
+    var Cq = C0 + (Ann - 1) * frac * D;
+    var Bq = Cq + Ann * reserveOut;
+    var Kq = frac * D * ((Ann - 1) * reserveOut +
+      (newD * newD + newD * D + D * D) / (4 * reserveOther));
+    if (!(Bq > 0) || !(Kq > 0)) return null;
+    var disc = Bq * Bq - 4 * Ann * Kq;
+    if (!(disc >= 0)) return null;
+    var sq = Math.sqrt(disc);
+    var pay = 2 * Kq / (Bq + sq);
+    if (!(pay > 0 && pay < reserveOut)) pay = (Bq + sq) / (2 * Ann);
+    if (!(pay > 0 && pay < reserveOut)) return null;
+    /* The remaining reserve is NOT reserveOut − pay: at a near-full
+       burn that difference is one ulp of the whole reserve against a
+       remaining sliver (a 99.8% burn of a 5.1e11 reserve left it
+       1.3e-5 relative off). The same factored equation gives it
+       directly as a quotient of positive quantities,
+       rem = D_new³ / (4·reserveOther·(C − Ann·pay)). */
+    var rem = newD * newD * newD / (4 * reserveOther * (Cq - Ann * pay));
+    if (!(rem > 0 && rem < reserveOut)) return null;
+    return { pay: pay, rem: rem };
+  }
+  var solA = singlePayout(reserveA, reserveB);
+  var solB = singlePayout(reserveB, reserveA);
+  var payA = solA ? solA.pay : NaN;
+  var payB = solB ? solB.pay : NaN;
+  var remSingleA = solA ? solA.rem
+    : stableSolveY(reserveB, reserveA, amp, newD);
+  var remSingleB = solB ? solB.rem
+    : stableSolveY(reserveA, reserveB, amp, newD);
   if (!Number.isFinite(remSingleA) || !Number.isFinite(remSingleB)) return null;
   if (!(remSingleA > 0) || !(remSingleA < reserveA)) return null;
   if (!(remSingleB > 0) || !(remSingleB < reserveB)) return null;
-  var singleOutA = reserveA - remSingleA;
-  var singleOutB = reserveB - remSingleB;
+  var singleOutA = Number.isFinite(payA) ? payA : reserveA - remSingleA;
+  var singleOutB = Number.isFinite(payB) ? payB : reserveB - remSingleB;
   if (!(singleOutA > base.proOutA) || !(singleOutB > base.proOutB)) return null;
   var result = Object.assign(base, {
     feasible: true, fullExit: false,
