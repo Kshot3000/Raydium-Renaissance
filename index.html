@@ -1730,6 +1730,27 @@
         <button type="submit" class="btn primary">Find the tolerance band</button>
         <p id="sband-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="carb-calc">
+        <h3>77 · CLMM arbitrage model</h3>
+        <p>Tools 16, 62 and 65 price the trade that aligns a pool's spot price with a price elsewhere — for a constant-product pool, a weighted pool and a stableswap pool; this prices it for one CLMM range, whose spot is simply its current price. At liquidity 10,000 over 0.5–2 and price 1, an external price of 1.21 makes the aligning trade pay exactly 1,000 B and take ≈909.0909 A out, a modelled profit of exactly 100 B valued at that external price; at 0.81 the mirror pays ≈1,111.1111 A and takes exactly 1,000 B. The honest shape is the range wall: one range can only align as far as its own edge, so an external price beyond the edge caps the trade there — the post-trade spot is the edge, not your price — where a real pool would continue into the next range at its own liquidity. A gap smaller than the fee tier honestly comes out negative at the aligning size. Single range only. Educational model only — your liquidity, range, prices and fee inputs; not live pool data, not a found opportunity, not financial advice.</p>
+        <label for="carb-l">Range liquidity L (model units, above 0)</label>
+        <input id="carb-l" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="carb-lower">Range lower price (B per A, above 0)</label>
+        <input id="carb-lower" inputmode="decimal" placeholder="e.g. 0.5" autocomplete="off">
+        <label for="carb-upper">Range upper price (B per A, above the lower price)</label>
+        <input id="carb-upper" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="carb-price">Current price (B per A, strictly inside the range)</label>
+        <input id="carb-price" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="carb-ext">External price of token A (B per A, above 0)</label>
+        <input id="carb-ext" inputmode="decimal" placeholder="e.g. 1.21" autocomplete="off">
+        <label for="carb-fee">Pool fee tier (whole basis points, 0–9999)</label>
+        <input id="carb-fee" inputmode="decimal" placeholder="e.g. 25" autocomplete="off">
+        <label for="carb-out">Modelled profit in token B at your external price (model)</label>
+        <input id="carb-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Size the aligning trade</button>
+        <p id="carb-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1757,6 +1778,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=94"></script>
+<script src="app.js?v=95"></script>
 </body>
 </html>

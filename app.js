@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus seventy-six fully
+/* Raydium Renaissance hub logic: project filtering plus seventy-seven fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -49,8 +49,8 @@
    break-even days calculator, a stableswap
    break-even days calculator, a curve
    comparison exact-out model, a weighted-pool
-   IL tolerance band, and a stableswap IL
-   tolerance band.
+   IL tolerance band, a stableswap IL
+   tolerance band, and a CLMM arbitrage model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -5200,8 +5200,88 @@ function stableIlBand(reserveAStr, reserveBStr, ampStr, feesStr) {
   return out;
 }
 
+/* ---------- 77 · CLMM arbitrage model ---------- */
+/* Tools 16, 62 and 65 price the price-aligning arbitrage trade
+   for a constant-product pool, a weighted pool and a stableswap
+   pool; the CLMM ranges of Tool 42 had none. Inside one range
+   the pool's spot IS its current price, and the aligning trade
+   walks the sqrt-price straight to the external price's sqrt:
+   paying B (A is cheap in the pool) the net B owed is
+   L x (s' - s) and the A taken is L x (1/s - 1/s'); paying A is
+   the mirror. The fee comes off the input first (Tool 42's
+   convention), so the gross input is net / (1 - fee share), and
+   feeding that gross input through Tool 42's own clmmSwap
+   returns the modelled output and lands the price on the
+   external price (asserted in tests, both directions, with and
+   without a fee). The honest shape is the range wall: a single
+   range can only align as far as its own edge, so an external
+   price beyond the edge caps the trade AT the edge — the model
+   reports the capped trade, flags hitBoundary, and its
+   post-trade spot is the edge, not the external price; the
+   profit is still valued at the external price, which is why a
+   capped trade can show a large paper profit no single range
+   could actually finish collecting (a real pool continues into
+   the next range at that range's liquidity, Tool 43's point).
+   Headline: L = 10,000 over 0.5-2 at price 1, external 1.21,
+   zero fee -> pay exactly 1,000 B, take ≈909.0909 A, profit
+   exactly 100 B; the mirror at 0.81 pays ≈1,111.1111 A, takes
+   exactly 1,000 B, same 100 B profit. A gap smaller than the
+   fee honestly comes out negative (a 0.01% gap at a 25 bps
+   tier: ≈-0.0012 B at the aligning size). Single range only,
+   floating point like every CLMM tool here. Educational model
+   only — your liquidity, range, prices and fee inputs; not
+   live pool data, not a found opportunity, not financial
+   advice. */
+function clmmArbitrage(liquidityStr, lowerStr, upperStr, priceStr, externalPriceStr, feeBps) {
+  var raw = [liquidityStr, lowerStr, upperStr, priceStr, externalPriceStr, feeBps];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var liquidity = Number(liquidityStr), lower = Number(lowerStr), upper = Number(upperStr);
+  var price = Number(priceStr), pe = Number(externalPriceStr), fee = Number(feeBps);
+  if (![liquidity, lower, upper, price, pe].every(Number.isFinite)) return null;
+  if (liquidity <= 0 || lower <= 0 || upper <= 0 || price <= 0 || pe <= 0) return null;
+  if (lower >= upper) return null;
+  if (price <= lower || price >= upper) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var s = Math.sqrt(price);
+  var base = { liquidity: liquidity, lowerPrice: lower, upperPrice: upper,
+    price: price, spotPrice: price, externalPrice: pe,
+    priceGapPct: (pe / price - 1) * 100, feeBps: fee, feePct: fee / 100 };
+  var result;
+  if (Math.abs(pe - price) / price < 1e-12) {
+    result = Object.assign(base, { direction: "none", inToken: null, netIn: 0,
+      grossIn: 0, amountOut: 0, outToken: null, profitInB: 0,
+      postTradeSpot: price, targetPrice: price, hitBoundary: false });
+  } else if (pe > price) {
+    var targetUp = Math.min(pe, upper), sUp = Math.sqrt(targetUp);
+    var netInB = liquidity * (sUp - s), outA = liquidity * (1 / s - 1 / sUp);
+    if (!(netInB > 0) || !(outA > 0)) return null;
+    var grossInB = netInB / (1 - fee / 10000);
+    result = Object.assign(base, { direction: "buy-a", inToken: "B", netIn: netInB,
+      grossIn: grossInB, amountOut: outA, outToken: "A",
+      profitInB: outA * pe - grossInB,
+      postTradeSpot: targetUp, targetPrice: targetUp, hitBoundary: pe >= upper });
+  } else {
+    var targetDn = Math.max(pe, lower), sDn = Math.sqrt(targetDn);
+    var netInA = liquidity * (1 / sDn - 1 / s), outB = liquidity * (s - sDn);
+    if (!(netInA > 0) || !(outB > 0)) return null;
+    var grossInA = netInA / (1 - fee / 10000);
+    result = Object.assign(base, { direction: "sell-a", inToken: "A", netIn: netInA,
+      grossIn: grossInA, amountOut: outB, outToken: "B",
+      profitInB: outB - grossInA * pe,
+      postTradeSpot: targetDn, targetPrice: targetDn, hitBoundary: pe <= lower });
+  }
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    var v = result[fields[j]];
+    if (typeof v === "number" && !Number.isFinite(v)) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -7481,6 +7561,41 @@ if (typeof document !== "undefined") {
       } else {
         out.textContent = "Model output: " + fmt(res.feesEarned, 4) + " A of fees earned by this pool covers token B prices from ≈ " + fmt(res.priceLow, 4) + " A (−" + fmt(res.moveDownPct, 2) + "%) to ≈ " + fmt(res.priceHigh, 4) + " A (+" + fmt(res.moveUpPct, 2) + "%) around its starting spot of " + fmt(res.startSpotB, 4) + " A per B. The band is measured from the pool's own spot, not from 1, and it is not symmetric: the downside hurdle caps at ≈ " + fmt(res.maxDownHurdle, 4) + " A (the whole token A reserve) while the upside hurdle grows without bound, and the amplification narrows the band as it rises. At either edge the fees exactly equal tool 61's depeg loss. A stableswap IL tolerance band model, not a live Raydium quote. Not financial advice.";
         document.getElementById("sband-out").value = fmt(res.priceLow, 4) + " A to " + fmt(res.priceHigh, 4) + " A per B";
+      }
+    });
+
+    document.getElementById("carb-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmArbitrage(
+        document.getElementById("carb-l").value,
+        document.getElementById("carb-lower").value,
+        document.getElementById("carb-upper").value,
+        document.getElementById("carb-price").value,
+        document.getElementById("carb-ext").value,
+        document.getElementById("carb-fee").value
+      );
+      var out = document.getElementById("carb-result");
+      if (res === null) {
+        out.textContent = "Enter liquidity above 0, a range with lower below upper, a current price strictly inside the range, an external price above 0 and a fee tier in whole basis points (0–9999).";
+        document.getElementById("carb-out").value = "";
+      } else if (res.direction === "none") {
+        out.textContent = "Model output: the range's spot price is already ≈ " + fmt(res.spotPrice, 6) + " B per A, so there is no price-aligning trade to size at your external price. A CLMM arbitrage model, not live pool data — not financial advice.";
+        document.getElementById("carb-out").value = fmt(0, 6);
+      } else {
+        var dirText = res.direction === "buy-a"
+          ? "token A is cheap in the pool: pay token B in and take token A out"
+          : "token A is expensive in the pool: pay token A in and take token B out";
+        var wallText = res.hitBoundary
+          ? " Your external price sits beyond the range's edge, so this single range can only align as far as that edge — the trade stops there, the post-trade spot is the edge rather than your price, and the profit is the capped trade's, valued at your price; a real pool would continue into the next range at its own liquidity."
+          : " The trade lands the range's price exactly on your external price.";
+        out.textContent = "Model output: the range's spot price is ≈ " + fmt(res.spotPrice, 6) +
+          " B per A against your external price of ≈ " + fmt(res.externalPrice, 6) + " (a gap of ≈ " + fmt(res.priceGapPct, 4) + "%) — " + dirText +
+          ". The price-aligning trade pays ≈ " + fmt(res.grossIn, 6) + " of token " + res.inToken + " in (≈ " + fmt(res.netIn, 6) +
+          " after the fee reaches the pool) and takes ≈ " + fmt(res.amountOut, 6) + " of token " + res.outToken +
+          " out, leaving the range at ≈ " + fmt(res.postTradeSpot, 6) + " B per A." + wallText +
+          " Modelled profit valued in B at your external price: ≈ " + fmt(res.profitInB, 6) +
+          " B — a gap smaller than the fee honestly comes out negative. A CLMM arbitrage model over a price you typed — not a live feed, not a found opportunity, not financial advice.";
+        document.getElementById("carb-out").value = fmt(res.profitInB, 6);
       }
     });
 

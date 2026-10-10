@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=94"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=95"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1357,7 +1357,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists seventy-six tools", readme.includes("seventy-six pool tools") || readme.includes("all seventy-six"));
+check("README lists seventy-seven tools", readme.includes("seventy-seven pool tools") || readme.includes("all seventy-seven"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2000,8 +2000,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts seventy-six tools and names the stableswap IL tolerance band",
-  appSrc.includes("plus seventy-six fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, a curve\n   comparison exact-out model, a weighted-pool\n   IL tolerance band, and a stableswap IL\n   tolerance band.\n   These are educational MODELS"));
+check("app.js header counts seventy-seven tools and names the CLMM arbitrage model",
+  appSrc.includes("plus seventy-seven fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, a curve\n   comparison exact-out model, a weighted-pool\n   IL tolerance band, a stableswap IL\n   tolerance band, and a CLMM arbitrage model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -4703,6 +4703,82 @@ check("sband handler wired to its own form", appSrc.includes('getElementById("sb
 check("sband honesty: downside cap and not-live labels", html.includes("fees at or above that reserve cover any fall at all") && html.includes("not live pool data, not a live quote, not financial advice"));
 check("guide covers stableswap IL tolerance band", guide.includes("the whole token A reserve is the most a fall can cost"));
 check("README lists tool 76", readme.includes("76. **Stableswap IL tolerance band**"));
+
+/* ---------- Tool 77: CLMM arbitrage (CARB) ---------- */
+const carb = app.clmmArbitrage("10000", "0.5", "2", "1", "1.21", 0);
+check("CARB headline exists", carb !== null);
+check("CARB headline direction buy-a", carb.direction === "buy-a" && carb.inToken === "B" && carb.outToken === "A");
+near("CARB headline net in is exactly 1000 B", carb.netIn, 1000, 1e-9);
+near("CARB headline gross equals net at zero fee", carb.grossIn, 1000, 1e-9);
+near("CARB headline amount out", carb.amountOut, 909.0909090909091, 1e-9);
+near("CARB headline profit is exactly 100 B", carb.profitInB, 100, 1e-9);
+near("CARB headline post-trade spot lands on the external price", carb.postTradeSpot, 1.21, 1e-12);
+check("CARB headline not boundary-capped", carb.hitBoundary === false);
+near("CARB headline gap pct", carb.priceGapPct, 21, 1e-9);
+/* mirror: external 0.81 */
+{
+  const m = app.clmmArbitrage("10000", "0.5", "2", "1", "0.81", 0);
+  check("CARB mirror direction sell-a", m.direction === "sell-a" && m.inToken === "A" && m.outToken === "B");
+  near("CARB mirror net in", m.netIn, 1111.1111111111111, 1e-9);
+  near("CARB mirror amount out is exactly 1000 B", m.amountOut, 1000, 1e-9);
+  near("CARB mirror profit is exactly 100 B", m.profitInB, 100, 1e-9);
+  near("CARB mirror post-trade spot", m.postTradeSpot, 0.81, 1e-12);
+}
+/* composition: the gross input through Tool 42 returns the output and lands on the price */
+for (const [L, lo, up, p, pe, fee] of [
+  ["10000", "0.5", "2", "1", "1.21", 0], ["10000", "0.5", "2", "1", "0.81", 0],
+  ["10000", "0.5", "2", "1", "1.21", 25], ["10000", "0.5", "2", "1", "0.81", 25],
+  ["5000", "0.8", "1.25", "1.1", "1.2", 5], ["20000", "0.25", "4", "0.9", "0.6", 100],
+  ["10000", "0.5", "2", "1", "3", 0], ["10000", "0.5", "2", "1", "0.4", 30]
+]) {
+  const r = app.clmmArbitrage(L, lo, up, p, pe, fee);
+  const dir = r.direction === "buy-a" ? "ba" : "ab";
+  const sw = app.clmmSwap(L, lo, up, p, String(r.grossIn), fee, dir);
+  check(`CARB composes Tool 42 at pe=${pe} fee=${fee}`,
+    sw !== null && Math.abs(sw.amountOut - r.amountOut) < 1e-6 &&
+    Math.abs(sw.newPrice - r.postTradeSpot) < 1e-9);
+}
+/* range wall: an external price beyond the edge caps at the edge */
+{
+  const upWall = app.clmmArbitrage("10000", "0.5", "2", "1", "3", 0);
+  check("CARB up-wall flagged", upWall.hitBoundary === true && upWall.postTradeSpot === 2 && upWall.targetPrice === 2);
+  near("CARB up-wall profit valued at the external price", upWall.profitInB, 4644.660940672625, 1e-9);
+  const dnWall = app.clmmArbitrage("10000", "0.5", "2", "1", "0.4", 0);
+  check("CARB down-wall flagged", dnWall.hitBoundary === true && dnWall.postTradeSpot === 0.5 && dnWall.targetPrice === 0.5);
+  check("CARB external price exactly at the edge is the wall", app.clmmArbitrage("10000", "0.5", "2", "1", "2", 0).hitBoundary === true);
+}
+/* fee: grossed up, profit reduced; a gap below the fee is honestly negative */
+{
+  const f = app.clmmArbitrage("10000", "0.5", "2", "1", "1.21", 25);
+  near("CARB fee gross in", f.grossIn, 1002.5062656641604, 1e-9);
+  near("CARB fee profit", f.profitInB, 97.49373433583901, 1e-9);
+  check("CARB fee leaves net in unchanged", Math.abs(f.netIn - carb.netIn) < 1e-9 && f.amountOut === carb.amountOut);
+  const tiny = app.clmmArbitrage("10000", "0.5", "2", "1", "1.0001", 25);
+  check("CARB tiny gap at 25 bps is honestly unprofitable", tiny.profitInB < 0);
+  near("CARB tiny gap profit", tiny.profitInB, -0.0012281027557469182, 1e-12);
+}
+/* no gap, and scale freedom */
+{
+  const none = app.clmmArbitrage("10000", "0.5", "2", "1", "1", 25);
+  check("CARB no gap is direction none with zeros", none.direction === "none" && none.netIn === 0 && none.grossIn === 0 && none.amountOut === 0 && none.profitInB === 0 && none.postTradeSpot === 1);
+  const big = app.clmmArbitrage("100000", "0.5", "2", "1", "1.21", 0);
+  check("CARB 10x liquidity scales every amount 10x",
+    Math.abs(big.netIn / carb.netIn - 10) < 1e-12 && Math.abs(big.amountOut / carb.amountOut - 10) < 1e-12 && Math.abs(big.profitInB / carb.profitInB - 10) < 1e-12);
+}
+/* rejections */
+check("CARB rejects blank and junk", app.clmmArbitrage("", "0.5", "2", "1", "1.21", 0) === null && app.clmmArbitrage("10000", "0.5", "2", "1", "abc", 0) === null && app.clmmArbitrage("10000", " ", "2", "1", "1.21", 0) === null);
+check("CARB rejects non-positive inputs", app.clmmArbitrage("0", "0.5", "2", "1", "1.21", 0) === null && app.clmmArbitrage("10000", "0.5", "2", "1", "0", 0) === null && app.clmmArbitrage("10000", "-0.5", "2", "1", "1.21", 0) === null);
+check("CARB rejects inverted range and price outside it", app.clmmArbitrage("10000", "2", "0.5", "1", "1.21", 0) === null && app.clmmArbitrage("10000", "0.5", "2", "0.5", "1.21", 0) === null && app.clmmArbitrage("10000", "0.5", "2", "2", "1.21", 0) === null && app.clmmArbitrage("10000", "0.5", "2", "3", "1.21", 0) === null);
+check("CARB rejects bad fee tiers", app.clmmArbitrage("10000", "0.5", "2", "1", "1.21", -1) === null && app.clmmArbitrage("10000", "0.5", "2", "1", "1.21", 10000) === null && app.clmmArbitrage("10000", "0.5", "2", "1", "1.21", 2.5) === null);
+check("CARB composes Tool 42 in source", appSrc.includes("function clmmArbitrage"));
+check("all carb controls labelled",
+  ["carb-l", "carb-lower", "carb-upper", "carb-price", "carb-ext", "carb-fee", "carb-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("carb tool present in index.html", html.includes('id="carb-calc"') && html.includes('id="carb-result"'));
+check("carb handler wired to its own form", appSrc.includes('getElementById("carb-calc")') && appSrc.includes('getElementById("carb-result")'));
+check("carb honesty: range wall and not-live labels", html.includes("an external price beyond the edge caps the trade there") && html.includes("not live pool data, not a found opportunity, not financial advice"));
+check("guide covers CLMM arbitrage", guide.includes("respect the range wall"));
+check("README lists tool 77", readme.includes("77. **CLMM arbitrage model**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
