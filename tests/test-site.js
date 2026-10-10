@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=100"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=101"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5106,7 +5106,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v100", html.includes("app.js?v=100"));
+check("app.js cache key bumped to v101", html.includes("app.js?v=101"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -5144,6 +5144,19 @@ check("XCIS headline ranges chain 0.5-2, 2-4", xcis.secondLowerPrice === 2 && xc
       x.maxAmountIn === s.maxAmountIn && x.netIn === s.netIn && x.amountOut === s.amountOut &&
       x.effectiveRate === s.effectiveRate && x.actualImpactPct === s.actualImpactPct && x.newPrice === s.newPrice;
   }));
+}
+/* the reported two-range ceiling is the impact of emptying BOTH ranges,
+   even when the cap itself fits inside the first range (regression:
+   the ceiling used to be built on the cap-sized trade, so an inside
+   cap reported a "ceiling" that emptied neither range) */
+{
+  const x = app.clmmCrossImpactSizer("234841.01755148795", "0.11744241207805212", "0.22437868640222594", "0.15729858341014738", "8.944241184565977", 1, "ba", "2836.0488430904365", "5.25342201216398");
+  check("XCIS inside-case ceiling exists and does not cross", x !== null && x.feasible === true && x.crossed === false);
+  near("XCIS inside-case ceiling is the both-ranges-empty impact", x.secondBoundaryImpactPct, 31.631132107719097, 1e-6);
+  const sB = Math.sqrt(0.22437868640222594), sOut = Math.sqrt(5.25342201216398), sP = Math.sqrt(0.15729858341014738);
+  const capTotal = 234841.01755148795 * (sB - sP) / (1 - 0.0001) + 2836.0488430904365 * (sOut - sB) / (1 - 0.0001);
+  const drain = app.clmmCrossSwap("234841.01755148795", "0.11744241207805212", "0.22437868640222594", "0.15729858341014738", String(capTotal), 1, "ba", "2836.0488430904365", "5.25342201216398");
+  check("XCIS ceiling equals tool 43 at the true total capacity", drain !== null && drain.hitSecondBoundary === true && Math.abs(drain.priceImpactPct - x.secondBoundaryImpactPct) < 1e-9);
 }
 /* the sized input through tool 43 itself lands on the cap across a sweep */
 {

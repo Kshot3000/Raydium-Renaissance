@@ -5437,12 +5437,20 @@ function clmmCrossImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImp
       leg1UsedIn: 0, leg1Out: 0, leg2UsedIn: 0, leg2Out: 0 });
   }
   /* The two-range ceiling: the impact of the trade that empties both
-     ranges, priced by tool 43 itself at the exact total capacity. */
-  var sB = Math.sqrt(boundary), sOut = Math.sqrt(outer);
+     ranges, priced by tool 43 itself at the exact total capacity.
+     The first range's capacity is its own boundary trade — computed
+     here from the range geometry, NOT taken from single.maxAmountIn:
+     when the cap fits inside the first range that is the smaller
+     cap-sized trade, and building the total on it left the "ceiling"
+     the impact of a trade that empties neither range. */
+  var sB = Math.sqrt(boundary), sOut = Math.sqrt(outer), sP = Math.sqrt(price);
+  var netMax1 = direction === "ab"
+    ? liquidity * (1 / sB - 1 / sP)
+    : liquidity * (sB - sP);
   var netMax2 = direction === "ab"
     ? liquidity2 * (1 / sOut - 1 / sB)
     : liquidity2 * (sOut - sB);
-  var grossTotal = single.maxAmountIn + netMax2 / (1 - f);
+  var grossTotal = netMax1 / (1 - f) + netMax2 / (1 - f);
   var drain = clmmCrossSwap(liquidityStr, lowerStr, upperStr, priceStr, String(grossTotal), feeBps, direction, secondLiquidityStr, secondOuterStr);
   if (drain === null) return null;
   var ceiling = drain.priceImpactPct;
