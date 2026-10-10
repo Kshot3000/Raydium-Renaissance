@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus eighty-nine fully
+/* Raydium Renaissance hub logic: project filtering plus ninety fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -59,8 +59,9 @@
    arbitrage model, a CLMM four-range price-impact
    sizer, a CLMM four-range exact-out swap model,
    a stableswap deposit planner, a stableswap
-   withdrawal planner, and a weighted-pool
-   deposit planner.
+   withdrawal planner, a weighted-pool
+   deposit planner, and a weighted-pool
+   withdrawal planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3818,6 +3819,127 @@ function weightedDepositPlan(reserveAStr, reserveBStr, weightAPctStr, totalSuppl
   return result;
 }
 
+/* ---------- 90 · Weighted-pool withdrawal planner ---------- */
+/* Tool 89's exit mirror: tools 5, 7 and 88 plan exits from
+   constant-product, CLMM and stableswap pools; a weighted
+   withdrawal is priced by the invariant itself. Burning a
+   fraction f of the LP supply shrinks the weighted geometric
+   mean V = reserveA^wA x reserveB^wB by exactly that
+   fraction — a pro-rata withdrawal scales both reserves by
+   (1 - f) and the weights sum to 1 — so burning 200 of
+   2,000 LP outstanding on balanced 1,000/1,000 reserves
+   pays exactly 100 A and 100 B at any weight, the pool's own
+   ratio at no price cost. Taking the whole exit in one
+   token holds the other reserve put and solves the paying
+   reserve against the shrunken invariant:
+     singleOutA = A x (1 - (1 - f)^(1/wA)),
+     singleOutB = B x (1 - (1 - f)^(1/wB)),
+   so the cost of leaving one-sided is set by the token you
+   leave in's OWN weight, not by scarcity: on balanced
+   reserves a 10% exit at a 50% weight pays 190 of either
+   token, exactly 5% under the pro-rata payout's value at
+   the starting spot; at an 80% A weight the heavy side pays
+   123.3966 A, only 1.2827% under its 125 pro-rata value,
+   while the light side pays 409.51 B whose value at the
+   starting spot of 0.25 A per B is 102.3875, 18.098% under
+   — the mirror at a 20% A weight swaps the two figures
+   exactly, and at 50/50 an unbalanced 1,500/500 pool costs
+   5% on both sides (285 A, or 95 B worth 285 A), because
+   equal weights mean equal exponents. The cost also grows
+   with the share burned: a 95% exit of the balanced 50/50
+   pool pays 997.5 single-sided against a 1,900 pro-rata
+   value (-47.5%), because the last of a reserve is the most
+   expensive part of the curve. Precision: each payout is
+   formed cancellation-free as
+   -reserve x expm1(log1p(-f) / w) and each remaining
+   reserve directly as reserve x exp(log1p(-f) / w), never
+   as a difference of near-equals — a dust burn of 2e-6 LP
+   (f = 1e-9) on the balanced pool pays
+   1.999999999e-6 single-sided, a vs-pro-rata figure of
+   -5e-8%, i.e. no phantom cost. Burning the entire supply
+   is reported as a full pro-rata drain with no
+   single-sided figure: at an invariant of zero there is
+   no curve left to take one side from (tool 88's pattern).
+   Honest edges: NO withdrawal fee is modelled — some
+   weighted designs charge one, or route a one-sided exit
+   through a swap that pays fee and impact the way tool 56
+   shows, so a real single-sided exit can pay a little less
+   than this; the value benchmark is struck at the STARTING
+   spot, the only price that exists before the exit moves
+   it. Weighted pools are a generalised design used
+   elsewhere — Raydium's own constant-product pools are
+   the 50/50 case. Educational model only — your reserves,
+   weight, supply and burn, not live pool data, not a live
+   quote, not financial advice. */
+function weightedWithdrawPlan(reserveAStr, reserveBStr, weightAPctStr, totalSupplyStr, burnStr) {
+  var raw = [reserveAStr, reserveBStr, weightAPctStr, totalSupplyStr, burnStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var reserveA = Number(reserveAStr), reserveB = Number(reserveBStr);
+  var weightAPct = Number(weightAPctStr), totalSupply = Number(totalSupplyStr);
+  var burn = Number(burnStr);
+  if (![reserveA, reserveB, weightAPct, totalSupply, burn].every(Number.isFinite)) return null;
+  if (reserveA <= 0 || reserveB <= 0 || totalSupply <= 0) return null;
+  if (weightAPct <= 0 || weightAPct >= 100) return null;
+  if (burn <= 0 || burn > totalSupply) return null;
+  var wA = weightAPct / 100, wB = 1 - wA;
+  var invariantV = Math.exp(wA * Math.log(reserveA) + wB * Math.log(reserveB));
+  if (!Number.isFinite(invariantV) || !(invariantV > 0)) return null;
+  var spotBInA = (reserveA / wA) / (reserveB / wB);
+  if (!Number.isFinite(spotBInA) || !(spotBInA > 0)) return null;
+  var frac = burn / totalSupply;
+  var base = {
+    reserveA: reserveA, reserveB: reserveB,
+    weightAPct: weightAPct, weightBPct: 100 - weightAPct,
+    totalSupply: totalSupply, burn: burn,
+    burnSharePct: frac * 100, remainingSupply: totalSupply - burn,
+    invariantV: invariantV, newInvariantV: invariantV * (1 - frac),
+    spotBInA: spotBInA,
+    proOutA: reserveA * frac, proOutB: reserveB * frac,
+    proRataValueA: reserveA * frac + spotBInA * reserveB * frac
+  };
+  if (burn === totalSupply) {
+    return Object.assign(base, {
+      feasible: false, fullExit: true,
+      remainingReserveA: 0, remainingReserveB: 0,
+      singleOutA: null, singleOutB: null,
+      singleRemainingA: null, singleRemainingB: null,
+      singleAValueA: null, singleBValueA: null,
+      singleAVsProRataPct: null, singleBVsProRataPct: null,
+      singleANewSpotBInA: null, singleBNewSpotBInA: null
+    });
+  }
+  /* The payouts and remaining reserves, each formed directly
+     (see the header's precision note): with s = log1p(-f),
+     the paying reserve's remaining factor is exp(s / w). */
+  var logShrink = Math.log1p(-frac);
+  var singleRemainingA = reserveA * Math.exp(logShrink / wA);
+  var singleRemainingB = reserveB * Math.exp(logShrink / wB);
+  var singleOutA = -reserveA * Math.expm1(logShrink / wA);
+  var singleOutB = -reserveB * Math.expm1(logShrink / wB);
+  if (!(singleRemainingA > 0 && singleRemainingA < reserveA)) return null;
+  if (!(singleRemainingB > 0 && singleRemainingB < reserveB)) return null;
+  if (!(singleOutA > base.proOutA) || !(singleOutB > base.proOutB)) return null;
+  var result = Object.assign(base, {
+    feasible: true, fullExit: false,
+    remainingReserveA: reserveA - base.proOutA,
+    remainingReserveB: reserveB - base.proOutB,
+    singleOutA: singleOutA, singleOutB: singleOutB,
+    singleRemainingA: singleRemainingA, singleRemainingB: singleRemainingB,
+    singleAValueA: singleOutA, singleBValueA: singleOutB * spotBInA,
+    singleAVsProRataPct: (singleOutA / base.proRataValueA - 1) * 100,
+    singleBVsProRataPct: (singleOutB * spotBInA / base.proRataValueA - 1) * 100,
+    singleANewSpotBInA: (singleRemainingA / wA) / (reserveB / wB),
+    singleBNewSpotBInA: (reserveA / wA) / (singleRemainingB / wB)
+  });
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -6791,7 +6913,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -8586,6 +8708,31 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: depositing " + fmt(res.depositA, 4) + " A and " + fmt(res.depositB, 4) + " B grows the weighted invariant from " + fmt(res.invariantV, 4) + " to " + fmt(res.newInvariantV, 4) + ", minting ≈ " + fmt(res.minted, 4) + " LP tokens — ≈ " + fmt(-res.vsProportionalPct, 4) + "% less than the ≈ " + fmt(res.proportionalMinted, 4) + " the same value, struck at the pool's starting spot of " + fmt(res.spotBInA, 4) + " A per B, would mint in the pool's own ratio, because a one-sided deposit grows its own reserve along a concave curve: the tax rises with the deposit's size relative to its own reserve and falls as that token's weight rises. The spot moves to ≈ " + fmt(res.newSpotBInA, 4) + " A per B. Your share after the deposit is ≈ " + fmt(res.shareAfterPct, 4) + "% of " + fmt(res.newTotalSupply, 4) + " LP outstanding. No join fee is modelled — some weighted designs charge one or route the non-proportional part through a swap, so a real deposit this shape can mint a little less again. A weighted-pool deposit model, not a live Raydium quote. Not financial advice.";
         document.getElementById("wdep-out").value = fmt(res.minted, 4);
         document.getElementById("wdep-share").value = fmt(res.shareAfterPct, 4) + "%";
+      }
+    });
+
+    document.getElementById("wwd-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = weightedWithdrawPlan(
+        document.getElementById("wwd-ra").value,
+        document.getElementById("wwd-rb").value,
+        document.getElementById("wwd-wa").value,
+        document.getElementById("wwd-supply").value,
+        document.getElementById("wwd-burn").value
+      );
+      var out = document.getElementById("wwd-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, a token A weight above 0 and below 100%, an LP supply above 0, and a burn above 0 and at most the whole supply.";
+        document.getElementById("wwd-outa").value = "";
+        document.getElementById("wwd-outb").value = "";
+      } else if (!res.feasible) {
+        out.textContent = "Model output: burning all " + fmt(res.burn, 4) + " LP tokens (100% of the supply) drains the pool pro-rata — " + fmt(res.proOutA, 4) + " A and " + fmt(res.proOutB, 4) + " B, leaving nothing behind. A single-sided figure is not quoted: with the invariant at zero there is no curve left to take one side from, so a sole LP simply keeps both tokens (or swaps elsewhere). No withdrawal fee is modelled. A weighted-pool withdrawal model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("wwd-outa").value = fmt(res.proOutA, 4);
+        document.getElementById("wwd-outb").value = fmt(res.proOutB, 4);
+      } else {
+        out.textContent = "Model output: burning " + fmt(res.burn, 4) + " LP tokens (" + fmt(res.burnSharePct, 4) + "% of the supply) shrinks the weighted invariant from " + fmt(res.invariantV, 4) + " to " + fmt(res.newInvariantV, 4) + ". Pro-rata, it pays " + fmt(res.proOutA, 4) + " A and " + fmt(res.proOutB, 4) + " B — the pool's own ratio, worth " + fmt(res.proRataValueA, 4) + " A at the starting spot of " + fmt(res.spotBInA, 4) + " A per B. Taken entirely in A it pays ≈ " + fmt(res.singleOutA, 4) + " A (≈ " + fmt(-res.singleAVsProRataPct, 4) + "% under the pro-rata value), and entirely in B ≈ " + fmt(res.singleOutB, 4) + " B (≈ " + fmt(-res.singleBVsProRataPct, 4) + "% under, struck at the same spot), because a single-sided exit walks the spot away from you as it pays out — cheaper in the token with the heavier weight, dearer in the lighter one, and dearer the larger the share burned. No withdrawal fee is modelled — some weighted designs charge one or route a one-sided exit through a swap, so a real single-sided exit pays a little less again. A weighted-pool withdrawal model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("wwd-outa").value = fmt(res.proOutA, 4);
+        document.getElementById("wwd-outb").value = fmt(res.proOutB, 4);
       }
     });
 

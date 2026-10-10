@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=111"));
+check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=112"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1358,7 +1358,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists eighty-nine tools", readme.includes("eighty-nine pool tools") || readme.includes("all eighty-nine"));
+check("README lists ninety tools", readme.includes("ninety pool tools") || readme.includes("all ninety"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2001,8 +2001,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts eighty-nine tools and names the newest tools",
-  appSrc.includes("plus eighty-nine fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, and a weighted-pool\n   deposit planner.\n   These are educational MODELS"));
+check("app.js header counts ninety tools and names the newest tools",
+  appSrc.includes("plus ninety fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, and a weighted-pool\n   withdrawal planner.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v111", html.includes("app.js?v=111"));
+check("app.js cache key bumped to v112", html.includes("app.js?v=112"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6006,6 +6006,125 @@ check("wdep handler wired to its own form", appSrc.includes('getElementById("wde
 check("wdep honesty: no join fee modelled and not-live labels", html.includes("No join fee is modelled") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers weighted-pool deposits", guide.includes("Deposit into a weighted pool in the pool's own ratio"));
 check("README lists tool 89", readme.includes("89. **Weighted-pool deposit planner**"));
+
+/* ---------- 90 · Weighted-pool withdrawal planner (WWD) ---------- */
+/* Prototype-verified before these tests were written (clean
+   foreground run, 50-digit Decimal oracle): balanced 1,000/1,000
+   with 2,000 LP outstanding, burning 200 pays exactly 100/100
+   pro-rata at any weight and 190 single-sided at a 50% weight
+   (-5%); at an 80% A weight the heavy side pays
+   123.39662821723291 (-1.2826974262136703%) and the light side
+   409.51 B (-18.098%); a dust burn of 2e-6 LP pays
+   1.999999999e-6 single-sided with no phantom cost. */
+const ww1 = app.weightedWithdrawPlan("1000", "1000", "50", "2000", "200");
+check("WWD headline is not null", ww1 !== null);
+check("WWD headline is feasible and not a full exit", ww1.feasible === true && ww1.fullExit === false);
+near("WWD headline pro-rata A is exact", ww1.proOutA, 100, 1e-9);
+near("WWD headline pro-rata B is exact", ww1.proOutB, 100, 1e-9);
+near("WWD headline pro-rata value", ww1.proRataValueA, 200, 1e-9);
+near("WWD headline invariant V", ww1.invariantV, 1000, 1e-9);
+near("WWD headline new V shrinks by exactly the burn fraction", ww1.newInvariantV, 900, 1e-9);
+near("WWD headline burn share", ww1.burnSharePct, 10, 1e-12);
+near("WWD headline remaining supply", ww1.remainingSupply, 1800, 1e-12);
+near("WWD headline spot", ww1.spotBInA, 1, 1e-12);
+near("WWD headline single A", ww1.singleOutA, 190, 1e-9);
+near("WWD headline single B", ww1.singleOutB, 190, 1e-9);
+near("WWD headline single A vs pro-rata", ww1.singleAVsProRataPct, -5, 1e-9);
+near("WWD headline single B vs pro-rata", ww1.singleBVsProRataPct, -5, 1e-9);
+near("WWD headline single remaining A", ww1.singleRemainingA, 810, 1e-9);
+near("WWD headline single-A new spot", ww1.singleANewSpotBInA, 0.81, 1e-12);
+near("WWD headline single-B new spot", ww1.singleBNewSpotBInA, 1 / 0.81, 1e-12);
+near("WWD headline pro-rata remaining A", ww1.remainingReserveA, 900, 1e-9);
+const ww80 = app.weightedWithdrawPlan("1000", "1000", "80", "2000", "200");
+near("WWD pro-rata pays exactly its fraction at an 80% weight too", ww80.proOutA, 100, 1e-9);
+near("WWD spot at 80% A weight", ww80.spotBInA, 0.25, 1e-12);
+near("WWD single A at 80% weight", ww80.singleOutA, 123.39662821723291, 1e-9);
+near("WWD single A at 80% vs pro-rata", ww80.singleAVsProRataPct, -1.2826974262136703, 1e-9);
+near("WWD single B at 80% weight", ww80.singleOutB, 409.51, 1e-9);
+near("WWD single B at 80% vs pro-rata", ww80.singleBVsProRataPct, -18.098, 1e-9);
+check("WWD the heavier token is the cheaper side to leave in", ww80.singleAVsProRataPct > ww80.singleBVsProRataPct);
+near("WWD mirror: single A at a 20% A weight is the 80% B figure",
+  app.weightedWithdrawPlan("1000", "1000", "20", "2000", "200").singleOutA, 409.51, 1e-9);
+near("WWD mirror: single B at a 20% A weight is the 80% A figure",
+  app.weightedWithdrawPlan("1000", "1000", "20", "2000", "200").singleOutB, 123.39662821723291, 1e-9);
+const wwU = app.weightedWithdrawPlan("1500", "500", "50", "2000", "200");
+near("WWD unbalanced spot", wwU.spotBInA, 3, 1e-12);
+near("WWD unbalanced single A", wwU.singleOutA, 285, 1e-9);
+near("WWD unbalanced single B", wwU.singleOutB, 95, 1e-9);
+near("WWD unbalanced both sides cost exactly 5% at 50/50", wwU.singleBVsProRataPct, -5, 1e-9);
+const wwU80 = app.weightedWithdrawPlan("1500", "500", "80", "2000", "200");
+near("WWD unbalanced 80% single A", wwU80.singleOutA, 185.09494232584936, 1e-9);
+near("WWD unbalanced 80% single B value", wwU80.singleBValueA, 153.56625, 1e-9);
+near("WWD 95% exit single A", app.weightedWithdrawPlan("1000", "1000", "50", "2000", "1900").singleOutA, 997.5, 1e-9);
+near("WWD 95% exit vs pro-rata", app.weightedWithdrawPlan("1000", "1000", "50", "2000", "1900").singleAVsProRataPct, -47.5, 1e-9);
+check("WWD single-sided cost grows with the share burned",
+  app.weightedWithdrawPlan("1000", "1000", "50", "2000", "1000").singleAVsProRataPct <
+  ww1.singleAVsProRataPct &&
+  ww1.singleAVsProRataPct <
+  app.weightedWithdrawPlan("1000", "1000", "50", "2000", "20").singleAVsProRataPct);
+/* sweeps: pro-rata always pays exactly the burn fraction of both
+   reserves and leaves the spot unmoved; single-sided always pays
+   more units than the pro-rata leg yet less value; the remaining
+   reserves under every exit return exactly the shrunken
+   invariant; Tool 89 round-trips both ways. */
+for (const [ra, rb, wa, supply, f] of [[1000, 1000, 50, 2000, 0.1], [2000, 1000, 80, 3000, 0.1], [1000, 4000, 20, 2000, 0.05], [1500, 500, 65, 2500, 0.2], [750, 1250, 35, 1500, 0.333], [10000, 10000, 90, 20000, 0.01]]) {
+  const r = app.weightedWithdrawPlan(String(ra), String(rb), String(wa), String(supply), String(supply * f));
+  const tag = "WWD sweep " + ra + "/" + rb + " @w" + wa + " f " + f;
+  check(tag + " not null", r !== null);
+  near(tag + " pro-rata A is exactly f x reserve", r.proOutA, ra * f, 1e-6);
+  near(tag + " pro-rata B is exactly f x reserve", r.proOutB, rb * f, 1e-6);
+  near(tag + " new V is exactly (1-f) x V", r.newInvariantV, r.invariantV * (1 - f), 1e-6);
+  check(tag + " single-sided pays more units, less value", r.singleOutA > r.proOutA && r.singleOutB > r.proOutB && r.singleAVsProRataPct < 0 && r.singleBVsProRataPct < 0);
+  near(tag + " single-A remaining returns the shrunken invariant",
+    Math.pow(r.singleRemainingA, wa / 100) * Math.pow(rb, 1 - wa / 100) / r.newInvariantV, 1, 1e-9);
+  near(tag + " single-B remaining returns the shrunken invariant",
+    Math.pow(ra, wa / 100) * Math.pow(r.singleRemainingB, 1 - wa / 100) / r.newInvariantV, 1, 1e-9);
+  near(tag + " pro-rata remaining returns the shrunken invariant",
+    Math.pow(r.remainingReserveA, wa / 100) * Math.pow(r.remainingReserveB, 1 - wa / 100) / r.newInvariantV, 1, 1e-9);
+}
+{
+  const dep = app.weightedDepositPlan("1000", "1000", "50", "2000", "100", "100");
+  const back = app.weightedWithdrawPlan("1100", "1100", "50", "2200", String(dep.minted));
+  near("WWD round-trip: an in-ratio deposit burned pro-rata returns it exactly (A)", back.proOutA, 100, 1e-9);
+  near("WWD round-trip: an in-ratio deposit burned pro-rata returns it exactly (B)", back.proOutB, 100, 1e-9);
+  const depS = app.weightedDepositPlan("1000", "1000", "50", "2000", "100", "0");
+  const backS = app.weightedWithdrawPlan("1100", "1000", "50", String(2000 + depS.minted), String(depS.minted));
+  near("WWD round-trip: a single-sided A deposit burned single-sided in A returns it exactly", backS.singleOutA, 100, 1e-9);
+  const depB = app.weightedDepositPlan("1000", "1000", "80", "2000", "0", "100");
+  const backB = app.weightedWithdrawPlan("1000", "1100", "80", String(2000 + depB.minted), String(depB.minted));
+  near("WWD round-trip: a single-sided B deposit at 80% burned single-sided in B returns it exactly", backB.singleOutB, 100, 1e-9);
+  const redep = app.weightedDepositPlan("900", "900", "50", "1800", "100", "100");
+  near("WWD round-trip: a pro-rata withdrawal re-deposited mints back exactly the burn", redep.minted, 200, 1e-9);
+}
+near("WWD 10x scale pays exactly 10x single-sided", app.weightedWithdrawPlan("10000", "10000", "50", "20000", "2000").singleOutA, ww1.singleOutA * 10, 1e-9);
+/* dust burns: the payout is formed with expm1/log1p, not
+   subtracted — the plain power difference would round it away
+   and wear a phantom cost (50-digit oracle pins). */
+near("WWD dust burn 2e-6 single A matches the oracle",
+  app.weightedWithdrawPlan("1000", "1000", "50", "2000", "0.000002").singleOutA, 1.999999999e-6, 1e-15);
+near("WWD dust burn 2e-6 has no phantom cost",
+  app.weightedWithdrawPlan("1000", "1000", "50", "2000", "0.000002").singleAVsProRataPct, 0, 1e-6);
+const wwFull = app.weightedWithdrawPlan("1000", "1000", "50", "2000", "2000");
+check("WWD full burn is a pro-rata drain with no single-sided figure",
+  wwFull !== null && wwFull.feasible === false && wwFull.fullExit === true &&
+  wwFull.proOutA === 1000 && wwFull.proOutB === 1000 && wwFull.remainingSupply === 0 &&
+  wwFull.singleOutA === null && wwFull.singleOutB === null);
+check("WWD rejects burn above supply", app.weightedWithdrawPlan("1000", "1000", "50", "2000", "2001") === null);
+check("WWD rejects zero burn", app.weightedWithdrawPlan("1000", "1000", "50", "2000", "0") === null);
+check("WWD rejects negative burn", app.weightedWithdrawPlan("1000", "1000", "50", "2000", "-5") === null);
+check("WWD rejects weight 0", app.weightedWithdrawPlan("1000", "1000", "0", "2000", "1") === null);
+check("WWD rejects weight 100", app.weightedWithdrawPlan("1000", "1000", "100", "2000", "1") === null);
+check("WWD rejects zero supply", app.weightedWithdrawPlan("1000", "1000", "50", "0", "1") === null);
+check("WWD rejects zero reserve", app.weightedWithdrawPlan("0", "1000", "50", "2000", "1") === null);
+check("WWD rejects empty input", app.weightedWithdrawPlan("", "1000", "50", "2000", "1") === null);
+check("WWD rejects non-numeric input", app.weightedWithdrawPlan("1000", "1000", "50", "2000", "abc") === null);
+check("WWD forms the payout cancellation-free in source", appSrc.includes("function weightedWithdrawPlan") && appSrc.includes("-reserveA * Math.expm1(logShrink / wA)") && appSrc.includes("Math.log1p(-frac)"));
+check("all wwd controls labelled", ["wwd-ra", "wwd-rb", "wwd-wa", "wwd-supply", "wwd-burn", "wwd-outa", "wwd-outb"].every(id => html.includes(`for="${id}"`)));
+check("wwd tool present in index.html", html.includes('id="wwd-calc"') && html.includes('id="wwd-result"'));
+check("wwd handler wired to its own form", appSrc.includes('getElementById("wwd-calc")') && appSrc.includes('getElementById("wwd-result")'));
+check("wwd honesty: no withdrawal fee modelled and not-live labels", html.includes("No withdrawal fee is modelled") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers weighted-pool withdrawals", guide.includes("Leave a weighted pool in the pool's own ratio"));
+check("README lists tool 90", readme.includes("90. **Weighted-pool withdrawal planner**"));
 
 /* ---------- Accessibility guards (global — every tool, present and future) ---------- */
 /* The per-tool "all X controls labelled" checks above only cover the

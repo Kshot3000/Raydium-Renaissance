@@ -2116,6 +2116,27 @@
         <button type="submit" class="btn primary">Plan this weighted-pool deposit</button>
         <p id="wdep-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="wwd-calc">
+        <h3>90 · Weighted-pool withdrawal planner</h3>
+        <p>Tool 89's exit mirror: tools 5, 7 and 88 plan exits from constant-product, CLMM and stableswap pools; this plans one from the weighted pools of tool 56, priced by the invariant itself. Burning a fraction of the LP supply shrinks the weighted invariant V = A<sup>wA</sup> × B<sup>wB</sup> by exactly that fraction, so burning 200 of 2,000 LP outstanding on balanced 1,000/1,000 reserves pays exactly 100 A and 100 B pro-rata at any weight — the pool's own ratio at no price cost. Taking the whole exit in one token instead holds the other reserve put and solves the paying reserve against the shrunken invariant, so the cost is set by the token you leave in's own weight, not by scarcity: on that pool a 10% exit pays 190 of either token at a 50% weight (≈5% under the pro-rata payout's value at the starting spot); at an 80% A weight the heavy side pays ≈123.3966 A (only ≈1.2827% under its 125 pro-rata value) while the light side pays ≈409.51 B worth only ≈102.3875 A at the starting spot (≈18.098% under) — and at 50/50 an unbalanced 1,500/500 pool costs 5% on both sides, because equal weights mean equal exponents. The cost grows with the share burned: a 95% exit of the balanced 50/50 pool pays only ≈997.5 single-sided against a 1,900 pro-rata value. Burning the entire supply is reported as a full pro-rata drain with no single-sided figure: at an invariant of zero there is no curve left to take one side from. No withdrawal fee is modelled: some weighted designs charge one, or route a one-sided exit through a swap that pays fee and impact, so a real single-sided exit can pay a little less than this shows. Weighted pools are a generalised design used elsewhere — Raydium's own constant-product pools are the 50/50 case. Educational model only — your reserves, weight, supply and burn, not live pool data, not a live quote, not financial advice.</p>
+        <label for="wwd-ra">Reserve of token A</label>
+        <input id="wwd-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="wwd-rb">Reserve of token B</label>
+        <input id="wwd-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="wwd-wa">Token A weight % (above 0, below 100)</label>
+        <input id="wwd-wa" inputmode="decimal" placeholder="e.g. 50" autocomplete="off">
+        <label for="wwd-supply">LP tokens outstanding (total supply)</label>
+        <input id="wwd-supply" inputmode="decimal" placeholder="e.g. 2000" autocomplete="off">
+        <label for="wwd-burn">LP tokens you burn (above 0, at most the supply)</label>
+        <input id="wwd-burn" inputmode="decimal" placeholder="e.g. 200" autocomplete="off">
+        <label for="wwd-outa">Token A paid out pro-rata (model)</label>
+        <input id="wwd-outa" readonly placeholder="—" autocomplete="off">
+        <label for="wwd-outb">Token B paid out pro-rata (model)</label>
+        <input id="wwd-outb" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan this weighted-pool withdrawal</button>
+        <p id="wwd-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2143,6 +2164,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=111"></script>
+<script src="app.js?v=112"></script>
 </body>
 </html>
