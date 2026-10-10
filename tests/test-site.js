@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=113"));
+check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=114"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1358,7 +1358,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists ninety-one tools", readme.includes("ninety-one pool tools") || readme.includes("all ninety-one"));
+check("README lists ninety-two tools", readme.includes("ninety-two pool tools") || readme.includes("all ninety-two"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2001,8 +2001,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts ninety-one tools and names the newest tools",
-  appSrc.includes("plus ninety-one fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, and a Token-2022\n   transfer-fee swap model.\n   These are educational MODELS"));
+check("app.js header counts ninety-two tools and names the newest tools",
+  appSrc.includes("plus ninety-two fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, a Token-2022\n   transfer-fee swap model, and a sandwich\n   (MEV) attack model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v113", html.includes("app.js?v=113"));
+check("app.js cache key bumped to v114", html.includes("app.js?v=114"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6241,6 +6241,86 @@ check("tfswap handler wired to its own form", appSrc.includes('getElementById("t
 check("tfswap honesty: receiver-withheld, not-burned and not-live labels", html.includes("withheld from the receiver") && html.includes("not burned") && html.includes("not live pool data, not a live quote, not financial advice"));
 check("guide covers Token-2022 transfer-fee swaps", guide.includes("A transfer-fee token is taxed on both legs of a swap"));
 check("README lists tool 91", readme.includes("91. **Token-2022 transfer-fee swap model**"));
+
+/* ---------- 92 · Sandwich (MEV) attack model (SAND) ---------- */
+/* Three swaps in one pool in a fixed order — front-run, victim,
+   back-run — each one tool 1's own curve on the reserves that leg
+   actually faced (a reserve grows by the leg's after-fee input and
+   shrinks by its output, tool 19's post-swap convention). Vectors
+   verified in a clean prototype BEFORE these tests were written,
+   every leg cross-checked against tool 1 there. */
+const sand1 = app.sandwichModel("1000", "1000", "100", "100", 25);
+check("SAND headline is not null", s1 !== null);
+check("SAND headline front-run out is tool 1 verbatim", sand1.frontOut === app.cpSwap("1000", "1000", "100", 25).out && sand1.frontOut === "90.70243237");
+check("SAND headline victim baseline is tool 1 verbatim", sand1.victimOutBaseline === "90.70243237");
+check("SAND headline victim out", sand1.victimOut === "75.616867337");
+check("SAND headline victim loss", sand1.victimLoss === "15.085565033");
+near("SAND headline victim loss pct", sand1.victimLossPct, 16.631929970148825, 1e-9);
+check("SAND headline back-run out", sand1.backOut === "117.432045548");
+check("SAND headline attacker profit", sand1.attackerProfit === "17.432045548");
+near("SAND headline attacker profit pct", sand1.attackerProfitPct, 17.432045548, 1e-9);
+check("SAND headline is profitable", sand1.profitable === true);
+check("SAND headline round trip without the victim loses money", sand1.backOutNoVictim === "99.523192487" && sand1.attackerProfitNoVictim === "-0.476807513");
+near("SAND headline spot", sand1.spotPrice, 1, 1e-12);
+const sand0 = app.sandwichModel("1000", "1000", "100", "100", 0);
+check("SAND zero-fee victim out", sand0 !== null && sand0.victimOut === "75.757575757");
+check("SAND zero-fee profit", sand0 !== null && sand0.attackerProfit === "18.032786885");
+check("SAND zero-fee round trip loses only the flooring dust", sand0 !== null && sand0.backOutNoVictim === "99.999999999" && sand0.attackerProfitNoVictim === "-0.000000001");
+const sandSmall = app.sandwichModel("1000", "1000", "100", "10", 25);
+check("SAND small front-run out", sandSmall !== null && sandSmall.frontOut === "9.876482091");
+check("SAND small front-run victim out", sandSmall !== null && sandSmall.victimOut === "88.999365528");
+check("SAND small front-run profit", sandSmall !== null && sandSmall.attackerProfit === "2.001171623");
+near("SAND small front-run profit pct beats the headline pct", sandSmall.attackerProfitPct, 20.01171623, 1e-9);
+const sandBig = app.sandwichModel("1000", "1000", "100", "500", 25);
+check("SAND big front-run victim out", sandBig !== null && sandBig.victimOut === "41.636198239");
+check("SAND big front-run profit", sandBig !== null && sandBig.attackerProfit === "54.148325272");
+check("SAND bigger front-run hurts the victim more but earns a falling pct", sandBig !== null && sandBig.victimLossPct > sand1.victimLossPct && sandBig.attackerProfitPct < sand1.attackerProfitPct && Number(sandBig.attackerProfit) > Number(sand1.attackerProfit));
+const sandTiny = app.sandwichModel("1000", "1000", "1", "100", 25);
+check("SAND tiny victim still loses a large pct", sandTiny !== null && sandTiny.victimOut === "0.824007616" && sandTiny.victimLossPct > 17);
+check("SAND tiny victim leaves the attacker underwater", sandTiny !== null && sandTiny.attackerProfit === "-0.304368965" && sandTiny.profitable === false);
+const sandUnbal = app.sandwichModel("2000", "500", "50", "80", 30);
+check("SAND unbalanced front-run out", sandUnbal !== null && sandUnbal.frontOut === "19.175289456");
+check("SAND unbalanced victim baseline and out", sandUnbal !== null && sandUnbal.victimOutBaseline === "12.159426299" && sandUnbal.victimOut === "11.255164945");
+check("SAND unbalanced profit", sandUnbal !== null && sandUnbal.attackerProfit === "3.311720495");
+const sandDust = app.sandwichModel("1000000000", "1000000000", "1000", "0.001", 25);
+check("SAND dust front-run on a deep pool: victim loss is dust and the attacker loses the round-trip toll", sandDust !== null && sandDust.victimLoss === "0.000000002" && sandDust.attackerProfit === "-0.000004994" && sandDust.profitable === false);
+/* composition sweep: rebuild the whole sequence from tool 1 alone,
+   updating reserves the hub's way, and compare every reported field */
+function sandRebuild(rin, rout, vic, att, fee) {
+  const afterFee = a => app.parseScaled(a) * BigInt(10000 - fee) / 10000n;
+  const front = app.cpSwap(rin, rout, att, fee);
+  const rin1 = app.formatScaled(app.parseScaled(rin) + afterFee(att));
+  const rout1 = app.formatScaled(app.parseScaled(rout) - app.parseScaled(front.out));
+  const vleg = app.cpSwap(rin1, rout1, vic, fee);
+  const rin2 = app.formatScaled(app.parseScaled(rin1) + afterFee(vic));
+  const rout2 = app.formatScaled(app.parseScaled(rout1) - app.parseScaled(vleg.out));
+  const back = app.cpSwap(rout2, rin2, front.out, fee);
+  const backSolo = app.cpSwap(rout1, rin1, front.out, fee);
+  return { front, vleg, back, backSolo };
+}
+for (const [rin, rout, vic, att, fee] of [["1000", "1000", "100", "100", 25], ["2000", "500", "50", "80", 30], ["500", "4000", "25", "200", 5], ["100000", "250000", "5000", "10000", 100], ["1000", "1000", "1", "100", 25], ["777.5", "123.25", "10.5", "33.75", 42]]) {
+  const sm = app.sandwichModel(rin, rout, vic, att, fee);
+  const rb = sandRebuild(rin, rout, vic, att, fee);
+  const base = app.cpSwap(rin, rout, vic, fee);
+  check("SAND composition " + rin + "/" + rout + " vic " + vic + " att " + att + " @" + fee, sm !== null
+    && sm.frontOut === rb.front.out && sm.victimOut === rb.vleg.out && sm.backOut === rb.back.out
+    && sm.backOutNoVictim === rb.backSolo.out && sm.victimOutBaseline === base.out
+    && app.formatScaled(app.parseScaled(sm.victimOut) + app.parseScaled(sm.victimLoss)) === sm.victimOutBaseline);
+}
+check("SAND victim loss grows monotonically with the front-run size",
+  [10, 50, 100, 200, 500].map(a => app.sandwichModel("1000", "1000", "100", String(a), 25).victimLossPct)
+    .every((v, i, arr) => i === 0 || v > arr[i - 1]));
+check("SAND a higher pool fee lowers the attacker profit on the headline", app.sandwichModel("1000", "1000", "100", "100", 100).attackerProfitPct < sand1.attackerProfitPct);
+check("SAND rejects zero/negative reserves and trades", app.sandwichModel("0", "1000", "100", "100", 25) === null && app.sandwichModel("1000", "1000", "0", "100", 25) === null && app.sandwichModel("1000", "1000", "100", "0", 25) === null);
+check("SAND rejects unparseable and over-precise amounts", app.sandwichModel("1000", "1000", "abc", "100", 25) === null && app.sandwichModel("1000", "1000", "100", "0.0000000001", 25) === null);
+check("SAND rejects bad fees", app.sandwichModel("1000", "1000", "100", "100", -1) === null && app.sandwichModel("1000", "1000", "100", "100", 10000) === null && app.sandwichModel("1000", "1000", "100", "100", 25.5) === null);
+check("SAND source sequences the legs through one reserve-updating helper", appSrc.includes("function sandwichModel") && appSrc.includes("var rin1 = rin + front.inAfterFee, rout1 = rout - front.out;"));
+check("all sand controls labelled", ["sand-rin", "sand-rout", "sand-vic", "sand-att", "sand-fee", "sand-vout", "sand-profit"].every(id => html.includes(`for="${id}"`)));
+check("sand tool present in index.html", html.includes('id="sand-calc"') && html.includes('id="sand-result"'));
+check("sand handler wired to its own form", appSrc.includes('getElementById("sand-calc")') && appSrc.includes('getElementById("sand-result")'));
+check("sand honesty: gross profit, unmodelled costs and not-live labels", html.includes("no priority fees, searcher competition or failed-bundle costs are modelled") && html.includes("not a how-to") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers sandwich attacks", guide.includes("price the sandwich before someone else does"));
+check("README lists tool 92", readme.includes("92. **Sandwich (MEV) attack model**"));
 
 /* ---------- Accessibility guards (global — every tool, present and future) ---------- */
 /* The per-tool "all X controls labelled" checks above only cover the

@@ -2164,6 +2164,27 @@
         <button type="submit" class="btn primary">Model this transfer-fee swap</button>
         <p id="tfswap-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="sand-calc">
+        <h3>92 · Sandwich (MEV) attack model</h3>
+        <p>Every other swap tool here prices a trade as if it were alone in its block. A sandwich is what happens when it is not: an attacker who can see a victim's pending swap in the same constant-product pool front-runs it — swapping the same direction first, which moves the price against the victim — lets the victim fill at that worsened price, then back-runs by selling everything the front-run bought straight back. All three legs are tool 1's own curve, run in sequence on the reserves each leg actually faced. Headline: balanced 1,000/1,000 reserves, a 100 victim trade and a 100 front-run at a 25 bps fee — the victim receives ≈75.6169 instead of ≈90.7024 unsandwiched, a ≈16.6319% loss, and the attacker banks ≈17.4320 gross. The model is honest about the attack's own economics: the front/back round trip alone loses money (fees plus its own impact — at a zero fee it loses only the model's 9-decimal flooring dust, ≈0.000000001), so a victim too small to cover that cost leaves the attacker underwater even while losing a large percentage itself (a 1-token victim loses ≈17.31% and the attacker still loses ≈0.3044), and a bigger front-run always hurts the victim more but earns a falling percentage on the growing stake. The profit shown is gross — no priority fees, searcher competition or failed-bundle costs are modelled — and the victim is assumed to have no slippage protection: a minimum-received (tool 10) above the sandwiched output would make the victim's trade fail rather than fill, which is the defence this model exists to size. This prices an attack so traders and LPs can see what it costs and what stops it; it is not a how-to. Educational model only — your reserves and trades, not live pool data, not a live quote, not financial advice.</p>
+        <label for="sand-rin">Reserve in (tokens)</label>
+        <input id="sand-rin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sand-rout">Reserve out (tokens)</label>
+        <input id="sand-rout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sand-vic">Victim amount in (tokens)</label>
+        <input id="sand-vic" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="sand-att">Attacker front-run amount in (tokens)</label>
+        <input id="sand-att" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="sand-fee">Pool swap fee (basis points, 25 = 0.25%)</label>
+        <input id="sand-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="sand-vout">What the victim actually receives (model)</label>
+        <input id="sand-vout" readonly placeholder="—" autocomplete="off">
+        <label for="sand-profit">Attacker gross profit, in the input token (model)</label>
+        <input id="sand-profit" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model this sandwich</button>
+        <p id="sand-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2191,6 +2212,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=113"></script>
+<script src="app.js?v=114"></script>
 </body>
 </html>

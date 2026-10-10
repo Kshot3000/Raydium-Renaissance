@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus ninety-one fully
+/* Raydium Renaissance hub logic: project filtering plus ninety-two fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -61,8 +61,9 @@
    a stableswap deposit planner, a stableswap
    withdrawal planner, a weighted-pool
    deposit planner, a weighted-pool
-   withdrawal planner, and a Token-2022
-   transfer-fee swap model.
+   withdrawal planner, a Token-2022
+   transfer-fee swap model, and a sandwich
+   (MEV) attack model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -4037,6 +4038,89 @@ function transferFeeSwap(reserveInStr, reserveOutStr, amountInStr, poolFeeBps, t
   };
 }
 
+/* ---------- 92 · Sandwich (MEV) attack model (constant-product pools) ---------- */
+/* Every swap tool before this one prices a trade as if it were alone
+   in its block. A sandwich is what happens when it is not: an attacker
+   who sees a victim's pending swap in the same pool front-runs it —
+   swapping the same direction first, which moves the price against
+   the victim — lets the victim trade at that worsened price, then
+   back-runs by swapping everything the front-run bought straight
+   back. All three legs are tool 1's own curve, run in sequence on
+   reserves updated the hub's way (a reserve grows by the after-fee
+   input and shrinks by the output, exactly as tool 19's post-swap
+   reserves do), so each leg's output is tool 1 verbatim on the
+   reserves that leg actually faced — the tests assert that. The
+   victim's loss is measured against what the same trade returns
+   unsandwiched, and the attacker's profit is the back-run's output
+   minus the front-run's input, both in the input token. Two honest
+   edges the numbers make unavoidable: the front/back round trip on
+   its own LOSES money (fees plus its own price impact — at zero fee
+   it loses only the model's 9-dp flooring dust), so a victim too
+   small to move the price enough leaves the attacker underwater even
+   while the victim still loses a large PERCENTAGE (a 1-token victim
+   on balanced 1,000/1,000 reserves at 25 bps loses ≈17.31% and the
+   attacker still loses ≈0.3044); and a bigger front-run always hurts
+   the victim more but earns a falling percentage on the growing stake.
+   Model only — one pool, the three legs land in this exact order with
+   nothing in between, and the attacker's profit is GROSS: no priority
+   fees, no searcher competition or failed-bundle costs, and no
+   slippage protection on the victim (a victim whose minimum-received
+   from tool 10 the sandwiched output falls below would fail rather
+   than fill — the defence this model exists to size). Your reserves
+   and trades, not live pool data, not a live quote, not financial
+   advice, and not a how-to: it prices an attack so traders and LPs
+   can see what it costs and what stops it. */
+function sandwichModel(reserveInStr, reserveOutStr, victimInStr, attackerInStr, feeBps) {
+  var rin = parseScaled(reserveInStr), rout = parseScaled(reserveOutStr);
+  var vic = parseScaled(victimInStr), att = parseScaled(attackerInStr);
+  var fee = Number(feeBps);
+  if (rin === null || rout === null || vic === null || att === null) return null;
+  if (rin <= 0n || rout <= 0n || vic <= 0n || att <= 0n) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  function leg(rIn, rOut, aIn) {
+    var inAfterFee = aIn * BigInt(10000 - fee) / 10000n;
+    if (inAfterFee <= 0n) return null;
+    var out = rOut * inAfterFee / (rIn + inAfterFee);
+    if (out <= 0n) return null;
+    return { out: out, inAfterFee: inAfterFee };
+  }
+  function signed(n) { return n < 0n ? "-" + formatScaled(-n) : formatScaled(n); }
+  var baseline = leg(rin, rout, vic);
+  if (baseline === null) return null;
+  var front = leg(rin, rout, att);
+  if (front === null) return null;
+  var rin1 = rin + front.inAfterFee, rout1 = rout - front.out;
+  var victimLeg = leg(rin1, rout1, vic);
+  if (victimLeg === null) return null;
+  var rin2 = rin1 + victimLeg.inAfterFee, rout2 = rout1 - victimLeg.out;
+  var back = leg(rout2, rin2, front.out);
+  if (back === null) return null;
+  var backSolo = leg(rout1, rin1, front.out);
+  if (backSolo === null) return null;
+  var victimLoss = baseline.out - victimLeg.out;
+  var profit = back.out - att;
+  var profitSolo = backSolo.out - att;
+  return {
+    reserveIn: formatScaled(rin),
+    reserveOut: formatScaled(rout),
+    victimIn: formatScaled(vic),
+    attackerIn: formatScaled(att),
+    frontOut: formatScaled(front.out),
+    victimOutBaseline: formatScaled(baseline.out),
+    victimOut: formatScaled(victimLeg.out),
+    victimLoss: formatScaled(victimLoss),
+    victimLossPct: scaledToNumber(victimLoss) / scaledToNumber(baseline.out) * 100,
+    backOut: formatScaled(back.out),
+    attackerProfit: signed(profit),
+    attackerProfitPct: scaledToNumber(profit) / scaledToNumber(att) * 100,
+    profitable: profit > 0n,
+    backOutNoVictim: formatScaled(backSolo.out),
+    attackerProfitNoVictim: signed(profitSolo),
+    spotPrice: scaledToNumber(rout) / scaledToNumber(rin),
+    feePct: fee / 100
+  };
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -7010,7 +7094,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, sandwichModel, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -8854,6 +8938,28 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: of the " + res.amountIn + " you send, the in-token's transfer fee withholds " + res.transferFeeIn + ", so the pool actually receives " + res.netAmountIn + "; the pool fee takes a further " + res.poolFeeAmount + " of that, and the curve pays out " + res.grossOut + " gross. The out-token's transfer fee then withholds " + res.transferFeeOut + ", so you actually receive " + res.amountOut + " — " + fmt(res.transferDragPct, 4) + "% less than the " + res.noTransferFeeOut + " the same trade returns in tool 1 with no transfer fees, at an effective price of ≈ " + fmt(res.effectivePrice, 6) + " against a spot of ≈ " + fmt(res.spotPrice, 6) + " (≈ " + fmt(res.priceImpactPct, 4) + "% total drag versus spot, transfer fees included). The withheld fees sit in the receiving accounts until the mint's fee authority collects them — they are not burned and do not reach the pool's LPs. A Token-2022 transfer-fee swap model, not a live Raydium quote. Not financial advice.";
         document.getElementById("tfswap-netin").value = res.netAmountIn;
         document.getElementById("tfswap-out").value = res.amountOut;
+      }
+    });
+
+    /* --- sandwich (MEV) attack model --- */
+    document.getElementById("sand-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = sandwichModel(
+        document.getElementById("sand-rin").value,
+        document.getElementById("sand-rout").value,
+        document.getElementById("sand-vic").value,
+        document.getElementById("sand-att").value,
+        document.getElementById("sand-fee").value
+      );
+      var out = document.getElementById("sand-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves, a positive victim trade and a positive attacker front-run, and a pool fee of 0–9,999 bps. A leg so small that the fee and the model's 9-decimal flooring leave it nothing to trade with is rejected rather than zeroed.";
+        document.getElementById("sand-vout").value = "";
+        document.getElementById("sand-profit").value = "";
+      } else {
+        out.textContent = "Model output: the attacker's front-run of " + res.attackerIn + " buys " + res.frontOut + " of the out token and moves the price against the victim, whose " + res.victimIn + " trade receives " + res.victimOut + " instead of the " + res.victimOutBaseline + " it returns unsandwiched — a loss of " + res.victimLoss + " (≈ " + fmt(res.victimLossPct, 4) + "%). The back-run then sells the " + res.frontOut + " straight back for " + res.backOut + ", leaving the attacker a gross profit of " + res.attackerProfit + " (≈ " + fmt(res.attackerProfitPct, 4) + "% on the front-run) — gross meaning before priority fees, searcher competition and failed-bundle costs, none of which are modelled. Without the victim the same round trip returns " + res.backOutNoVictim + " (a profit of " + res.attackerProfitNoVictim + "): the round trip alone loses money, which is why a victim too small to cover it leaves the attacker underwater. A victim whose minimum-received (tool 10) sits above the sandwiched output would fail rather than fill at this price. A sandwich (MEV) attack model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("sand-vout").value = res.victimOut;
+        document.getElementById("sand-profit").value = res.attackerProfit;
       }
     });
 
