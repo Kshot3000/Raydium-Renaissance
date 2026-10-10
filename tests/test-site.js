@@ -6,6 +6,7 @@ const root = path.join(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const guide = fs.readFileSync(path.join(root, "guides", "getting-started-raydium-pools.md"), "utf8");
+const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 const app = require(path.join(root, "app.js"));
 
 const SOL = "9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8";
@@ -56,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=106"));
+check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=106"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5730,6 +5731,57 @@ check("qxo handler wired to its own form", appSrc.includes('getElementById("qxo-
 check("qxo honesty: fourth ceiling and not-live labels", html.includes("supply that fourth range too") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("does not invent either"));
 check("guide covers CLMM four-range exact-out swap", guide.includes("Exact-out keeps going past the third wall too"));
 check("README lists tool 86", readme.includes("86. **CLMM four-range exact-out swap model**"));
+
+/* ---------- Accessibility guards (global — every tool, present and future) ---------- */
+/* The per-tool "all X controls labelled" checks above only cover the
+   tools their author remembered to list. These guards parse the whole
+   page instead, so a future tool that ships unlabelled, unannounced
+   or low-contrast fails the suite the day it lands. Verified against
+   the shipped page before being written: 615 inputs and 13 selects,
+   every one labelled; 488 editable inputs, every one with an
+   inputmode; 86 forms, every result a polite live region; 106
+   headings, one h1 and no skipped levels; the weakest text pair on
+   the page (white on the accent purple, chips and the primary
+   button) computes to 4.52:1, just over the WCAG AA 4.5 floor. */
+check("A11Y every input and select carries an id",
+  [...html.matchAll(/<input[^>]*>/g), ...html.matchAll(/<select[^>]*>/g)]
+    .every(m => / id="[^"]+"/.test(m[0])));
+check("A11Y every input and select is labelled",
+  (() => {
+    const fors = new Set([...html.matchAll(/<label[^>]*for="([^"]+)"/g)].map(m => m[1]));
+    const ids = [...html.matchAll(/<(?:input|select)[^>]* id="([^"]+)"/g)].map(m => m[1]);
+    return ids.length > 0 && ids.every(id => fors.has(id));
+  })());
+check("A11Y every editable input declares an inputmode (readonly outputs and the search box exempt)",
+  [...html.matchAll(/<input[^>]*>/g)].map(m => m[0])
+    .filter(t => !/readonly/.test(t) && !/type="(search|submit|button)"/.test(t))
+    .every(t => /inputmode="(decimal|numeric)"/.test(t)));
+check("A11Y every tool form's result is a polite live region",
+  [...html.matchAll(/<form[^>]* id="([^"]+)"/g)].map(m => m[1])
+    .every(f => {
+      const tag = html.match(new RegExp('id="' + f.replace(/-calc$/, "") + '-result"[^>]*>'));
+      return tag !== null && /role="status"/.test(tag[0]) && /aria-live="polite"/.test(tag[0]);
+    }));
+check("A11Y heading levels never skip",
+  (() => {
+    const hs = [...html.matchAll(/<h([1-6])[ >]/g)].map(m => Number(m[1]));
+    return hs.length > 0 && hs.every((h, i) => i === 0 || h <= hs[i - 1] + 1);
+  })());
+check("A11Y reduced-motion users get instant, unsmoothed scrolling",
+  /@media \(prefers-reduced-motion: reduce\)\s*\{\s*html\{scroll-behavior:auto\}\s*\}/.test(css));
+check("A11Y text contrast meets WCAG AA (4.5:1) for every themed text/background pair",
+  (() => {
+    const vars = {};
+    for (const m of css.matchAll(/--([a-z0-9]+):(#[0-9a-f]{6})/g)) vars[m[1]] = m[2];
+    const lum = hex => [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16) / 255)
+      .map(s => (s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)))
+      .reduce((acc, v, i) => acc + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const pairs = [["muted", "bg"], ["muted", "panel"], ["muted", "panel2"],
+      ["ink", "bg"], ["cyan", "bg"], ["cyan", "panel"], ["accent2", "bg"]];
+    return pairs.every(([fg, bg]) => vars[fg] && vars[bg] && ratio(vars[fg], vars[bg]) >= 4.5)
+      && ratio("#ffffff", vars.accent) >= 4.5;
+  })());
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

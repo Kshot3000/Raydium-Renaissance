@@ -70,3 +70,6 @@ h3{margin:.2rem 0 .5rem}
 footer{border-top:1px solid var(--line);padding:1.4rem clamp(1rem,4vw,3rem);color:var(--muted);font-size:.9rem}
 footer p{word-break:break-all}
 @media (max-width:560px){.stats{gap:1.2rem}}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+}
