@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus eighty-four fully
+/* Raydium Renaissance hub logic: project filtering plus eighty-seven fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -55,8 +55,10 @@
    model, a CLMM three-range arbitrage model, a CLMM
    two-range price-impact sizer, a CLMM
    three-range price-impact sizer, a CLMM
-   four-range swap model, and a CLMM four-range
-   arbitrage model.
+   four-range swap model, a CLMM four-range
+   arbitrage model, a CLMM four-range price-impact
+   sizer, a CLMM four-range exact-out swap model,
+   and a stableswap deposit planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3424,6 +3426,86 @@ function clmmQuadSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amount
   });
 }
 
+/* ---------- 87 · Stableswap deposit planner ---------- */
+/* Tools 5 and 8 plan deposits into constant-product and CLMM pools;
+   the stableswap pools of tool 58 had swap-side tools only. A
+   deposit here is priced by the invariant itself, the way
+   Curve-style pools mint: with D the pool's invariant (tool 58's
+   own stableInvariantD) before and after the deposit lands,
+     minted = totalSupply * (D_new - D_old) / D_old,
+   so the minted share of the new supply is exactly the deposit's
+   share of the invariant's growth, (D_new - D_old) / D_new. Two
+   consequences are asserted in tests, not just claimed: a deposit
+   in the pool's own reserve ratio scales both reserves by the
+   same factor, D scales with them (the invariant is homogeneous),
+   and the mint is exactly that fraction of the supply at every
+   amplification; and a single-sided deposit mints LESS than the
+   same value — valued at the pool's starting spot price of B in
+   A, tool 61's own stableSpotBInA — deposited in ratio, because
+   the deposit itself walks the spot away from the depositor. The
+   shortfall is the amplification's signature: on balanced
+   1,000/1,000 reserves with 2,000 LP outstanding, 100 A alone
+   mints ≈99.9764 at A = 100 (≈0.0236% under the in-ratio mint),
+   only ≈98.8083 at A = 1 (≈1.1917% under), and ≈99.9995 at
+   A = 5,000 — a curve that barely defends par taxes imbalance
+   like a product curve, a curve that defends it hard barely
+   notices. On an unbalanced pool the scarce side is worth more
+   per unit deposited (1500/500 at A = 100: 100 of B mints
+   ≈101.1189 against 100 of A's ≈99.5384), because it moves the
+   pool toward balance. Honest edges: NO imbalance fee is
+   modelled — real Curve-style pools charge one on the
+   non-proportional part, so a real single-sided deposit mints a
+   little less than this; the value benchmark is struck at the
+   STARTING spot, the only price that exists before the deposit
+   moves it; and the mint buys a share of the invariant, not a
+   fixed claim on either token — what that share redeems for
+   depends on the reserves when it is withdrawn. Stableswap pools
+   are a generalised design used elsewhere for pegged pairs.
+   Educational model only — your reserves, amplification, supply
+   and deposits, not live pool data, not a live quote, not
+   financial advice. */
+function stableDepositPlan(reserveAStr, reserveBStr, ampStr, totalSupplyStr, depositAStr, depositBStr) {
+  var raw = [reserveAStr, reserveBStr, ampStr, totalSupplyStr, depositAStr, depositBStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var reserveA = Number(reserveAStr), reserveB = Number(reserveBStr);
+  var amp = Number(ampStr), totalSupply = Number(totalSupplyStr);
+  var depositA = Number(depositAStr), depositB = Number(depositBStr);
+  if (![reserveA, reserveB, amp, totalSupply, depositA, depositB].every(Number.isFinite)) return null;
+  if (reserveA <= 0 || reserveB <= 0 || amp <= 0 || totalSupply <= 0) return null;
+  if (depositA < 0 || depositB < 0 || depositA + depositB <= 0) return null;
+  var D = stableInvariantD(reserveA, reserveB, amp);
+  if (D === null || !(D > 0)) return null;
+  var newReserveA = reserveA + depositA, newReserveB = reserveB + depositB;
+  var newD = stableInvariantD(newReserveA, newReserveB, amp);
+  if (newD === null || !(newD > D)) return null;
+  var minted = totalSupply * (newD - D) / D;
+  if (!(minted > 0)) return null;
+  var spotB = stableSpotBInA(reserveA, reserveB, amp, D);
+  if (!Number.isFinite(spotB) || !(spotB > 0)) return null;
+  var depositValueA = depositA + spotB * depositB;
+  var poolValueA = reserveA + spotB * reserveB;
+  var proportionalMinted = totalSupply * depositValueA / poolValueA;
+  if (!(proportionalMinted > 0)) return null;
+  var result = {
+    reserveA: reserveA, reserveB: reserveB, amp: amp,
+    totalSupply: totalSupply, depositA: depositA, depositB: depositB,
+    invariantD: D, newInvariantD: newD, minted: minted,
+    newTotalSupply: totalSupply + minted,
+    shareAfterPct: minted / (totalSupply + minted) * 100,
+    newReserveA: newReserveA, newReserveB: newReserveB,
+    spotBInA: spotB, depositValueA: depositValueA, poolValueA: poolValueA,
+    proportionalMinted: proportionalMinted,
+    vsProportionalPct: (minted / proportionalMinted - 1) * 100
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (!Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -6397,7 +6479,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -8115,6 +8197,32 @@ if (typeof document !== "undefined") {
           fmt(res.maxOut, 4) + " " + outName + ". Price impact ≈ " + fmt(res.priceImpactPct, 2) +
           "% against the starting price, fee included. A thinner fourth range would have charged more for the same remainder — that fall-off is the cliff a three-range model cannot show. A CLMM four-range exact-out swap model — not a live quote, not financial advice.";
         fill();
+      }
+    });
+
+    document.getElementById("sdep-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = stableDepositPlan(
+        document.getElementById("sdep-ra").value,
+        document.getElementById("sdep-rb").value,
+        document.getElementById("sdep-amp").value,
+        document.getElementById("sdep-supply").value,
+        document.getElementById("sdep-da").value,
+        document.getElementById("sdep-db").value
+      );
+      var out = document.getElementById("sdep-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, an amplification above 0, an LP supply above 0, and deposits of 0 or more in each token with at least one deposit above 0.";
+        document.getElementById("sdep-out").value = "";
+        document.getElementById("sdep-share").value = "";
+      } else if (Math.abs(res.vsProportionalPct) < 1e-9) {
+        out.textContent = "Model output: depositing " + fmt(res.depositA, 4) + " A and " + fmt(res.depositB, 4) + " B grows the invariant from " + fmt(res.invariantD, 4) + " to " + fmt(res.newInvariantD, 4) + ", minting exactly " + fmt(res.minted, 4) + " LP tokens — exactly the in-ratio mint for this deposit's value at the pool's starting spot of " + fmt(res.spotBInA, 4) + " A per B, because a deposit in the pool's own ratio scales the invariant by its own fraction at any amplification. Your share after the deposit is ≈ " + fmt(res.shareAfterPct, 4) + "% of " + fmt(res.newTotalSupply, 4) + " LP outstanding. No imbalance fee is modelled — real Curve-style pools charge one on the non-proportional part. A stableswap deposit model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("sdep-out").value = fmt(res.minted, 4);
+        document.getElementById("sdep-share").value = fmt(res.shareAfterPct, 4) + "%";
+      } else {
+        out.textContent = "Model output: depositing " + fmt(res.depositA, 4) + " A and " + fmt(res.depositB, 4) + " B grows the invariant from " + fmt(res.invariantD, 4) + " to " + fmt(res.newInvariantD, 4) + ", minting ≈ " + fmt(res.minted, 4) + " LP tokens — ≈ " + fmt(-res.vsProportionalPct, 4) + "% less than the ≈ " + fmt(res.proportionalMinted, 4) + " the same value, struck at the pool's starting spot of " + fmt(res.spotBInA, 4) + " A per B, would mint in the pool's own ratio, because the deposit walks the spot away from you as it lands. The shortfall shrinks as amplification rises: a curve that defends par hard barely taxes imbalance, a low-A curve taxes it like a product curve. Your share after the deposit is ≈ " + fmt(res.shareAfterPct, 4) + "% of " + fmt(res.newTotalSupply, 4) + " LP outstanding. No imbalance fee is modelled — real Curve-style pools charge one on the non-proportional part, so a real deposit this shape mints a little less again. A stableswap deposit model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("sdep-out").value = fmt(res.minted, 4);
+        document.getElementById("sdep-share").value = fmt(res.shareAfterPct, 4) + "%";
       }
     });
 

@@ -2049,6 +2049,29 @@
         <button type="submit" class="btn primary">Price this four-range exact-out CLMM swap</button>
         <p id="qxo-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="sdep-calc">
+        <h3>87 · Stableswap deposit planner</h3>
+        <p>Tools 5 and 8 plan deposits into constant-product and CLMM pools; this plans one into the stableswap pools of tool 58, priced by the invariant itself the way Curve-style pools mint: the LP tokens you receive are your share of the invariant D's growth, minted = supply × (D after − D before) ÷ D before, with D computed by tool 58's own solver on the reserves before and after your deposit lands. A deposit in the pool's own ratio mints exactly its fraction of the supply — 100/100 into balanced 1,000/1,000 reserves with 2,000 LP outstanding mints exactly 200, a ≈9.0909% share — at every amplification. A single-sided deposit mints less than the same value, struck at the pool's starting spot, deposited in ratio, because the deposit walks the spot away from you: 100 A alone on that pool mints ≈99.9764 at A = 100 (≈0.0236% under the in-ratio mint), only ≈98.8083 at A = 1 and ≈99.9995 at A = 5,000. On an unbalanced pool the scarce side is worth more per unit — on 1,500/500 reserves at A = 100, 100 of token B mints ≈101.1189 against 100 of token A's ≈99.5384. No imbalance fee is modelled: real Curve-style pools charge one on the non-proportional part, so a real single-sided deposit mints a little less than this shows. Stableswap pools are a generalised design used elsewhere for pegged pairs. Educational model only — your reserves, amplification, supply and deposits, not live pool data, not a live quote, not financial advice.</p>
+        <label for="sdep-ra">Reserve of token A</label>
+        <input id="sdep-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sdep-rb">Reserve of token B</label>
+        <input id="sdep-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sdep-amp">Amplification A (pool property, above 0)</label>
+        <input id="sdep-amp" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="sdep-supply">LP tokens outstanding (total supply)</label>
+        <input id="sdep-supply" inputmode="decimal" placeholder="e.g. 2000" autocomplete="off">
+        <label for="sdep-da">Your deposit of token A (0 or more)</label>
+        <input id="sdep-da" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="sdep-db">Your deposit of token B (0 or more)</label>
+        <input id="sdep-db" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="sdep-out">LP tokens minted to you (model)</label>
+        <input id="sdep-out" readonly placeholder="—" autocomplete="off">
+        <label for="sdep-share">Your share of the pool after the deposit (model)</label>
+        <input id="sdep-share" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan this stableswap deposit</button>
+        <p id="sdep-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2076,6 +2099,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=106"></script>
+<script src="app.js?v=107"></script>
 </body>
 </html>

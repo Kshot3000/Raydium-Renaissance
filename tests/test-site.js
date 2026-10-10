@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=106"));
+check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=107"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1358,7 +1358,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists eighty-four tools", readme.includes("eighty-four pool tools") || readme.includes("all eighty-four"));
+check("README lists eighty-seven tools", readme.includes("eighty-seven pool tools") || readme.includes("all eighty-seven"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2001,8 +2001,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts eighty-four tools and names the CLMM four-range arbitrage model",
-  appSrc.includes("plus eighty-four fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, a curve\n   comparison exact-out model, a weighted-pool\n   IL tolerance band, a stableswap IL\n   tolerance band, a CLMM arbitrage model, a CLMM\n   price-impact sizer, a CLMM two-range arbitrage\n   model, a CLMM three-range arbitrage model, a CLMM\n   two-range price-impact sizer, a CLMM\n   three-range price-impact sizer, a CLMM\n   four-range swap model, and a CLMM four-range\n   arbitrage model.\n   These are educational MODELS"));
+check("app.js header counts eighty-seven tools and names the newest tools",
+  appSrc.includes("plus eighty-seven fully") && appSrc.includes("a CLMM four-range price-impact\n   sizer, a CLMM four-range exact-out swap model,\n   and a stableswap deposit planner.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v106", html.includes("app.js?v=106"));
+check("app.js cache key bumped to v107", html.includes("app.js?v=107"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -5731,6 +5731,79 @@ check("qxo handler wired to its own form", appSrc.includes('getElementById("qxo-
 check("qxo honesty: fourth ceiling and not-live labels", html.includes("supply that fourth range too") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("does not invent either"));
 check("guide covers CLMM four-range exact-out swap", guide.includes("Exact-out keeps going past the third wall too"));
 check("README lists tool 86", readme.includes("86. **CLMM four-range exact-out swap model**"));
+
+/* ---------- 87 · Stableswap deposit planner (SDEP) ---------- */
+/* headline: balanced 1000/1000, A=100, supply 2000, in-ratio 100/100 */
+const sd1 = app.stableDepositPlan("1000", "1000", "100", "2000", "100", "100");
+check("SDEP headline is not null", sd1 !== null);
+near("SDEP headline invariant D is the reserve sum", sd1.invariantD, 2000, 1e-9);
+near("SDEP headline new D", sd1.newInvariantD, 2200, 1e-9);
+near("SDEP in-ratio deposit mints exactly its fraction of the supply", sd1.minted, 200, 1e-9);
+near("SDEP headline share after", sd1.shareAfterPct, 9.090909090909092, 1e-9);
+near("SDEP in-ratio mint equals the proportional benchmark", sd1.vsProportionalPct, 0, 1e-9);
+near("SDEP headline spot is exactly par on a balanced pool", sd1.spotBInA, 1, 1e-12);
+/* single-sided: the imbalance is paid in mint, and amp sets the price */
+const sdA100 = app.stableDepositPlan("1000", "1000", "100", "2000", "100", "0");
+near("SDEP single-sided A100 minted", sdA100.minted, 99.9763734307835, 1e-9);
+near("SDEP single-sided A100 vs proportional", sdA100.vsProportionalPct, -0.023626569216506077, 1e-9);
+near("SDEP single-sided A1 minted", app.stableDepositPlan("1000", "1000", "1", "2000", "100", "0").minted, 98.8083412009555, 1e-9);
+near("SDEP single-sided A5000 minted", app.stableDepositPlan("1000", "1000", "5000", "2000", "100", "0").minted, 99.99952282303364, 1e-9);
+check("SDEP single-sided penalty grows as amp falls",
+  app.stableDepositPlan("1000", "1000", "1", "2000", "100", "0").minted <
+  sdA100.minted &&
+  sdA100.minted <
+  app.stableDepositPlan("1000", "1000", "5000", "2000", "100", "0").minted);
+near("SDEP single-sided B mirrors A on a balanced pool",
+  app.stableDepositPlan("1000", "1000", "100", "2000", "0", "100").minted, sdA100.minted, 1e-9);
+/* unbalanced pool: spot from tool 61's formula, scarce side mints more */
+const sdU = app.stableDepositPlan("1500", "500", "100", "2000", "100", "0");
+near("SDEP unbalanced invariant D", sdU.invariantD, 1996.715821544259, 1e-9);
+near("SDEP unbalanced spot is tool 76's documented figure", sdU.spotBInA, 1.0175352411985896, 1e-12);
+near("SDEP unbalanced deposit A minted", sdU.minted, 99.5384310721638, 1e-9);
+near("SDEP unbalanced scarce-side B minted", app.stableDepositPlan("1500", "500", "100", "2000", "0", "100").minted, 101.11885911798656, 1e-9);
+check("SDEP scarce side mints more per unit than the plentiful side",
+  app.stableDepositPlan("1500", "500", "100", "2000", "0", "100").minted > sdU.minted);
+near("SDEP unbalanced in-ratio deposit mints exactly its fraction",
+  app.stableDepositPlan("1500", "500", "100", "2000", "150", "50").minted, 200, 1e-6);
+/* in-ratio exactness + share identity + no-bonus sweep */
+for (const [ra, rb, amp, sup, t] of [[1000, 1000, 1, 2000, 0.1], [1000, 1000, 100, 2000, 0.25], [1500, 500, 100, 2000, 0.1], [800, 2400, 5000, 5000, 0.05], [1000, 1000, 5000, 2000, 0.5], [250, 750, 10, 900, 0.2]]) {
+  const r = app.stableDepositPlan(String(ra), String(rb), String(amp), String(sup), String(ra * t), String(rb * t));
+  const tag = "SDEP sweep in-ratio " + ra + "/" + rb + " @A" + amp + " t=" + t;
+  check(tag + " not null", r !== null);
+  near(tag + " mints exactly t x supply", r.minted, sup * t, Math.max(1e-6, sup * t * 1e-9));
+  near(tag + " vs proportional is zero", r.vsProportionalPct, 0, 1e-6);
+  near(tag + " share is the invariant growth share", r.shareAfterPct, (r.newInvariantD - r.invariantD) / r.newInvariantD * 100, 1e-9);
+}
+for (const [ra, rb, amp, da, db] of [[1000, 1000, 100, 100, 0], [1000, 1000, 1, 0, 250], [1500, 500, 100, 0, 100], [1500, 500, 100, 100, 0], [800, 2400, 500, 300, 10], [1000, 1000, 5000, 100000, 0], [250, 750, 10, 5, 90]]) {
+  const r = app.stableDepositPlan(String(ra), String(rb), String(amp), "2000", String(da), String(db));
+  const tag = "SDEP sweep off-ratio " + ra + "/" + rb + " @A" + amp + " dep " + da + "/" + db;
+  check(tag + " not null", r !== null);
+  check(tag + " never mints above the starting-spot value benchmark", r.vsProportionalPct <= 1e-9);
+  check(tag + " minted share buys the same share of both new reserves",
+    Math.abs(r.minted / r.newTotalSupply - r.shareAfterPct / 100) < 1e-12);
+}
+/* scale freedom: 10x pool, supply and deposit mints exactly 10x */
+near("SDEP 10x scale mints exactly 10x",
+  app.stableDepositPlan("10000", "10000", "100", "20000", "1000", "0").minted,
+  10 * sdA100.minted, 1e-6);
+/* dust deposit still mints, proportionally tiny */
+check("SDEP dust deposit mints a dust share",
+  app.stableDepositPlan("1000", "1000", "100", "2000", "0.001", "0").minted > 0);
+/* rejections */
+check("SDEP rejects both deposits zero", app.stableDepositPlan("1000", "1000", "100", "2000", "0", "0") === null);
+check("SDEP rejects a negative deposit", app.stableDepositPlan("1000", "1000", "100", "2000", "-1", "2") === null);
+check("SDEP rejects zero supply", app.stableDepositPlan("1000", "1000", "100", "0", "1", "1") === null);
+check("SDEP rejects zero amp", app.stableDepositPlan("1000", "1000", "0", "2000", "1", "1") === null);
+check("SDEP rejects zero reserve", app.stableDepositPlan("0", "1000", "100", "2000", "1", "1") === null);
+check("SDEP rejects empty input", app.stableDepositPlan("", "1000", "100", "2000", "1", "1") === null);
+check("SDEP rejects non-numeric input", app.stableDepositPlan("1000", "1000", "100", "2000", "abc", "1") === null);
+check("SDEP composes Tool 58 in source", appSrc.includes("function stableDepositPlan") && appSrc.includes("totalSupply * (newD - D) / D") && appSrc.includes("stableSpotBInA(reserveA, reserveB, amp, D)"));
+check("all sdep controls labelled", ["sdep-ra", "sdep-rb", "sdep-amp", "sdep-supply", "sdep-da", "sdep-db", "sdep-out", "sdep-share"].every(id => html.includes(`for="${id}"`)));
+check("sdep tool present in index.html", html.includes('id="sdep-calc"') && html.includes('id="sdep-result"'));
+check("sdep handler wired to its own form", appSrc.includes('getElementById("sdep-calc")') && appSrc.includes('getElementById("sdep-result")'));
+check("sdep honesty: no imbalance fee modelled and not-live labels", html.includes("No imbalance fee is modelled") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers stableswap deposits", guide.includes("Deposit into a stable pool in the pool's own ratio"));
+check("README lists tool 87", readme.includes("87. **Stableswap deposit planner**"));
 
 /* ---------- Accessibility guards (global — every tool, present and future) ---------- */
 /* The per-tool "all X controls labelled" checks above only cover the
