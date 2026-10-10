@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=91"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=92"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1357,7 +1357,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists seventy-three tools", readme.includes("seventy-three pool tools") || readme.includes("all seventy-three"));
+check("README lists seventy-four tools", readme.includes("seventy-four pool tools") || readme.includes("all seventy-four"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2000,8 +2000,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts seventy-three tools and names the stableswap break-even days calculator",
-  appSrc.includes("plus seventy-three fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, and a stableswap\n   break-even days calculator.\n   These are educational MODELS"));
+check("app.js header counts seventy-four tools and names the curve comparison exact-out model",
+  appSrc.includes("plus seventy-four fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, and a curve\n   comparison exact-out model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -4432,6 +4432,126 @@ check("sbed handler wired to its own form", appSrc.includes('getElementById("sbe
 check("sbed honesty: share-invariance and not-live labels", html.includes("the day count does not depend on your share") && html.includes("not live pool data, not a live quote, not financial advice"));
 check("guide covers stableswap break-even days", guide.includes("the amplification sets the hurdle before the days are counted"));
 check("README lists tool 73", readme.includes("73. **Stableswap break-even days calculator**"));
+
+
+/* ---------- 74 · Curve comparison exact-out model ---------- */
+/* Every leg is the source exact-out tool verbatim: tool 6's
+   cpSwapExactOut (input string parsed back), tool 63's
+   weightedSwapExactOut and tool 59's stableSwapExactOut. Headline
+   vectors were computed in a clean foreground prototype before
+   being written. */
+const ccx = app.curveCompareExactOut("1000", "1000", "50", "100", "100", 25);
+check("CCX headline non-null", ccx !== null);
+near("CCX headline CP in", ccx.constantProduct.in, 111.389585075, 1e-9);
+near("CCX headline CP spot", ccx.constantProduct.spotPrice, 1, 1e-12);
+near("CCX headline CP impact", ccx.constantProduct.priceImpactPct, 10.225000000970697, 1e-6);
+near("CCX headline weighted in", ccx.weighted.in, 111.3895850737956, 1e-9);
+near("CCX 50/50 weighted leg is the CP leg", ccx.weighted.in, ccx.constantProduct.in, 1e-6);
+near("CCX headline weighted spot", ccx.weighted.spotPrice, 1, 1e-12);
+near("CCX headline stable in", ccx.stableswap.in, 100.35096849591363, 1e-9);
+near("CCX headline stable spot", ccx.stableswap.spotPrice, 1, 1e-12);
+near("CCX headline stable impact", ccx.stableswap.priceImpactPct, 0.3497410151332314, 1e-9);
+check("CCX headline cheapest in is stableswap", ccx.cheapestIn === "stableswap");
+near("CCX headline cheapest amount", ccx.cheapestInAmount, 100.35096849591363, 1e-9);
+check("CCX headline lowest impact is stableswap", ccx.lowestImpact === "stableswap");
+near("CCX headline in spread", ccx.inSpread, 111.389585075 - 100.35096849591363, 1e-6);
+
+/* leg-for-leg equality with the source tools across a sweep */
+for (const [rin, rout, w, amp, aout, fee] of [
+  ["1000", "1000", "80", "100", "100", 25],
+  ["1000", "1000", "20", "100", "100", 25],
+  ["1000", "4000", "50", "100", "100", 25],
+  ["5000", "2500", "35", "100", "250", 10],
+  ["1000", "1000", "50", "1", "100", 25],
+  ["1000", "1000", "50", "5000", "100", 0],
+  ["2000", "500", "65", "20", "37.5", 100],
+  ["1000", "500", "50", "100", "50", 25]
+]) {
+  const c = app.curveCompareExactOut(rin, rout, w, amp, aout, fee);
+  const cp6 = app.cpSwapExactOut(rin, rout, aout, fee);
+  const wt63 = app.weightedSwapExactOut(rin, rout, w, aout, fee);
+  const st59 = app.stableSwapExactOut(rin, rout, amp, aout, fee);
+  const tag = `CCX legs verbatim ${rin}/${rout} w${w} A${amp} out${aout} fee${fee}`;
+  check(tag + " non-null", c !== null && cp6 !== null && wt63 !== null && st59 !== null);
+  check(tag + " CP", c.constantProduct.in === Number(cp6.amountIn) && c.constantProduct.spotPrice === cp6.spotPrice && c.constantProduct.priceImpactPct === cp6.priceImpactPct);
+  check(tag + " weighted", c.weighted.in === wt63.amountIn && c.weighted.spotPrice === wt63.spotPrice && c.weighted.priceImpactPct === wt63.priceImpactPct);
+  check(tag + " stable", c.stableswap.in === st59.amountIn && c.stableswap.spotPrice === st59.spotPrice && c.stableswap.priceImpactPct === st59.priceImpactPct);
+  check(tag + " cheapest consistent", c.cheapestInAmount === Math.min(c.constantProduct.in, c.weighted.in, c.stableswap.in) && c[c.cheapestIn].in === c.cheapestInAmount);
+  check(tag + " lowestImpact consistent", c.lowestImpactPct === Math.min(c.constantProduct.priceImpactPct, c.weighted.priceImpactPct, c.stableswap.priceImpactPct) && c[c.lowestImpact].priceImpactPct === c.lowestImpactPct);
+  /* round trip: each leg's gross input, fed through its own
+     exact-in tool, returns the target */
+  near(tag + " CP round-trips", Number(app.cpSwap(rin, rout, String(c.constantProduct.in), fee).out), Number(aout), 1e-6);
+  near(tag + " weighted round-trips", app.weightedSwap(rin, rout, w, String(c.weighted.in), fee).out, Number(aout), 1e-6);
+  near(tag + " stable round-trips", app.stableSwap(rin, rout, amp, String(c.stableswap.in), fee).out, Number(aout), 1e-6);
+}
+
+/* the honesty trap, reversed: at an 80% weight the weighted leg is
+   the cheapest in raw input because its spot is 4, yet its impact
+   is nowhere near the stableswap leg's — the two rankings split */
+const ccx80 = app.curveCompareExactOut("1000", "1000", "80", "100", "100", 25);
+near("CCX weight-80 weighted spot", ccx80.weighted.spotPrice, 4, 1e-9);
+near("CCX weight-80 weighted in", ccx80.weighted.in, 26.756988551720266, 1e-9);
+near("CCX weight-80 weighted impact", ccx80.weighted.priceImpactPct, 6.566465984481318, 1e-9);
+check("CCX weight-80 cheapest in is weighted", ccx80.cheapestIn === "weighted");
+check("CCX weight-80 lowest impact is NOT the cheapest", ccx80.lowestImpact === "stableswap" && ccx80.cheapestIn !== ccx80.lowestImpact);
+const ccx20 = app.curveCompareExactOut("1000", "1000", "20", "100", "100", 25);
+near("CCX weight-20 weighted spot", ccx20.weighted.spotPrice, 0.25, 1e-12);
+near("CCX weight-20 weighted in", ccx20.weighted.in, 525.4715817130084, 1e-9);
+check("CCX weight-20 cheapest in is stableswap", ccx20.cheapestIn === "stableswap");
+
+/* parameter isolation: amp moves only the stable leg, weight only
+   the weighted leg; the stable leg's cost falls as amp rises on
+   balanced reserves */
+const ccxA1 = app.curveCompareExactOut("1000", "1000", "50", "1", "100", 25);
+const ccxA5000 = app.curveCompareExactOut("1000", "1000", "50", "5000", "100", 25);
+check("CCX amp leaves CP and weighted legs untouched", ccxA1.constantProduct.in === ccx.constantProduct.in && ccxA1.weighted.in === ccx.weighted.in && ccxA5000.constantProduct.in === ccx.constantProduct.in);
+near("CCX amp-1 stable in", ccxA1.stableswap.in, 105.54159520646438, 1e-9);
+near("CCX amp-5000 stable in", ccxA5000.stableswap.in, 100.25265145971896, 1e-9);
+check("CCX stable cost falls with amp at balanced reserves", ccxA1.stableswap.in > ccx.stableswap.in && ccx.stableswap.in > ccxA5000.stableswap.in);
+check("CCX weight leaves CP and stable legs untouched", ccx80.constantProduct.in === ccx.constantProduct.in && ccx80.stableswap.in === ccx.stableswap.in);
+
+/* zero fee, near-ceiling target, dust target */
+const ccxF0 = app.curveCompareExactOut("1000", "1000", "50", "100", "100", 0);
+near("CCX zero-fee CP in", ccxF0.constantProduct.in, 111.111111112, 1e-9);
+near("CCX zero-fee stable in", ccxF0.stableswap.in, 100.10009107467386, 1e-9);
+const ccx900 = app.curveCompareExactOut("1000", "1000", "50", "100", "900", 25);
+near("CCX 900-out CP in", ccx900.constantProduct.in, 9022.556390978, 1e-6);
+near("CCX 900-out stable in", ccx900.stableswap.in, 943.8660625266496, 1e-9);
+check("CCX 900-out CP impact above 90%", ccx900.constantProduct.priceImpactPct > 90);
+const ccxDust = app.curveCompareExactOut("1000", "1000", "50", "100", "0.001", 25);
+near("CCX dust CP in", ccxDust.constantProduct.in, 0.001002509, 1e-12);
+near("CCX dust stable in", ccxDust.stableswap.in, 0.0010025062757839415, 1e-12);
+
+/* rejections: blanks, junk, bad ranges, the reserve ceiling, and
+   any single leg rejecting */
+check("CCX rejects blank and junk", app.curveCompareExactOut("", "1000", "50", "100", "100", 25) === null &&
+  app.curveCompareExactOut("1000", "1000", "50", "100", "abc", 25) === null &&
+  app.curveCompareExactOut("1000", "1000", " ", "100", "100", 25) === null);
+check("CCX rejects non-positive inputs", app.curveCompareExactOut("0", "1000", "50", "100", "100", 25) === null &&
+  app.curveCompareExactOut("1000", "-5", "50", "100", "100", 25) === null &&
+  app.curveCompareExactOut("1000", "1000", "50", "100", "0", 25) === null &&
+  app.curveCompareExactOut("1000", "1000", "50", "0", "100", 25) === null);
+check("CCX rejects a target at or above the output reserve", app.curveCompareExactOut("1000", "1000", "50", "100", "1000", 25) === null &&
+  app.curveCompareExactOut("1000", "1000", "50", "100", "1500", 25) === null);
+check("CCX rejects weight at the edges", app.curveCompareExactOut("1000", "1000", "0", "100", "100", 25) === null &&
+  app.curveCompareExactOut("1000", "1000", "100", "100", "100", 25) === null);
+check("CCX rejects bad fee", app.curveCompareExactOut("1000", "1000", "50", "100", "100", -1) === null &&
+  app.curveCompareExactOut("1000", "1000", "50", "100", "100", 10000) === null &&
+  app.curveCompareExactOut("1000", "1000", "50", "100", "100", 25.5) === null);
+check("CCX rejects inputs tool 6 cannot parse", app.curveCompareExactOut("1000", "1000", "50", "100", "0.0000000001", 25) === null &&
+  app.curveCompareExactOut("1e3", "1000", "50", "100", "100", 25) === null);
+check("CCX composes the three exact-out tools in source", appSrc.includes("function curveCompareExactOut") &&
+  appSrc.includes("cpSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, feeBps)") &&
+  appSrc.includes("weightedSwapExactOut(reserveInStr, reserveOutStr, weightInPctStr, amountOutStr, feeBps)") &&
+  appSrc.includes("stableSwapExactOut(reserveInStr, reserveOutStr, ampStr, amountOutStr, feeBps)"));
+check("all ccx controls labelled",
+  ["ccx-rin", "ccx-rout", "ccx-weight", "ccx-amp", "ccx-aout", "ccx-fee", "ccx-in"]
+    .every(id => html.includes(`for="${id}"`)));
+check("ccx tool present in index.html", html.includes('id="ccx-calc"') && html.includes('id="ccx-result"'));
+check("ccx handler wired to its own form", appSrc.includes('getElementById("ccx-calc")') && appSrc.includes('getElementById("ccx-result")'));
+check("ccx honesty: split rankings and not-live labels", html.includes("cheapest-in and lowest-impact name different curves") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers curve comparison exact-out", guide.includes("read the spot before ranking the cost"));
+check("README lists tool 74", readme.includes("74. **Curve comparison exact-out model**"));
 
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);

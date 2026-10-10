@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus seventy-three fully
+/* Raydium Renaissance hub logic: project filtering plus seventy-four fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -46,8 +46,9 @@
    return calculator, a weighted-pool
    required-volume planner, a stableswap
    required-volume planner, a weighted-pool
-   break-even days calculator, and a stableswap
-   break-even days calculator.
+   break-even days calculator, a stableswap
+   break-even days calculator, and a curve
+   comparison exact-out model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -4473,6 +4474,72 @@ function curveCompare(reserveInStr, reserveOutStr, weightInPctStr, ampStr, amoun
   };
 }
 
+/* ---------- 74 · Curve comparison exact-out model ---------- */
+/* Tool 67's question reversed: tool 67 fixes the input and compares
+   what each curve pays; this fixes the OUTPUT — the amount you must
+   receive — and compares what each curve charges, with every leg
+   priced by its own exact-out tool verbatim (tool 6's cpSwapExactOut,
+   tool 63's weightedSwapExactOut, tool 59's stableSwapExactOut), so
+   the comparison can never drift from the tools it compares. The
+   trap is tool 67's, turned around: the cheapest input is not
+   necessarily the cheapest trade. On balanced 1,000/1,000 reserves
+   a target of 100 out at a 25 bps tier costs ≈111.3896 in on the
+   constant-product curve (impact ≈10.225% against its own spot),
+   exactly the same on the weighted curve at a 50% input weight,
+   and ≈100.3510 in on the stableswap curve at A = 100 (impact
+   ≈0.3497%). Move the weight to 80% and the weighted leg becomes
+   the cheapest in raw input (≈26.7570 in) — because its spot is 4
+   out per in, not 1 — while its impact (≈6.5665%) is still nearly
+   nineteen times the stableswap leg's, so cheapest-in and
+   lowest-impact name different curves. Read each leg's spot before
+   ranking its cost: each curve sets its own spot from the same
+   reserves, and a low required input can simply be a curve that
+   priced the output token cheaply before the trade. A target at or
+   above the whole output reserve is impossible on every curve —
+   each leg rejects it, so the comparison rejects it too.
+   Educational model only — your reserves, weight, amplification
+   and target; not live pool data, not a live quote, not financial
+   advice. */
+function curveCompareExactOut(reserveInStr, reserveOutStr, weightInPctStr, ampStr, amountOutStr, feeBps) {
+  var raw = [reserveInStr, reserveOutStr, weightInPctStr, ampStr, amountOutStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var fee = Number(feeBps);
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var cp = cpSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, feeBps);
+  var wt = weightedSwapExactOut(reserveInStr, reserveOutStr, weightInPctStr, amountOutStr, feeBps);
+  var st = stableSwapExactOut(reserveInStr, reserveOutStr, ampStr, amountOutStr, feeBps);
+  if (cp === null || wt === null || st === null) return null;
+  var legs = {
+    constantProduct: { "in": Number(cp.amountIn), spotPrice: cp.spotPrice, effectivePrice: cp.effectivePrice, priceImpactPct: cp.priceImpactPct },
+    weighted: { "in": wt.amountIn, spotPrice: wt.spotPrice, effectivePrice: wt.effectivePrice, priceImpactPct: wt.priceImpactPct },
+    stableswap: { "in": st.amountIn, spotPrice: st.spotPrice, effectivePrice: st.effectivePrice, priceImpactPct: st.priceImpactPct }
+  };
+  var names = Object.keys(legs);
+  for (var n = 0; n < names.length; n++) {
+    var legFields = Object.keys(legs[names[n]]);
+    for (var m = 0; m < legFields.length; m++) {
+      if (!Number.isFinite(legs[names[n]][legFields[m]])) return null;
+    }
+  }
+  var cheapestIn = names[0], lowestImpact = names[0];
+  for (var k = 1; k < names.length; k++) {
+    if (legs[names[k]]["in"] < legs[cheapestIn]["in"]) cheapestIn = names[k];
+    if (legs[names[k]].priceImpactPct < legs[lowestImpact].priceImpactPct) lowestImpact = names[k];
+  }
+  var ins = names.map(function (name) { return legs[name]["in"]; });
+  return {
+    reserveIn: Number(reserveInStr), reserveOut: Number(reserveOutStr),
+    weightInPct: Number(weightInPctStr), amp: Number(ampStr),
+    amountOut: Number(amountOutStr), feeBps: fee,
+    constantProduct: legs.constantProduct, weighted: legs.weighted, stableswap: legs.stableswap,
+    cheapestIn: cheapestIn, cheapestInAmount: legs[cheapestIn]["in"],
+    lowestImpact: lowestImpact, lowestImpactPct: legs[lowestImpact].priceImpactPct,
+    inSpread: Math.max.apply(null, ins) - Math.min.apply(null, ins)
+  };
+}
+
 /* ---------- 68 · Weighted-pool net return calculator ---------- */
 /* Tools 24 and 29 settle a position — LP value plus the fees actually
    earned, against simply holding — for a 50/50 constant-product pool
@@ -4920,7 +4987,7 @@ function stableBreakEvenDays(reserveAStr, reserveBStr, ampStr, priceBStr, shareP
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -6957,6 +7024,31 @@ if (typeof document !== "undefined") {
           " out on a stableswap curve at A = " + fmt(res.amp, 4) + " (spot ≈ " + fmt(res.stableswap.spotPrice, 6) + ", impact ≈ " + fmt(res.stableswap.priceImpactPct, 4) + "%). Most out: the " + names[res.bestOut] +
           " curve; lowest impact against its own spot: the " + names[res.lowestImpact] + " curve. Read the spots before ranking the payouts: each curve sets its own spot from the same reserves — the weighted spot carries the weight and the stable spot sits near par only while reserves are balanced — so the biggest payout can simply be the curve that priced the token cheapest before the trade. Impact, measured against each curve's own spot, is the shape comparison. A curve comparison model — not live pool data, not a live quote, not financial advice.";
         document.getElementById("cmp-out").value = fmt(res.bestOutAmount, 6);
+      }
+    });
+
+    document.getElementById("ccx-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = curveCompareExactOut(
+        document.getElementById("ccx-rin").value,
+        document.getElementById("ccx-rout").value,
+        document.getElementById("ccx-weight").value,
+        document.getElementById("ccx-amp").value,
+        document.getElementById("ccx-aout").value,
+        document.getElementById("ccx-fee").value
+      );
+      var out = document.getElementById("ccx-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, an input weight above 0% and below 100%, an amplification above 0, a positive target out below the output reserve as a plain decimal (up to 9 decimal places), and a fee tier in whole basis points (0–9999). If one curve rejects the target, the comparison rejects it too.";
+        document.getElementById("ccx-in").value = "";
+      } else {
+        var names = { constantProduct: "constant product", weighted: "weighted", stableswap: "stableswap" };
+        out.textContent = "Model output: receiving ≈ " + fmt(res.amountOut, 6) + " out costs ≈ " + fmt(res.constantProduct["in"], 6) +
+          " in on a constant-product curve (spot ≈ " + fmt(res.constantProduct.spotPrice, 6) + " out per in, price impact ≈ " + fmt(res.constantProduct.priceImpactPct, 4) + "%), ≈ " + fmt(res.weighted["in"], 6) +
+          " in on a weighted curve at a " + fmt(res.weightInPct, 4) + "% input weight (spot ≈ " + fmt(res.weighted.spotPrice, 6) + ", impact ≈ " + fmt(res.weighted.priceImpactPct, 4) + "%), and ≈ " + fmt(res.stableswap["in"], 6) +
+          " in on a stableswap curve at A = " + fmt(res.amp, 4) + " (spot ≈ " + fmt(res.stableswap.spotPrice, 6) + ", impact ≈ " + fmt(res.stableswap.priceImpactPct, 4) + "%). Cheapest in raw input: the " + names[res.cheapestIn] +
+          " curve; lowest impact against its own spot: the " + names[res.lowestImpact] + " curve. Read the spots before ranking the costs: each curve sets its own spot from the same reserves — the weighted spot carries the weight and the stable spot sits near par only while reserves are balanced — so the cheapest input can simply be the curve that priced the output token cheapest before the trade. Impact, measured against each curve's own spot, is the shape comparison. A curve comparison exact-out model — not live pool data, not a live quote, not financial advice.";
+        document.getElementById("ccx-in").value = fmt(res.cheapestInAmount, 6);
       }
     });
 
