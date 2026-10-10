@@ -5534,28 +5534,37 @@ function clmmTripleArbitrage(liquidityStr, lowerStr, upperStr, priceStr, externa
   if (liquidity3 <= 0 || outer3 <= 0) return null;
   var prev = clmmCrossArbitrage(liquidityStr, lowerStr, upperStr, priceStr, externalPriceStr, feeBps, secondLiquidityStr, secondOuterStr);
   if (prev === null) return null;
-  if (prev.direction === "buy-a" && !(outer3 > prev.secondUpperPrice)) return null;
-  if (prev.direction === "sell-a" && !(outer3 < prev.secondLowerPrice)) return null;
+  /* The third range chains on the side the trade travels — and when
+     there is no trade (direction none) the side is the one the second
+     range sits on, which tool 79's own fields record. Validating only
+     the two trading directions would let a none result carry a third
+     range anchored on the wrong side or inverted, so the side is
+     resolved first and every direction is checked against it. */
+  var thirdBelow = prev.direction === "sell-a" ||
+    (prev.direction === "none" && prev.secondLowerPrice < prev.lowerPrice);
+  if (thirdBelow && !(outer3 < prev.secondLowerPrice)) return null;
+  if (!thirdBelow && !(outer3 > prev.secondUpperPrice)) return null;
   var secondBoundary = prev.direction === "buy-a" ? prev.secondUpperPrice
     : prev.direction === "sell-a" ? prev.secondLowerPrice : null;
   var base = { liquidity: prev.liquidity, lowerPrice: prev.lowerPrice, upperPrice: prev.upperPrice,
     secondLiquidity: prev.secondLiquidity,
     secondLowerPrice: prev.secondLowerPrice, secondUpperPrice: prev.secondUpperPrice,
     thirdLiquidity: liquidity3,
-    thirdLowerPrice: prev.direction === "sell-a" ? outer3 : prev.secondUpperPrice,
-    thirdUpperPrice: prev.direction === "sell-a" ? prev.secondLowerPrice : outer3,
+    thirdLowerPrice: thirdBelow ? outer3 : prev.secondUpperPrice,
+    thirdUpperPrice: thirdBelow ? prev.secondLowerPrice : outer3,
     boundaryPrice: prev.boundaryPrice, secondBoundaryPrice: secondBoundary,
     price: prev.price, spotPrice: prev.spotPrice, externalPrice: prev.externalPrice,
     priceGapPct: prev.priceGapPct, feeBps: prev.feeBps, feePct: prev.feePct };
+  var notEntered = Object.assign(base, { direction: prev.direction, inToken: prev.inToken, outToken: prev.outToken,
+    leg1NetIn: prev.leg1NetIn, leg1GrossIn: prev.leg1GrossIn, leg1Out: prev.leg1Out,
+    leg2NetIn: prev.leg2NetIn, leg2GrossIn: prev.leg2GrossIn, leg2Out: prev.leg2Out,
+    leg3NetIn: 0, leg3GrossIn: 0, leg3Out: 0,
+    netIn: prev.netIn, grossIn: prev.grossIn, amountOut: prev.amountOut, profitInB: prev.profitInB,
+    postTradeSpot: prev.postTradeSpot, targetPrice: prev.targetPrice,
+    crossed: prev.crossed, enteredThird: false,
+    hitBoundary: prev.hitBoundary, hitSecondBoundary: prev.hitSecondBoundary, hitThirdBoundary: false });
   if (!prev.hitSecondBoundary) {
-    return Object.assign(base, { direction: prev.direction, inToken: prev.inToken, outToken: prev.outToken,
-      leg1NetIn: prev.leg1NetIn, leg1GrossIn: prev.leg1GrossIn, leg1Out: prev.leg1Out,
-      leg2NetIn: prev.leg2NetIn, leg2GrossIn: prev.leg2GrossIn, leg2Out: prev.leg2Out,
-      leg3NetIn: 0, leg3GrossIn: 0, leg3Out: 0,
-      netIn: prev.netIn, grossIn: prev.grossIn, amountOut: prev.amountOut, profitInB: prev.profitInB,
-      postTradeSpot: prev.postTradeSpot, targetPrice: prev.targetPrice,
-      crossed: prev.crossed, enteredThird: false,
-      hitBoundary: prev.hitBoundary, hitSecondBoundary: false, hitThirdBoundary: false });
+    return notEntered;
   }
   var f = prev.feeBps / 10000, pe = prev.externalPrice;
   var sB = Math.sqrt(secondBoundary);
@@ -5569,7 +5578,11 @@ function clmmTripleArbitrage(liquidityStr, lowerStr, upperStr, priceStr, externa
     var s3d = Math.sqrt(target3);
     net3 = liquidity3 * (1 / s3d - 1 / sB); out3 = liquidity3 * (sB - s3d);
   }
-  if (!(net3 > 0) || !(out3 > 0)) return null;
+  /* An external price exactly at the second edge (or a hair beyond it,
+     below float resolution) drains the second range and stops there:
+     the third leg is zero-size and the answer is tool 79's capped one,
+     not a rejection. */
+  if (!(net3 > 0) || !(out3 > 0)) return notEntered;
   var gross3 = net3 / (1 - f);
   var grossIn = prev.grossIn + gross3, amountOut = prev.amountOut + out3;
   var result = Object.assign(base, { direction: prev.direction, inToken: prev.inToken, outToken: prev.outToken,
@@ -8006,6 +8019,8 @@ if (typeof document !== "undefined") {
         var crossText;
         if (!res.crossed) {
           crossText = " Your external price sits inside the first range, so the trade never crosses: this is tool 77's single-range answer and the second and third ranges are untouched.";
+        } else if (!res.enteredThird && res.hitSecondBoundary) {
+          crossText = " The trade crosses the shared edge at ≈ " + fmt(res.boundaryPrice, 6) + " B per A (leg 1: ≈ " + fmt(res.leg1GrossIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg1Out, 6) + " " + res.outToken + " out) and finishes aligning exactly at the second range's outer edge (leg 2: ≈ " + fmt(res.leg2GrossIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg2Out, 6) + " " + res.outToken + " out), so the third range is untouched — this is tool 79's two-range answer.";
         } else if (!res.enteredThird) {
           crossText = " The trade crosses the shared edge at ≈ " + fmt(res.boundaryPrice, 6) + " B per A (leg 1: ≈ " + fmt(res.leg1GrossIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg1Out, 6) + " " + res.outToken + " out) and finishes aligning inside the second range (leg 2: ≈ " + fmt(res.leg2GrossIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg2Out, 6) + " " + res.outToken + " out), so the third range is untouched — this is tool 79's two-range answer.";
         } else if (res.hitThirdBoundary) {

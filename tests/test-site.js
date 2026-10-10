@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=98"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=99"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5071,6 +5071,34 @@ check("TARB rejects non-positive inputs", app.clmmTripleArbitrage("0", "0.5", "2
 check("TARB rejects a third edge on the wrong side or at the second edge", app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 0, "10000", "4", "10000", "3") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 0, "10000", "4", "10000", "4") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "0.2", 0, "10000", "0.25", "10000", "0.3") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "0.2", 0, "10000", "0.25", "10000", "0.25") === null);
 check("TARB rejects a bad second edge and inverted range", app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 0, "10000", "1.5", "10000", "8") === null && app.clmmTripleArbitrage("10000", "2", "0.5", "1", "5", 0, "10000", "4", "10000", "8") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "2", "5", 0, "10000", "4", "10000", "8") === null);
 check("TARB rejects bad fee tiers", app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", -1, "10000", "4", "10000", "8") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 10000, "10000", "4", "10000", "8") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 2.5, "10000", "4", "10000", "8") === null);
+/* no gap: the third range chains on the side the second range sits, and is validated there too */
+{
+  const na = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "1", 0, "10000", "4", "10000", "8");
+  check("TARB no-gap second-above chains the third range above", na.direction === "none" && na.thirdLowerPrice === 4 && na.thirdUpperPrice === 8);
+  const nb = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "1", 0, "10000", "0.25", "10000", "0.125");
+  check("TARB no-gap second-below chains the third range below", nb.direction === "none" && nb.thirdLowerPrice === 0.125 && nb.thirdUpperPrice === 0.25 && nb.grossIn === 0);
+  check("TARB no-gap rejects a third edge inside, at, or across the second range",
+    app.clmmTripleArbitrage("10000", "0.5", "2", "1", "1", 0, "10000", "4", "10000", "3") === null &&
+    app.clmmTripleArbitrage("10000", "0.5", "2", "1", "1", 0, "10000", "4", "10000", "4") === null &&
+    app.clmmTripleArbitrage("10000", "0.5", "2", "1", "1", 0, "10000", "4", "10000", "0.1") === null &&
+    app.clmmTripleArbitrage("10000", "0.5", "2", "1", "1", 0, "10000", "0.25", "10000", "0.3") === null &&
+    app.clmmTripleArbitrage("10000", "0.5", "2", "1", "1", 0, "10000", "0.25", "10000", "0.25") === null &&
+    app.clmmTripleArbitrage("10000", "0.5", "2", "1", "1", 0, "10000", "0.25", "10000", "8") === null);
+}
+/* an external price exactly at the second edge stops there: tool 79's capped answer, not a rejection */
+{
+  const e = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "4", 0, "10000", "4", "10000", "8");
+  const s = app.clmmCrossArbitrage("10000", "0.5", "2", "1", "4", 0, "10000", "4");
+  check("TARB external exactly at the second edge returns the two-range answer",
+    e !== null && e.enteredThird === false && e.leg3GrossIn === 0 && e.leg3Out === 0 &&
+    e.hitSecondBoundary === true && e.hitThirdBoundary === false &&
+    e.grossIn === s.grossIn && e.amountOut === s.amountOut && e.profitInB === s.profitInB && e.postTradeSpot === 4);
+  const em = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "0.25", 25, "10000", "0.25", "10000", "0.125");
+  check("TARB mirror external exactly at the second edge returns the two-range answer",
+    em !== null && em.enteredThird === false && em.hitSecondBoundary === true && em.postTradeSpot === 0.25);
+  const h = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "4.000001", 0, "10000", "4", "10000", "8");
+  check("TARB a hair beyond the second edge still enters the third range", h.enteredThird === true && h.leg3GrossIn > 0);
+}
 check("TARB composes Tool 79 in source", appSrc.includes("function clmmTripleArbitrage") && appSrc.includes("clmmCrossArbitrage(liquidityStr, lowerStr, upperStr, priceStr, externalPriceStr, feeBps, secondLiquidityStr, secondOuterStr)"));
 check("all tarb controls labelled",
   ["tarb-l", "tarb-lower", "tarb-upper", "tarb-price", "tarb-ext", "tarb-fee", "tarb-l2", "tarb-outer", "tarb-l3", "tarb-outer3", "tarb-out"]
@@ -5078,7 +5106,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v98", html.includes("app.js?v=98"));
+check("app.js cache key bumped to v99", html.includes("app.js?v=99"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
