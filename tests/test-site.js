@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=97"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=98"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1357,7 +1357,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists seventy-nine tools", readme.includes("seventy-nine pool tools") || readme.includes("all seventy-nine"));
+check("README lists eighty tools", readme.includes("eighty pool tools") || readme.includes("all eighty"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2000,8 +2000,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts seventy-nine tools and names the CLMM two-range arbitrage model",
-  appSrc.includes("plus seventy-nine fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, a curve\n   comparison exact-out model, a weighted-pool\n   IL tolerance band, a stableswap IL\n   tolerance band, a CLMM arbitrage model, a CLMM\n   price-impact sizer, and a CLMM two-range\n   arbitrage model.\n   These are educational MODELS"));
+check("app.js header counts eighty tools and names the CLMM three-range arbitrage model",
+  appSrc.includes("plus eighty fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, a curve\n   comparison exact-out model, a weighted-pool\n   IL tolerance band, a stableswap IL\n   tolerance band, a CLMM arbitrage model, a CLMM\n   price-impact sizer, a CLMM two-range arbitrage\n   model, and a CLMM three-range arbitrage model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -4972,9 +4972,115 @@ check("all xarb controls labelled",
 check("xarb tool present in index.html", html.includes('id="xarb-calc"') && html.includes('id="xarb-result"'));
 check("xarb handler wired to its own form", appSrc.includes('getElementById("xarb-calc")') && appSrc.includes('getElementById("xarb-result")'));
 check("xarb honesty: second wall, second fee and not-live labels", html.includes("an external price beyond the outer edge caps the combined trade there") && html.includes("the fee is charged again on the second range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v97", html.includes("app.js?v=97"));
 check("guide covers CLMM two-range arbitrage", guide.includes("price the second range too"));
 check("README lists tool 79", readme.includes("79. **CLMM two-range arbitrage model**"));
+
+/* ---------- Tool 80: CLMM three-range arbitrage (TARB) ---------- */
+const tarb = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 0, "10000", "4", "10000", "8");
+check("TARB headline exists and entered third", tarb !== null && tarb.enteredThird === true && tarb.crossed === true && tarb.hitSecondBoundary === true && tarb.hitThirdBoundary === false);
+check("TARB headline direction buy-a", tarb.direction === "buy-a" && tarb.inToken === "B" && tarb.outToken === "A");
+near("TARB headline leg 1 gross in", tarb.leg1GrossIn, 4142.135623730951, 1e-9);
+near("TARB headline leg 1 out", tarb.leg1Out, 2928.9321881345254, 1e-9);
+near("TARB headline leg 2 gross in", tarb.leg2GrossIn, 5857.86437626905, 1e-9);
+near("TARB headline leg 2 out", tarb.leg2Out, 2071.06781186547, 1e-9);
+near("TARB headline leg 3 gross in", tarb.leg3GrossIn, 2360.6797749979, 1e-9);
+near("TARB headline leg 3 out", tarb.leg3Out, 527.864045000421, 1e-9);
+near("TARB headline gross in is the legs summed", tarb.grossIn, 12360.6797749979, 1e-9);
+near("TARB headline amount out is the legs summed", tarb.amountOut, 5527.86404500042, 1e-9);
+near("TARB headline profit", tarb.profitInB, 15278.6404500042, 1e-9);
+near("TARB headline post-trade spot lands on the external price", tarb.postTradeSpot, 5, 1e-12);
+check("TARB headline ranges chain 0.5-2, 2-4, 4-8", tarb.secondLowerPrice === 2 && tarb.secondUpperPrice === 4 && tarb.thirdLowerPrice === 4 && tarb.thirdUpperPrice === 8 && tarb.boundaryPrice === 2 && tarb.secondBoundaryPrice === 4);
+/* beyond the third edge: capped at the third wall */
+{
+  const w = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "9", 0, "10000", "4", "10000", "8");
+  check("TARB third wall flagged", w.hitThirdBoundary === true && w.enteredThird === true);
+  near("TARB third wall gross in", w.grossIn, 18284.2712474619, 1e-9);
+  near("TARB third wall amount out", w.amountOut, 6464.46609406726, 1e-9);
+  near("TARB third wall profit", w.profitInB, 39895.9235991435, 1e-9);
+  near("TARB third wall post-trade spot is the third edge", w.postTradeSpot, 8, 1e-12);
+  check("TARB external price exactly at the third edge is the third wall", app.clmmTripleArbitrage("10000", "0.5", "2", "1", "8", 0, "10000", "4", "10000", "8").hitThirdBoundary === true);
+}
+/* mirror: external below, ranges below */
+{
+  const m = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "0.2", 0, "10000", "0.25", "10000", "0.125");
+  check("TARB mirror direction sell-a and entered third", m.direction === "sell-a" && m.inToken === "A" && m.outToken === "B" && m.enteredThird === true);
+  near("TARB mirror gross in matches the up headline legs", m.grossIn, 12360.6797749979, 1e-9);
+  near("TARB mirror amount out", m.amountOut, 5527.86404500042, 1e-9);
+  near("TARB mirror profit in B", m.profitInB, 3055.72809000084, 1e-9);
+  near("TARB mirror post-trade spot", m.postTradeSpot, 0.2, 1e-12);
+  check("TARB mirror ranges chain down", m.thirdLowerPrice === 0.125 && m.thirdUpperPrice === 0.25 && m.secondBoundaryPrice === 0.25);
+  const mc = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "0.1", 0, "10000", "0.25", "10000", "0.125");
+  check("TARB mirror third wall flagged", mc.hitThirdBoundary === true);
+  near("TARB mirror third wall post-trade spot is the third edge", mc.postTradeSpot, 0.125, 1e-12);
+  near("TARB mirror third wall profit", mc.profitInB, 4636.03896932107, 1e-9);
+}
+/* inside the two ranges the answer is tool 79's verbatim; inside the first, tool 77's */
+{
+  const w = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "3", 25, "10000", "4", "10000", "8");
+  const s = app.clmmCrossArbitrage("10000", "0.5", "2", "1", "3", 25, "10000", "4");
+  check("TARB inside-two-ranges equals Tool 79 field by field",
+    w.enteredThird === false && w.leg3GrossIn === 0 && w.leg3Out === 0 &&
+    w.grossIn === s.grossIn && w.netIn === s.netIn && w.amountOut === s.amountOut &&
+    w.profitInB === s.profitInB && w.postTradeSpot === s.postTradeSpot && w.crossed === s.crossed);
+  const w1 = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "1.21", 25, "10000", "4", "10000", "8");
+  const s1 = app.clmmArbitrage("10000", "0.5", "2", "1", "1.21", 25);
+  check("TARB inside-first-range equals Tool 77", w1.enteredThird === false && w1.crossed === false && w1.grossIn === s1.grossIn && w1.amountOut === s1.amountOut && w1.profitInB === s1.profitInB);
+}
+/* composition: the reported gross input through tool 46 returns the modelled output at the modelled price */
+{
+  const combos = [
+    ["5", 0, "10000", "4", "10000", "8", "ba"], ["9", 25, "10000", "4", "10000", "8", "ba"], ["6", 100, "5000", "4", "20000", "16", "ba"],
+    ["0.2", 25, "10000", "0.25", "10000", "0.125", "ab"], ["0.1", 0, "20000", "0.25", "5000", "0.125", "ab"], ["12", 50, "1000", "9", "3000", "27", "ba"]
+  ];
+  for (const [pe, fee, l2, outer, l3, outer3, dir] of combos) {
+    const x = app.clmmTripleArbitrage("10000", "0.5", "2", "1", pe, fee, l2, outer, l3, outer3);
+    const ts = app.clmmTripleSwap("10000", "0.5", "2", "1", String(x.grossIn), fee, dir, l2, outer, l3, outer3);
+    check(`TARB composes Tool 46 at pe=${pe} fee=${fee} L3=${l3}`,
+      ts !== null && ts.enteredThird === true && Math.abs(ts.amountOut - x.amountOut) < 1e-6 && Math.abs(ts.newPrice - x.postTradeSpot) < 1e-9);
+    check(`TARB legs conserve at pe=${pe} fee=${fee}`,
+      Math.abs(x.leg1GrossIn + x.leg2GrossIn + x.leg3GrossIn - x.grossIn) < 1e-9 && Math.abs(x.leg1Out + x.leg2Out + x.leg3Out - x.amountOut) < 1e-12 && x.leg3GrossIn > 0);
+  }
+}
+/* the fee is charged on each leg, a third time on the third */
+{
+  const f = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 25, "10000", "4", "10000", "8");
+  near("TARB fee leg 3 gross is grossed up separately", f.leg3GrossIn, 2366.59626566205, 1e-9);
+  near("TARB fee gross in", f.grossIn, 12391.6589223037, 1e-9);
+  near("TARB fee profit", f.profitInB, 15247.6613026984, 1e-9);
+  check("TARB fee leaves all legs' net and out unchanged", Math.abs(f.netIn - tarb.netIn) < 1e-9 && f.amountOut === tarb.amountOut && f.leg3NetIn === tarb.leg3NetIn);
+}
+/* third-range depth scales its leg, not its reach */
+{
+  const t = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 0, "10000", "4", "1000", "8");
+  near("TARB tenth-depth leg 3 in", t.leg3GrossIn, 236.06797749979, 1e-9);
+  near("TARB tenth-depth leg 3 out", t.leg3Out, 52.7864045000421, 1e-9);
+  check("TARB tenth-depth still lands on the external price", t.postTradeSpot === 5 && t.enteredThird === true);
+  near("TARB tenth-depth profit", t.profitInB, 15027.8640450004, 1e-9);
+}
+/* no gap, and scale freedom */
+{
+  const none = app.clmmTripleArbitrage("10000", "0.5", "2", "1", "1", 0, "10000", "4", "10000", "8");
+  check("TARB no gap is direction none with zeros", none.direction === "none" && none.grossIn === 0 && none.amountOut === 0 && none.profitInB === 0 && none.enteredThird === false);
+  const big = app.clmmTripleArbitrage("100000", "0.5", "2", "1", "5", 0, "100000", "4", "100000", "8");
+  check("TARB 10x liquidity on all ranges scales every amount 10x",
+    Math.abs(big.grossIn / tarb.grossIn - 10) < 1e-12 && Math.abs(big.amountOut / tarb.amountOut - 10) < 1e-12 && big.postTradeSpot === tarb.postTradeSpot);
+}
+/* rejections */
+check("TARB rejects blank and junk", app.clmmTripleArbitrage("", "0.5", "2", "1", "5", 0, "10000", "4", "10000", "8") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "abc", 0, "10000", "4", "10000", "8") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 0, "10000", "4", "10000", " ") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 0, "10000", "4", "", "8") === null);
+check("TARB rejects non-positive inputs", app.clmmTripleArbitrage("0", "0.5", "2", "1", "5", 0, "10000", "4", "10000", "8") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "0", 0, "10000", "4", "10000", "8") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 0, "10000", "4", "0", "8") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 0, "10000", "4", "10000", "0") === null);
+check("TARB rejects a third edge on the wrong side or at the second edge", app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 0, "10000", "4", "10000", "3") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 0, "10000", "4", "10000", "4") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "0.2", 0, "10000", "0.25", "10000", "0.3") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "0.2", 0, "10000", "0.25", "10000", "0.25") === null);
+check("TARB rejects a bad second edge and inverted range", app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 0, "10000", "1.5", "10000", "8") === null && app.clmmTripleArbitrage("10000", "2", "0.5", "1", "5", 0, "10000", "4", "10000", "8") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "2", "5", 0, "10000", "4", "10000", "8") === null);
+check("TARB rejects bad fee tiers", app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", -1, "10000", "4", "10000", "8") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 10000, "10000", "4", "10000", "8") === null && app.clmmTripleArbitrage("10000", "0.5", "2", "1", "5", 2.5, "10000", "4", "10000", "8") === null);
+check("TARB composes Tool 79 in source", appSrc.includes("function clmmTripleArbitrage") && appSrc.includes("clmmCrossArbitrage(liquidityStr, lowerStr, upperStr, priceStr, externalPriceStr, feeBps, secondLiquidityStr, secondOuterStr)"));
+check("all tarb controls labelled",
+  ["tarb-l", "tarb-lower", "tarb-upper", "tarb-price", "tarb-ext", "tarb-fee", "tarb-l2", "tarb-outer", "tarb-l3", "tarb-outer3", "tarb-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
+check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
+check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
+check("app.js cache key bumped to v98", html.includes("app.js?v=98"));
+check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
+check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

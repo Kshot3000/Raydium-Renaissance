@@ -1802,6 +1802,35 @@
         <button type="submit" class="btn primary">Size the aligning trade across both ranges</button>
         <p id="xarb-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="tarb-calc">
+        <h3>80 · CLMM three-range arbitrage model</h3>
+        <p>Tool 79 prices the trade that aligns two CLMM ranges with an external price and stops honestly at the second wall; this supplies the third range, the way tool 46 did for the swap models. At liquidity 10,000 over 0.5–2 and price 1, an external price of 5 crosses an equal second range out to 4 — exactly 10,000 B in and 5,000 A out across the two capped legs — then pays ≈2,360.6798 B for ≈527.8640 A more inside an equal third range out to 8, landing exactly on 5 for a modelled profit of ≈15,278.6405 B. Two honest edges: the third wall — an external price beyond the third range's outer edge caps the combined trade there (at 9 the trade stops at 8), and a live pool would need a fourth range; and crossing twice is not free, because the fee is charged again on the third range's leg. The third range's depth scales its leg, not its reach. Three ranges only. Educational model only — your liquidities, ranges, prices and fee inputs; not live pool data, not a found opportunity, not financial advice.</p>
+        <label for="tarb-l">First range liquidity L (model units, above 0)</label>
+        <input id="tarb-l" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="tarb-lower">First range lower price (B per A, above 0)</label>
+        <input id="tarb-lower" inputmode="decimal" placeholder="e.g. 0.5" autocomplete="off">
+        <label for="tarb-upper">First range upper price (B per A, above the lower price)</label>
+        <input id="tarb-upper" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="tarb-price">Current price (B per A, strictly inside the first range)</label>
+        <input id="tarb-price" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="tarb-ext">External price of token A (B per A, above 0)</label>
+        <input id="tarb-ext" inputmode="decimal" placeholder="e.g. 5" autocomplete="off">
+        <label for="tarb-fee">Pool fee tier (whole basis points, 0–9999)</label>
+        <input id="tarb-fee" inputmode="decimal" placeholder="e.g. 25" autocomplete="off">
+        <label for="tarb-l2">Second range liquidity L (model units, above 0)</label>
+        <input id="tarb-l2" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="tarb-outer">Second range outer edge price (B per A, beyond the first range on the side of your external price)</label>
+        <input id="tarb-outer" inputmode="decimal" placeholder="e.g. 4" autocomplete="off">
+        <label for="tarb-l3">Third range liquidity L (model units, above 0)</label>
+        <input id="tarb-l3" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="tarb-outer3">Third range outer edge price (B per A, beyond the second range on the side of your external price)</label>
+        <input id="tarb-outer3" inputmode="decimal" placeholder="e.g. 8" autocomplete="off">
+        <label for="tarb-out">Modelled profit in token B at your external price (model)</label>
+        <input id="tarb-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Size the aligning trade across all three ranges</button>
+        <p id="tarb-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1829,6 +1858,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=97"></script>
+<script src="app.js?v=98"></script>
 </body>
 </html>
