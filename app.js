@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus ninety-two fully
+/* Raydium Renaissance hub logic: project filtering plus ninety-three fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -62,8 +62,9 @@
    withdrawal planner, a weighted-pool
    deposit planner, a weighted-pool
    withdrawal planner, a Token-2022
-   transfer-fee swap model, and a sandwich
-   (MEV) attack model.
+   transfer-fee swap model, a sandwich
+   (MEV) attack model, and a Token-2022
+   transfer-fee exact-out swap model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -4121,6 +4122,130 @@ function sandwichModel(reserveInStr, reserveOutStr, victimInStr, attackerInStr, 
   };
 }
 
+/* ---------- 93 · Token-2022 transfer-fee exact-out swap model ---------- */
+/* Tool 91 run backwards, for the trade specified by what must
+   ARRIVE: a payment, a debt, a target holding — in the token OUT's
+   own terms, after its transfer fee has been withheld. Tool 6
+   inverts one curve; this inverts a curve taxed on both legs, and
+   neither tax inverts by dividing by (1 − rate): each fee is
+   min(ceil(amount × rate / 10,000), cap), a step function, so the
+   gross amount that nets a target is found by searching the fee
+   function itself (tool 91's own transferFee) for the SMALLEST
+   amount whose net reaches the target — at the model's 9 dp scale
+   that amount is exact, not approximate. The chain: gross the
+   received target up through the OUT fee to the gross output the
+   curve must pay, price that output with tool 6's own
+   cpSwapExactOut (its ceiling divisions already guarantee the
+   pool input it names buys at least that output), then gross
+   that pool input up through the IN fee to the wallet amount.
+   That wallet amount is then verified — and tightened to the
+   smallest 9 dp unit that works — by binary search directly on
+   tool 91's transferFeeSwap, so the reported input is one where
+   tool 91 itself receives at least the target, and one scaled
+   unit less receives less (asserted across a sweep in tests).
+   Headline, the exact inverse of tool 91's headline: receiving
+   9,583.109398907 with a 1% fee in and a 2% fee out at a 25 bps
+   pool fee on balanced 1,000,000/1,000,000 reserves costs
+   exactly 10,000 in; receiving a round 9,000 costs
+   9,385.883959033 (the curve must pay 9,183.673469388 gross).
+   With both transfer fees at zero the answer is tool 6 verbatim
+   (9,000 out costs 9,104.496862743). Caps invert asymmetrically:
+   tool 91's capped out-fee vector (a 10% out fee capped at 100)
+   inverts to exactly its 5,000 input, and a 100% fee is not
+   automatically impossible here — capped at 50 the out fee is
+   simply a flat 50, so the curve must pay target + 50 — while
+   UNCAPPED at 100% either fee nets zero at every size and the
+   target is rejected, not priced. A target whose grossed-up
+   output reaches the whole output reserve is likewise rejected:
+   the curve approaches it asymptotically and never pays it.
+   Honest edges: the search guarantees the received amount is at
+   least the target, and the excess over it (usually zero at this
+   scale, reported either way) is whatever the 9 dp granularity
+   of the cheapest sufficient input happens to pay; the withheld
+   fees sit in the receiving accounts until the mint's fee
+   authority collects them — not burned, not the pool's.
+   Educational model only — your reserves, target and the two
+   mints' fee configs, not live pool data, not a live quote, not
+   financial advice. */
+function transferGrossUp(neededScaled, bps, capScaled) {
+  if (neededScaled <= 0n) return null;
+  if (bps === 0 || capScaled === 0n) return neededScaled;
+  if (bps === 10000 && capScaled === null) return null;
+  function net(a) { return a - transferFee(a, bps, capScaled); }
+  var hi = neededScaled;
+  while (net(hi) < neededScaled) { hi = hi * 2n + 1n; }
+  var lo = 1n;
+  while (lo < hi) {
+    var mid = (lo + hi) / 2n;
+    if (net(mid) >= neededScaled) hi = mid; else lo = mid + 1n;
+  }
+  return lo;
+}
+function transferFeeSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, poolFeeBps, tfInBps, tfInCapStr, tfOutBps, tfOutCapStr) {
+  var rin = parseScaled(reserveInStr), rout = parseScaled(reserveOutStr), target = parseScaled(amountOutStr);
+  var poolFee = Number(poolFeeBps), tfIn = Number(tfInBps), tfOut = Number(tfOutBps);
+  if (rin === null || rout === null || target === null) return null;
+  if (rin <= 0n || rout <= 0n || target <= 0n) return null;
+  if (!Number.isInteger(poolFee) || poolFee < 0 || poolFee > 9999) return null;
+  if (!Number.isInteger(tfIn) || tfIn < 0 || tfIn > 10000) return null;
+  if (!Number.isInteger(tfOut) || tfOut < 0 || tfOut > 10000) return null;
+  var capIn = null, capOut = null;
+  if (tfInCapStr != null && String(tfInCapStr).trim() !== "") {
+    capIn = parseScaled(tfInCapStr);
+    if (capIn === null || capIn < 0n) return null;
+  }
+  if (tfOutCapStr != null && String(tfOutCapStr).trim() !== "") {
+    capOut = parseScaled(tfOutCapStr);
+    if (capOut === null || capOut < 0n) return null;
+  }
+  var grossOutNeeded = transferGrossUp(target, tfOut, capOut);
+  if (grossOutNeeded === null || grossOutNeeded >= rout) return null;
+  var exact = cpSwapExactOut(reserveInStr, reserveOutStr, formatScaled(grossOutNeeded), poolFeeBps);
+  if (exact === null) return null;
+  var candidate = transferGrossUp(parseScaled(exact.amountIn), tfIn, capIn);
+  if (candidate === null) return null;
+  function forward(w) {
+    return transferFeeSwap(reserveInStr, reserveOutStr, formatScaled(w), poolFeeBps, tfInBps, tfInCapStr, tfOutBps, tfOutCapStr);
+  }
+  var fwdTop = forward(candidate);
+  if (fwdTop === null || parseScaled(fwdTop.amountOut) < target) return null;
+  /* Tighten to the smallest sufficient input, searching tool 91
+     itself: its received amount never falls as the input grows
+     (each fee grows by at most the amount's own growth), so the
+     sufficient inputs form a single range from some unit up. */
+  var lo = 1n, hi = candidate;
+  while (lo < hi) {
+    var mid = (lo + hi) / 2n;
+    var fm = forward(mid);
+    if (fm !== null && parseScaled(fm.amountOut) >= target) hi = mid; else lo = mid + 1n;
+  }
+  var f = forward(lo);
+  if (f === null || parseScaled(f.amountOut) < target) return null;
+  var base = cpSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, poolFeeBps);
+  var baseIn = base === null ? null : parseScaled(base.amountIn);
+  return {
+    amountIn: formatScaled(lo),
+    targetOut: formatScaled(target),
+    grossOutNeeded: formatScaled(grossOutNeeded),
+    poolInputNeeded: exact.amountIn,
+    transferFeeIn: f.transferFeeIn,
+    netAmountIn: f.netAmountIn,
+    poolFeeAmount: f.poolFeeAmount,
+    grossOut: f.grossOut,
+    transferFeeOut: f.transferFeeOut,
+    amountOut: f.amountOut,
+    excessOut: formatScaled(parseScaled(f.amountOut) - target),
+    spotPrice: f.spotPrice,
+    effectivePrice: f.effectivePrice,
+    priceImpactPct: f.priceImpactPct,
+    poolFeePct: poolFee / 100,
+    tfInPct: tfIn / 100,
+    tfOutPct: tfOut / 100,
+    noTransferFeeIn: base === null ? null : base.amountIn,
+    extraCostPct: baseIn === null ? null : (scaledToNumber(lo) / scaledToNumber(baseIn) - 1) * 100
+  };
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -7094,7 +7219,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, sandwichModel, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -8960,6 +9085,31 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: the attacker's front-run of " + res.attackerIn + " buys " + res.frontOut + " of the out token and moves the price against the victim, whose " + res.victimIn + " trade receives " + res.victimOut + " instead of the " + res.victimOutBaseline + " it returns unsandwiched — a loss of " + res.victimLoss + " (≈ " + fmt(res.victimLossPct, 4) + "%). The back-run then sells the " + res.frontOut + " straight back for " + res.backOut + ", leaving the attacker a gross profit of " + res.attackerProfit + " (≈ " + fmt(res.attackerProfitPct, 4) + "% on the front-run) — gross meaning before priority fees, searcher competition and failed-bundle costs, none of which are modelled. Without the victim the same round trip returns " + res.backOutNoVictim + " (a profit of " + res.attackerProfitNoVictim + "): the round trip alone loses money, which is why a victim too small to cover it leaves the attacker underwater. A victim whose minimum-received (tool 10) sits above the sandwiched output would fail rather than fill at this price. A sandwich (MEV) attack model, not a live Raydium quote. Not financial advice.";
         document.getElementById("sand-vout").value = res.victimOut;
         document.getElementById("sand-profit").value = res.attackerProfit;
+      }
+    });
+
+    /* --- Token-2022 transfer-fee exact-out swap model --- */
+    document.getElementById("tfxo-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = transferFeeSwapExactOut(
+        document.getElementById("tfxo-rin").value,
+        document.getElementById("tfxo-rout").value,
+        document.getElementById("tfxo-aout").value,
+        document.getElementById("tfxo-poolfee").value,
+        document.getElementById("tfxo-tfin").value,
+        document.getElementById("tfxo-tfincap").value,
+        document.getElementById("tfxo-tfout").value,
+        document.getElementById("tfxo-tfoutcap").value
+      );
+      var out = document.getElementById("tfxo-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves and an amount you must receive, a pool fee of 0–9,999 bps, transfer fees of 0–10,000 bps on each side, and — only if a mint sets one — a maximum fee cap of 0 or more on a side (leave it blank for no cap). An uncapped 100% transfer fee on either side nets zero at every size, and a target whose grossed-up output reaches the whole output reserve can never be paid, so both are rejected rather than priced.";
+        document.getElementById("tfxo-ain").value = "";
+        document.getElementById("tfxo-received").value = "";
+      } else {
+        out.textContent = "Model output: to receive exactly " + res.targetOut + " you must send " + res.amountIn + ". The out-token's transfer fee is grossed up first: the curve must pay " + res.grossOutNeeded + " gross, of which the fee withholds " + res.transferFeeOut + ". On the way in, the transfer fee withholds " + res.transferFeeIn + " of your " + res.amountIn + ", so the pool receives " + res.netAmountIn + " and the pool fee takes a further " + res.poolFeeAmount + " of that; tool 91's own model run on this input receives " + res.amountOut + " (an excess of " + res.excessOut + " over the target — the smallest sufficient input at 9-decimal granularity, never a hair short). With no transfer fees the same target costs " + res.noTransferFeeIn + " in tool 6's model, so the two transfer fees add ≈ " + fmt(res.extraCostPct, 4) + "% to the input. The withheld fees sit in the receiving accounts until the mint's fee authority collects them — they are not burned and do not reach the pool's LPs. A Token-2022 transfer-fee exact-out model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("tfxo-ain").value = res.amountIn;
+        document.getElementById("tfxo-received").value = res.amountOut;
       }
     });
 

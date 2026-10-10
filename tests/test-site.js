@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=114"));
+check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=115"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1358,7 +1358,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists ninety-two tools", readme.includes("ninety-two pool tools") || readme.includes("all ninety-two"));
+check("README lists ninety-three tools", readme.includes("ninety-three pool tools") || readme.includes("all ninety-three"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2001,8 +2001,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts ninety-two tools and names the newest tools",
-  appSrc.includes("plus ninety-two fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, a Token-2022\n   transfer-fee swap model, and a sandwich\n   (MEV) attack model.\n   These are educational MODELS"));
+check("app.js header counts ninety-three tools and names the newest tools",
+  appSrc.includes("plus ninety-three fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, a Token-2022\n   transfer-fee swap model, a sandwich\n   (MEV) attack model, and a Token-2022\n   transfer-fee exact-out swap model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v114", html.includes("app.js?v=114"));
+check("app.js cache key bumped to v115", html.includes("app.js?v=115"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6321,6 +6321,97 @@ check("sand handler wired to its own form", appSrc.includes('getElementById("san
 check("sand honesty: gross profit, unmodelled costs and not-live labels", html.includes("no priority fees, searcher competition or failed-bundle costs are modelled") && html.includes("not a how-to") && html.includes("not live pool data, not a live quote, not financial advice"));
 check("guide covers sandwich attacks", guide.includes("price the sandwich before someone else does"));
 check("README lists tool 92", readme.includes("92. **Sandwich (MEV) attack model**"));
+
+/* ---------- 93 · Token-2022 transfer-fee exact-out swap model (TFXO) ---------- */
+/* Tool 91 run backwards: the target is what must ARRIVE, after the
+   out-token's transfer fee is withheld. Neither fee inverts by
+   dividing by (1 - rate) — each is min(ceil(amount x bps / 10000),
+   cap), a step function — so the gross amounts are searched on the
+   fee formula itself, the curve leg is tool 6's own exact-out, and
+   the final input is tightened by binary search on tool 91 itself.
+   Vectors verified in a clean prototype BEFORE these tests were
+   written: the headline is tool 91's headline inverted exactly. */
+const tfxo1 = app.transferFeeSwapExactOut("1000000", "1000000", "9583.109398907", 25, 100, "", 200, "");
+check("TFXO headline is not null", tfxo1 !== null);
+check("TFXO headline inverts tool 91's headline exactly: receiving 9583.109398907 costs exactly 10000", tfxo1.amountIn === "10000");
+check("TFXO headline gross out needed is tool 91's gross out", tfxo1.grossOutNeeded === "9778.68306011" && tf1.grossOut === tfxo1.grossOutNeeded);
+check("TFXO headline pool input needed is tool 91's net in", tfxo1.poolInputNeeded === "9900" && tfxo1.netAmountIn === "9900");
+check("TFXO headline fees reassemble tool 91's", tfxo1.transferFeeIn === "100" && tfxo1.transferFeeOut === "195.573661203");
+check("TFXO headline receives exactly the target, zero excess", tfxo1.amountOut === "9583.109398907" && tfxo1.excessOut === "0");
+check("TFXO headline no-transfer-fee input is tool 6 on the target", tfxo1.noTransferFeeIn === app.cpSwapExactOut("1000000", "1000000", "9583.109398907", 25).amountIn);
+const tfxoRound = app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 100, "", 200, "");
+check("TFXO round target amount in", tfxoRound !== null && tfxoRound.amountIn === "9385.883959033");
+check("TFXO round target gross out needed", tfxoRound.grossOutNeeded === "9183.673469388");
+check("TFXO round target pool input needed", tfxoRound.poolInputNeeded === "9292.025119442");
+check("TFXO round target fees", tfxoRound.transferFeeIn === "93.858839591" && tfxoRound.transferFeeOut === "183.673469388");
+check("TFXO round target receives exactly 9000", tfxoRound.amountOut === "9000" && tfxoRound.excessOut === "0");
+near("TFXO round target extra cost vs the no-transfer-fee input", tfxoRound.extraCostPct, (9385.883959033 / 9104.496862743 - 1) * 100, 1e-9);
+const tfxoZero = app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 0, "", 0, "");
+check("TFXO zero transfer fees reproduce tool 6 exactly", tfxoZero !== null && tfxoZero.amountIn === app.cpSwapExactOut("1000000", "1000000", "9000", 25).amountIn && tfxoZero.amountIn === "9104.496862743" && tfxoZero.extraCostPct === 0);
+const tfxoZero2 = app.transferFeeSwapExactOut("123456", "7890", "100", 30, 0, "", 0, "");
+check("TFXO zero-fee identity holds on an unbalanced pool too", tfxoZero2 !== null && tfxoZero2.amountIn === app.cpSwapExactOut("123456", "7890", "100", 30).amountIn);
+const tfxoCapOut = app.transferFeeSwapExactOut("500000", "2000000", "19545.414540941", 30, 50, "", 1000, "100");
+check("TFXO inverts tool 91's capped out-fee vector to exactly its 5000 input", tfxoCapOut !== null && tfxoCapOut.amountIn === "5000" && tfxoCapOut.grossOutNeeded === "19645.414540941" && tfxoCapOut.transferFeeOut === "100");
+const tfxoCapIn = app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 500, "10", 0, "");
+check("TFXO capped in-fee: a 5% fee capped at 10 adds exactly 10 to the pool input needed", tfxoCapIn !== null && tfxoCapIn.amountIn === "9114.496862743" && tfxoCapIn.transferFeeIn === "10");
+const tfxoFullOut = app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 0, "", 10000, "50");
+check("TFXO a 100% out fee capped at 50 is a flat 50 on the target", tfxoFullOut !== null && tfxoFullOut.grossOutNeeded === "9050" && tfxoFullOut.transferFeeOut === "50" && tfxoFullOut.amountIn === "9155.539335246");
+const tfxoFullIn = app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 10000, "50", 0, "");
+check("TFXO a 100% in fee capped at 50 is a flat 50 on the pool input", tfxoFullIn !== null && tfxoFullIn.transferFeeIn === "50" && tfxoFullIn.amountIn === "9154.496862743");
+const tfxoDust = app.transferFeeSwapExactOut("1000000", "1000000", "0.999899", 0, 1, "", 0, "");
+check("TFXO dust target at a 1 bp in-fee costs exactly 1", tfxoDust !== null && tfxoDust.amountIn === "1" && tfxoDust.grossOutNeeded === "0.999899" && tfxoDust.poolInputNeeded === "0.9999");
+/* Minimality + forward consistency across a sweep: tool 91 run on
+   the reported input receives at least the target, and one scaled
+   unit less receives less than the target. */
+const tfxoSweep = [
+  ["1000000", "1000000", "5000", 25, 100, "", 200, ""],
+  ["500000", "2000000", "12345.678", 30, 50, "", 1000, "100"],
+  ["250000", "4000000", "999.25", 5, 33, "1.5", 77, ""],
+  ["100000", "100000", "30000", 25, 100, "", 100, ""],
+  ["2000000", "50000", "400", 100, 250, "", 250, "3.25"],
+  ["1000000", "1000000", "0.5", 0, 1, "", 0, ""],
+  ["123456", "7890", "100", 30, 0, "", 0, ""],
+  ["1000000", "1000000", "9583.109398907", 25, 100, "", 200, ""]
+];
+for (const c of tfxoSweep) {
+  const tag = "TFXO sweep " + c[0] + "/" + c[1] + " target " + c[2];
+  const r = app.transferFeeSwapExactOut(c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]);
+  check(tag + " is not null", r !== null);
+  const fwd = app.transferFeeSwap(c[0], c[1], r.amountIn, c[3], c[4], c[5], c[6], c[7]);
+  check(tag + " tool 91 on the reported input receives at least the target, matching every field",
+    fwd !== null && fwd.amountOut === r.amountOut && fwd.grossOut === r.grossOut && fwd.transferFeeIn === r.transferFeeIn && fwd.transferFeeOut === r.transferFeeOut && app.parseScaled(r.amountOut) >= app.parseScaled(c[2]));
+  check(tag + " excess is received minus target, never negative",
+    app.parseScaled(r.excessOut) === app.parseScaled(r.amountOut) - app.parseScaled(c[2]));
+  const oneLess = app.formatScaled(app.parseScaled(r.amountIn) - 1n);
+  const fwdLess = app.transferFeeSwap(c[0], c[1], oneLess, c[3], c[4], c[5], c[6], c[7]);
+  check(tag + " one scaled unit less receives less than the target (input is minimal)",
+    fwdLess === null || app.parseScaled(fwdLess.amountOut) < app.parseScaled(c[2]));
+  check(tag + " gross out needed nets the target through the out fee",
+    app.parseScaled(r.grossOut) >= app.parseScaled(r.grossOutNeeded));
+}
+check("TFXO a higher out-fee never lowers the required input",
+  app.parseScaled(app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 100, "", 300, "").amountIn) >= app.parseScaled(tfxoRound.amountIn));
+check("TFXO a higher in-fee never lowers the required input",
+  app.parseScaled(app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 200, "", 200, "").amountIn) >= app.parseScaled(tfxoRound.amountIn));
+check("TFXO blank, null and missing caps all mean no cap",
+  app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 100, "", 200, "").amountIn ===
+  app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 100, null, 200, null).amountIn &&
+  app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 100, undefined, 200, undefined).amountIn === "9385.883959033");
+check("TFXO rejects an uncapped 100% in-fee (nothing ever reaches the pool)", app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 10000, "", 0, "") === null);
+check("TFXO rejects an uncapped 100% out-fee (nothing is ever received)", app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 0, "", 10000, "") === null);
+check("TFXO rejects a target at the whole output reserve", app.transferFeeSwapExactOut("1000000", "1000000", "1000000", 25, 0, "", 0, "") === null);
+check("TFXO rejects a target whose grossed-up output reaches the reserve", app.transferFeeSwapExactOut("1000000", "1000000", "999999", 25, 0, "", 200, "") === null);
+check("TFXO rejects a pool fee of 10000 bps", app.transferFeeSwapExactOut("1000000", "1000000", "9000", 10000, 0, "", 0, "") === null);
+check("TFXO rejects transfer fees above 10000 bps and fractional bps", app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 10001, "", 0, "") === null && app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 0, "", 1.5, "") === null);
+check("TFXO rejects unparseable and negative caps", app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 100, "abc", 0, "") === null && app.transferFeeSwapExactOut("1000000", "1000000", "9000", 25, 100, "-5", 0, "") === null);
+check("TFXO rejects zero/negative reserves and targets and over-precise targets", app.transferFeeSwapExactOut("0", "1000000", "9000", 25, 0, "", 0, "") === null && app.transferFeeSwapExactOut("1000000", "1000000", "0", 25, 0, "", 0, "") === null && app.transferFeeSwapExactOut("1000000", "1000000", "0.0000000001", 25, 0, "", 0, "") === null);
+check("TFXO source searches the fee formula itself and tightens on tool 91", appSrc.includes("function transferFeeSwapExactOut") && appSrc.includes("function transferGrossUp") && appSrc.includes("a - transferFee(a, bps, capScaled)"));
+check("all tfxo controls labelled", ["tfxo-rin", "tfxo-rout", "tfxo-aout", "tfxo-poolfee", "tfxo-tfin", "tfxo-tfincap", "tfxo-tfout", "tfxo-tfoutcap", "tfxo-ain", "tfxo-received"].every(id => html.includes(`for="${id}"`)));
+check("tfxo tool present in index.html", html.includes('id="tfxo-calc"') && html.includes('id="tfxo-result"'));
+check("tfxo handler wired to its own form", appSrc.includes('getElementById("tfxo-calc")') && appSrc.includes('getElementById("tfxo-result")'));
+check("tfxo honesty: smallest-sufficient, not-burned and not-live labels", html.includes("smallest at 9-decimal granularity") && html.includes("not burned") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers transfer-fee exact-out gross-ups", guide.includes("gross up both transfer fees"));
+check("README lists tool 93", readme.includes("93. **Token-2022 transfer-fee exact-out swap model**"));
 
 /* ---------- Accessibility guards (global — every tool, present and future) ---------- */
 /* The per-tool "all X controls labelled" checks above only cover the

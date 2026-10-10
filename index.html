@@ -2185,6 +2185,33 @@
         <button type="submit" class="btn primary">Model this sandwich</button>
         <p id="sand-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="tfxo-calc">
+        <h3>93 · Token-2022 transfer-fee exact-out swap model</h3>
+        <p>Tool 91 run backwards, for the trade specified by what must actually arrive — a payment, a debt, a target holding, in the out-token's terms after its transfer fee has been withheld from the receiver. Neither tax inverts by dividing by one-minus-the-rate: each fee is the lesser of ceil(amount × rate ÷ 10,000) and the mint's maximum fee, a step function, so this model searches the fee formula itself for the smallest gross amount whose net reaches the target, prices that gross output on the curve with tool 6's exact-out maths, then grosses the pool input up through the in-token's fee the same way — and finally tightens the answer against tool 91 itself, so the input shown is the smallest at 9-decimal granularity that tool 91 says receives at least the target. Headline, the exact inverse of tool 91's headline: receiving 9,583.109398907 with a 1% fee in and a 2% fee out at a 25 bps pool fee on balanced 1,000,000/1,000,000 reserves costs exactly 10,000 in; receiving a round 9,000 costs ≈9,385.8840, because the curve must pay ≈9,183.6735 gross. Caps invert unevenly: a 100% fee capped at 50 is just a flat 50 on top of the target, while an uncapped 100% fee on either side nets zero at every size and is rejected, not priced — as is a target whose grossed-up output reaches the whole output reserve, which the curve approaches but never pays. The withheld fees are not burned and do not reach the pool's LPs — they sit in the receiving accounts until the mint's fee authority collects them. Educational model only — your reserves, target and the two mints' fee configs, not live pool data, not a live quote, not financial advice.</p>
+        <label for="tfxo-rin">Reserve in (tokens)</label>
+        <input id="tfxo-rin" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="tfxo-rout">Reserve out (tokens)</label>
+        <input id="tfxo-rout" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="tfxo-aout">Amount you must receive (tokens, after the out-token's transfer fee)</label>
+        <input id="tfxo-aout" inputmode="decimal" placeholder="e.g. 9000" autocomplete="off">
+        <label for="tfxo-poolfee">Pool swap fee (basis points, 25 = 0.25%)</label>
+        <input id="tfxo-poolfee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="tfxo-tfin">Transfer fee on the token in (basis points, 100 = 1%)</label>
+        <input id="tfxo-tfin" inputmode="numeric" value="100" autocomplete="off">
+        <label for="tfxo-tfincap">Maximum fee cap on the token in (blank = no cap, 0 = no fee)</label>
+        <input id="tfxo-tfincap" inputmode="decimal" placeholder="blank = no cap" autocomplete="off">
+        <label for="tfxo-tfout">Transfer fee on the token out (basis points, 200 = 2%)</label>
+        <input id="tfxo-tfout" inputmode="numeric" value="200" autocomplete="off">
+        <label for="tfxo-tfoutcap">Maximum fee cap on the token out (blank = no cap, 0 = no fee)</label>
+        <input id="tfxo-tfoutcap" inputmode="decimal" placeholder="blank = no cap" autocomplete="off">
+        <label for="tfxo-ain">What you must send (model)</label>
+        <input id="tfxo-ain" readonly placeholder="—" autocomplete="off">
+        <label for="tfxo-received">What tool 91's model says that send receives (model)</label>
+        <input id="tfxo-received" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model this exact-out transfer-fee swap</button>
+        <p id="tfxo-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2212,6 +2239,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=114"></script>
+<script src="app.js?v=115"></script>
 </body>
 </html>
