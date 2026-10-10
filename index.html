@@ -1751,6 +1751,32 @@
         <button type="submit" class="btn primary">Size the aligning trade</button>
         <p id="carb-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="cis-calc">
+        <h3>78 · CLMM price-impact sizer</h3>
+        <p>Tools 17, 64 and 66 size a trade by an impact cap for a constant-product pool, a weighted pool and a stableswap pool; this sizes it for one CLMM range, whose impact has a closed form in the sqrt-price the trade walks to. At liquidity 10,000 over 0.5–2 and price 1, a 10% cap at zero fee admits exactly 1,111.1111 in either direction and pays exactly 1,000 out. Two honest edges: a cap at or below the fee tier admits no trade at all, because the impact measure counts the fee; and an impact cap is not a drain cap — walking this range all the way to its edge costs only ≈29.29% impact at zero fee, so a cap at or above that ceiling sizes the trade that empties the range, at the ceiling's impact rather than your cap. Single range only. Educational model only — your liquidity, range, price, cap and fee inputs; not live pool data, not a live quote, not financial advice.</p>
+        <label for="cis-l">Range liquidity L (model units, above 0)</label>
+        <input id="cis-l" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="cis-lower">Range lower price (B per A, above 0)</label>
+        <input id="cis-lower" inputmode="decimal" placeholder="e.g. 0.5" autocomplete="off">
+        <label for="cis-upper">Range upper price (B per A, above the lower price)</label>
+        <input id="cis-upper" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="cis-price">Current price (B per A, strictly inside the range)</label>
+        <input id="cis-price" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="cis-dir">Direction</label>
+        <select id="cis-dir">
+          <option value="ab">Pay token A, receive token B (price falls)</option>
+          <option value="ba">Pay token B, receive token A (price rises)</option>
+        </select>
+        <label for="cis-cap">Maximum price impact, percent (above 0, below 100)</label>
+        <input id="cis-cap" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="cis-fee">Pool fee tier (whole basis points, 0–9999)</label>
+        <input id="cis-fee" inputmode="decimal" placeholder="e.g. 25" autocomplete="off">
+        <label for="cis-out">Largest amount in at your cap (model)</label>
+        <input id="cis-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Size the trade at my cap</button>
+        <p id="cis-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1778,6 +1804,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=95"></script>
+<script src="app.js?v=96"></script>
 </body>
 </html>

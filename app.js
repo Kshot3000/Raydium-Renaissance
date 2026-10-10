@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus seventy-seven fully
+/* Raydium Renaissance hub logic: project filtering plus seventy-eight fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -50,7 +50,8 @@
    break-even days calculator, a curve
    comparison exact-out model, a weighted-pool
    IL tolerance band, a stableswap IL
-   tolerance band, and a CLMM arbitrage model.
+   tolerance band, a CLMM arbitrage model, and a
+   CLMM price-impact sizer.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -5280,8 +5281,96 @@ function clmmArbitrage(liquidityStr, lowerStr, upperStr, priceStr, externalPrice
   return result;
 }
 
+/* ---------- 78 · CLMM price-impact sizer ---------- */
+/* Tools 17, 64 and 66 answer "how big a trade fits my impact cap?"
+   for a constant-product pool, a weighted pool and a stableswap pool;
+   this answers it for one CLMM range — the last cell of the
+   impact-sizer matrix. Tool 42's impact measure has a closed form
+   inside one range. Paying B (price rises), with u = s'/s the
+   sqrt-price multiple the trade walks to, the effective rate is
+   (1 − fee) / (s² · u) against a spot of 1/s², so the impact is
+   exactly 1 − (1 − fee)/u and the cap sets u = (1 − fee)/(1 − cap)
+   directly. Paying A is the mirror: with v = s'/s the impact is
+   1 − v · (1 − fee) and the cap sets v = (1 − cap)/(1 − fee). The
+   trade is then rebuilt from that sqrt-price in tool 42's own
+   cancellation-free forms, and the tests feed the reported gross
+   input through tool 42 itself and assert it lands on the cap.
+   Two honest edges, both stated on the tool. First, the fee floor
+   the other sizers share: a dust trade's impact is exactly the fee,
+   so a cap at or below the fee tier admits no trade at any L.
+   Second, the range wall: impact inside one range is bounded —
+   walking the price all the way to the edge costs a fixed impact
+   (1 − (√lower/√price) · (1 − fee) paying A, mirrored paying B;
+   ≈29.29% at zero fee for the symmetric 0.5–2 range at price 1) —
+   so a cap at or above that bound sizes the whole range: the
+   largest trade is the one that empties the range's out-token,
+   its actual impact is that bound rather than your cap, and any
+   larger input is simply unfilled in tool 42, not worse-priced.
+   An impact cap is therefore not a way to trade past an edge.
+   Single range only, floating point like every CLMM tool here.
+   Model only: a real CLMM pool's liquidity varies tick by tick
+   and its live quote is on the pool page. */
+function clmmImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpactPctStr, feeBps, direction) {
+  var raw = [liquidityStr, lowerStr, upperStr, priceStr, maxImpactPctStr, feeBps, direction];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var liquidity = Number(liquidityStr), lower = Number(lowerStr), upper = Number(upperStr);
+  var price = Number(priceStr), capPct = Number(maxImpactPctStr), fee = Number(feeBps);
+  if (![liquidity, lower, upper, price, capPct].every(Number.isFinite)) return null;
+  if (liquidity <= 0 || lower <= 0 || upper <= 0 || price <= 0) return null;
+  if (lower >= upper) return null;
+  if (price <= lower || price >= upper) return null;
+  if (capPct <= 0 || capPct >= 100) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  if (direction !== "ab" && direction !== "ba") return null;
+  var f = fee / 10000, cap = capPct / 100;
+  var sa = Math.sqrt(lower), sb = Math.sqrt(upper), s = Math.sqrt(price);
+  var spotRate = direction === "ab" ? price : 1 / price;
+  var boundaryImpactPct = direction === "ab"
+    ? (1 - (sa / s) * (1 - f)) * 100
+    : (1 - (1 - f) * (s / sb)) * 100;
+  var base = { liquidity: liquidity, lowerPrice: lower, upperPrice: upper,
+    price: price, direction: direction,
+    inToken: direction === "ab" ? "A" : "B",
+    outToken: direction === "ab" ? "B" : "A",
+    spotRate: spotRate, maxImpactPct: capPct, feeBps: fee, feePct: fee / 100,
+    feeImpactPct: f * 100, boundaryImpactPct: boundaryImpactPct };
+  if (cap <= f) {
+    return Object.assign(base, { feasible: false, maxAmountIn: 0, netIn: 0,
+      amountOut: 0, effectiveRate: 0, actualImpactPct: f * 100,
+      newPrice: price, hitBoundary: false });
+  }
+  var hitBoundary = capPct >= boundaryImpactPct;
+  var sNew, netIn, amountOut;
+  if (direction === "ab") {
+    sNew = hitBoundary ? sa : s * ((1 - cap) / (1 - f));
+    amountOut = liquidity * (s - sNew);
+    netIn = amountOut / (s * sNew);
+  } else {
+    sNew = hitBoundary ? sb : s * ((1 - f) / (1 - cap));
+    amountOut = liquidity * (1 / s - 1 / sNew);
+    netIn = amountOut * s * sNew;
+  }
+  if (!Number.isFinite(netIn) || !(netIn > 0) || !Number.isFinite(amountOut) || !(amountOut > 0)) return null;
+  var grossIn = netIn / (1 - f);
+  var effectiveRate = amountOut / grossIn;
+  var result = Object.assign(base, {
+    feasible: true, maxAmountIn: grossIn, netIn: netIn, amountOut: amountOut,
+    effectiveRate: effectiveRate,
+    actualImpactPct: (1 - effectiveRate / spotRate) * 100,
+    newPrice: sNew * sNew, hitBoundary: hitBoundary
+  });
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    var v = result[fields[j]];
+    if (typeof v === "number" && !Number.isFinite(v)) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -7596,6 +7685,33 @@ if (typeof document !== "undefined") {
           " Modelled profit valued in B at your external price: ≈ " + fmt(res.profitInB, 6) +
           " B — a gap smaller than the fee honestly comes out negative. A CLMM arbitrage model over a price you typed — not a live feed, not a found opportunity, not financial advice.";
         document.getElementById("carb-out").value = fmt(res.profitInB, 6);
+      }
+    });
+
+    document.getElementById("cis-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmImpactSizer(
+        document.getElementById("cis-l").value,
+        document.getElementById("cis-lower").value,
+        document.getElementById("cis-upper").value,
+        document.getElementById("cis-price").value,
+        document.getElementById("cis-cap").value,
+        document.getElementById("cis-fee").value,
+        document.getElementById("cis-dir").value
+      );
+      var out = document.getElementById("cis-result");
+      if (res === null) {
+        out.textContent = "Enter liquidity above 0, a range with lower below upper, a current price strictly inside the range, an impact cap above 0 and below 100%, and a fee tier in whole basis points (0–9999).";
+        document.getElementById("cis-out").value = "";
+      } else if (!res.feasible) {
+        out.textContent = "Model output: no trade fits — a cap of " + fmt(res.maxImpactPct, 4) + "% is at or below the " + fmt(res.feeImpactPct, 4) + "% fee itself, and tool 42's impact measure counts the fee, so even a dust trade inside this range already carries that much impact. Raise the cap above the fee tier. A CLMM price-impact sizer model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("cis-out").value = fmt(0, 6);
+      } else {
+        var wallText = res.hitBoundary
+          ? " Your cap is at or above this range's own ceiling impact of ≈ " + fmt(res.boundaryImpactPct, 4) + "% — the impact of walking the price all the way to the range's edge — so the largest trade is the one that empties this range: its actual impact is that ceiling, not your cap, and any larger input would simply go unfilled in this range rather than fill at a worse price. A real pool would continue into the next range at its own liquidity."
+          : " The sized trade lands exactly on your cap and stays inside the range, whose own ceiling impact (walking to its edge) is ≈ " + fmt(res.boundaryImpactPct, 4) + "%.";
+        out.textContent = "Model output: the largest trade at a " + fmt(res.maxImpactPct, 4) + "% impact cap pays ≈ " + fmt(res.maxAmountIn, 6) + " of token " + res.inToken + " in (≈ " + fmt(res.netIn, 6) + " after the fee reaches the range) and takes ≈ " + fmt(res.amountOut, 6) + " of token " + res.outToken + " out, leaving the range at ≈ " + fmt(res.newPrice, 6) + " B per A with an actual impact of ≈ " + fmt(res.actualImpactPct, 4) + "%." + wallText + " A CLMM price-impact sizer model over one range — not live pool data, not a live quote, not financial advice.";
+        document.getElementById("cis-out").value = fmt(res.maxAmountIn, 6);
       }
     });
 

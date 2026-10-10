@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=95"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=96"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1357,7 +1357,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists seventy-seven tools", readme.includes("seventy-seven pool tools") || readme.includes("all seventy-seven"));
+check("README lists seventy-eight tools", readme.includes("seventy-eight pool tools") || readme.includes("all seventy-eight"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2000,8 +2000,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts seventy-seven tools and names the CLMM arbitrage model",
-  appSrc.includes("plus seventy-seven fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, a curve\n   comparison exact-out model, a weighted-pool\n   IL tolerance band, a stableswap IL\n   tolerance band, and a CLMM arbitrage model.\n   These are educational MODELS"));
+check("app.js header counts seventy-eight tools and names the CLMM arbitrage model",
+  appSrc.includes("plus seventy-eight fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, a stableswap\n   break-even days calculator, a curve\n   comparison exact-out model, a weighted-pool\n   IL tolerance band, a stableswap IL\n   tolerance band, a CLMM arbitrage model, and a\n   CLMM price-impact sizer.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -4779,6 +4779,101 @@ check("carb handler wired to its own form", appSrc.includes('getElementById("car
 check("carb honesty: range wall and not-live labels", html.includes("an external price beyond the edge caps the trade there") && html.includes("not live pool data, not a found opportunity, not financial advice"));
 check("guide covers CLMM arbitrage", guide.includes("respect the range wall"));
 check("README lists tool 77", readme.includes("77. **CLMM arbitrage model**"));
+
+/* ---------- Tool 78: CLMM price-impact sizer (CIS) ---------- */
+const cis = app.clmmImpactSizer("10000", "0.5", "2", "1", "10", 0, "ab");
+check("CIS headline exists and is feasible", cis !== null && cis.feasible === true && cis.hitBoundary === false);
+check("CIS headline tokens", cis.inToken === "A" && cis.outToken === "B" && cis.direction === "ab");
+near("CIS headline max in is exactly 1111.1111", cis.maxAmountIn, 1111.1111111111111, 1e-9);
+near("CIS headline net equals gross at zero fee", cis.netIn, 1111.1111111111111, 1e-9);
+near("CIS headline amount out is exactly 1000", cis.amountOut, 1000, 1e-9);
+near("CIS headline new price is exactly 0.81", cis.newPrice, 0.81, 1e-12);
+near("CIS headline actual impact is the cap", cis.actualImpactPct, 10, 1e-9);
+near("CIS headline boundary impact", cis.boundaryImpactPct, 29.28932188134524, 1e-9);
+/* mirror direction on the log-symmetric range: same amounts, reciprocal price */
+{
+  const m = app.clmmImpactSizer("10000", "0.5", "2", "1", "10", 0, "ba");
+  check("CIS mirror tokens", m.inToken === "B" && m.outToken === "A");
+  near("CIS mirror max in", m.maxAmountIn, 1111.1111111111111, 1e-9);
+  near("CIS mirror amount out is exactly 1000", m.amountOut, 1000, 1e-9);
+  near("CIS mirror new price", m.newPrice, 1.2345679012345678, 1e-12);
+  check("CIS mirror spot is reciprocal", m.spotRate === 1 && cis.spotRate === 1);
+}
+/* composition: the sized gross input through Tool 42 lands on the cap, both directions */
+for (const [L, lo, up, p, cap, fee, dir] of [
+  ["10000", "0.5", "2", "1", "10", 0, "ab"], ["10000", "0.5", "2", "1", "10", 0, "ba"],
+  ["10000", "0.5", "2", "1", "10", 25, "ab"], ["10000", "0.5", "2", "1", "10", 25, "ba"],
+  ["947.2135954999577", "0.8", "1.25", "1", "5", 25, "ab"], ["947.2135954999577", "0.8", "1.25", "1", "5", 25, "ba"],
+  ["5000", "0.25", "4", "1.5", "20", 100, "ab"], ["5000", "0.25", "4", "1.5", "1", 5, "ba"],
+  ["2000", "90", "110", "100", "2", 30, "ab"], ["2000", "90", "110", "100", "2", 30, "ba"]
+]) {
+  const r = app.clmmImpactSizer(L, lo, up, p, cap, fee, dir);
+  const sw = app.clmmSwap(L, lo, up, p, String(r.maxAmountIn), fee, dir);
+  check(`CIS composes Tool 42 at cap=${cap} fee=${fee} dir=${dir}`,
+    r.feasible === true && r.hitBoundary === false && sw !== null &&
+    Math.abs(sw.priceImpactPct - Number(cap)) < 1e-7 &&
+    Math.abs(sw.amountOut - r.amountOut) < 1e-6 &&
+    Math.abs(sw.newPrice - r.newPrice) < 1e-9);
+}
+/* fee: net is the zero-fee shape at the adjusted sqrt multiple, gross is net grossed up */
+{
+  const f = app.clmmImpactSizer("10000", "0.5", "2", "1", "10", 25, "ab");
+  near("CIS fee gross in", f.maxAmountIn, 1086.0484544695078, 1e-9);
+  near("CIS fee net in", f.netIn, 1083.333333333334, 1e-9);
+  near("CIS fee amount out", f.amountOut, 977.4436090225569, 1e-9);
+  near("CIS fee new price", f.newPrice, 0.814065238283679, 1e-12);
+  near("CIS fee boundary impact rises with the fee", f.boundaryImpactPct, 29.466098576641876, 1e-9);
+}
+/* range wall: a cap at or above the ceiling impact sizes the range-emptying trade */
+{
+  const b = app.clmmImpactSizer("10000", "0.5", "2", "1", "50", 0, "ab");
+  check("CIS boundary flagged", b.hitBoundary === true && b.feasible === true);
+  near("CIS boundary max in empties the range", b.maxAmountIn, 4142.13562373095, 1e-9);
+  near("CIS boundary amount out is the range's whole B holding", b.amountOut, 2928.9321881345245, 1e-9);
+  near("CIS boundary actual impact is the ceiling, not the cap", b.actualImpactPct, 29.28932188134524, 1e-9);
+  check("CIS boundary new price is the lower edge", Math.abs(b.newPrice - 0.5) < 1e-12);
+  const bm = app.clmmImpactSizer("10000", "0.5", "2", "1", "50", 0, "ba");
+  check("CIS mirror boundary lands on the upper edge", bm.hitBoundary === true && Math.abs(bm.newPrice - 2) < 1e-12);
+  near("CIS mirror boundary amount out", bm.amountOut, 2928.9321881345254, 1e-9);
+  check("CIS cap exactly at the ceiling is the boundary trade", app.clmmImpactSizer("10000", "0.5", "2", "1", "29.28932188134524", 0, "ab").hitBoundary === true);
+  check("CIS cap just below the ceiling stays inside", app.clmmImpactSizer("10000", "0.5", "2", "1", "29", 0, "ab").hitBoundary === false);
+}
+/* fee floor: a cap at or below the fee admits no trade; just above it admits a small one */
+{
+  const inf = app.clmmImpactSizer("10000", "0.5", "2", "1", "0.25", 25, "ab");
+  check("CIS cap equal to the fee is infeasible", inf.feasible === false && inf.maxAmountIn === 0 && inf.amountOut === 0 && inf.actualImpactPct === 0.25);
+  check("CIS cap below the fee is infeasible", app.clmmImpactSizer("10000", "0.5", "2", "1", "0.1", 25, "ba").feasible === false);
+  const just = app.clmmImpactSizer("10000", "0.5", "2", "1", "0.26", 25, "ab");
+  check("CIS cap just above the fee is feasible", just.feasible === true && just.maxAmountIn > 0);
+  near("CIS just-above-fee max in", just.maxAmountIn, 1.0051195765639593, 1e-9);
+  check("CIS zero fee admits any positive cap", app.clmmImpactSizer("10000", "0.5", "2", "1", "0.01", 0, "ab").feasible === true);
+}
+/* scale freedom and monotonicity */
+{
+  const big = app.clmmImpactSizer("100000", "0.5", "2", "1", "10", 0, "ab");
+  check("CIS 10x liquidity scales amounts 10x and keeps the price",
+    Math.abs(big.maxAmountIn / cis.maxAmountIn - 10) < 1e-12 && Math.abs(big.amountOut / cis.amountOut - 10) < 1e-12 && big.newPrice === cis.newPrice);
+  check("CIS a tighter cap admits a smaller trade",
+    app.clmmImpactSizer("10000", "0.5", "2", "1", "5", 0, "ab").maxAmountIn < cis.maxAmountIn &&
+    app.clmmImpactSizer("10000", "0.5", "2", "1", "20", 0, "ab").maxAmountIn > cis.maxAmountIn);
+  check("CIS a higher fee admits a smaller trade at the same cap",
+    app.clmmImpactSizer("10000", "0.5", "2", "1", "10", 100, "ab").maxAmountIn < app.clmmImpactSizer("10000", "0.5", "2", "1", "10", 25, "ab").maxAmountIn);
+}
+/* rejections */
+check("CIS rejects blank and junk", app.clmmImpactSizer("", "0.5", "2", "1", "10", 0, "ab") === null && app.clmmImpactSizer("10000", "0.5", "2", "1", "abc", 0, "ab") === null && app.clmmImpactSizer("10000", " ", "2", "1", "10", 0, "ab") === null && app.clmmImpactSizer("10000", "0.5", "2", "1", "10", 0, "") === null);
+check("CIS rejects non-positive inputs", app.clmmImpactSizer("0", "0.5", "2", "1", "10", 0, "ab") === null && app.clmmImpactSizer("10000", "-0.5", "2", "1", "10", 0, "ab") === null && app.clmmImpactSizer("10000", "0.5", "2", "0", "10", 0, "ab") === null);
+check("CIS rejects caps outside (0,100)", app.clmmImpactSizer("10000", "0.5", "2", "1", "0", 0, "ab") === null && app.clmmImpactSizer("10000", "0.5", "2", "1", "100", 0, "ab") === null && app.clmmImpactSizer("10000", "0.5", "2", "1", "-5", 0, "ab") === null);
+check("CIS rejects inverted range, price outside it and bad direction", app.clmmImpactSizer("10000", "2", "0.5", "1", "10", 0, "ab") === null && app.clmmImpactSizer("10000", "0.5", "2", "0.5", "10", 0, "ab") === null && app.clmmImpactSizer("10000", "0.5", "2", "2", "10", 0, "ab") === null && app.clmmImpactSizer("10000", "0.5", "2", "1", "10", 0, "xx") === null);
+check("CIS rejects bad fee tiers", app.clmmImpactSizer("10000", "0.5", "2", "1", "10", -1, "ab") === null && app.clmmImpactSizer("10000", "0.5", "2", "1", "10", 10000, "ab") === null && app.clmmImpactSizer("10000", "0.5", "2", "1", "10", 2.5, "ab") === null);
+check("CIS composes Tool 42 in source", appSrc.includes("function clmmImpactSizer"));
+check("all cis controls labelled",
+  ["cis-l", "cis-lower", "cis-upper", "cis-price", "cis-dir", "cis-cap", "cis-fee", "cis-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("cis tool present in index.html", html.includes('id="cis-calc"') && html.includes('id="cis-result"'));
+check("cis handler wired to its own form", appSrc.includes('getElementById("cis-calc")') && appSrc.includes('getElementById("cis-result")'));
+check("cis honesty: impact cap is not a drain cap and not-live labels", html.includes("an impact cap is not a drain cap") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers CLMM price-impact sizer", guide.includes("know the range's own ceiling"));
+check("README lists tool 78", readme.includes("78. **CLMM price-impact sizer**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
