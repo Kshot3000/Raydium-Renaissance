@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus seventy-eight fully
+/* Raydium Renaissance hub logic: project filtering plus seventy-nine fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -50,8 +50,9 @@
    break-even days calculator, a curve
    comparison exact-out model, a weighted-pool
    IL tolerance band, a stableswap IL
-   tolerance band, a CLMM arbitrage model, and a
-   CLMM price-impact sizer.
+   tolerance band, a CLMM arbitrage model, a CLMM
+   price-impact sizer, and a CLMM two-range
+   arbitrage model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -5369,8 +5370,133 @@ function clmmImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpactPc
   return result;
 }
 
+/* ---------- 79 · CLMM two-range arbitrage model ---------- */
+/* Tool 77 prices the spot-aligning trade for one CLMM range and
+   stops honestly at the range wall: an external price beyond the
+   edge caps the trade there, where a real pool continues into the
+   next range. This supplies that next range, the way tools 43 and
+   45 did for tools 42 and 44. The first leg is tool 77's own capped
+   trade to the shared edge; the second leg is the same aligning
+   maths run on the second range from the edge toward the external
+   price (or its outer edge). The fee is charged on each leg, the
+   way tool 43 charges it again on the remainder that crosses, so
+   the totals are the two legs' gross inputs summed — and the tests
+   prove it: feeding the reported gross input through tool 43's
+   two-range swap returns the modelled total output at the modelled
+   post-trade price across a sweep. When the external price sits
+   inside the first range the answer is tool 77's verbatim (asserted
+   field by field) and the second range is never touched. The
+   second range's depth scales its leg, not its reach: a tenth-depth
+   second range takes a tenth of the trade to the same target price.
+   Two honest edges, both stated on the tool. First, the second
+   wall: an external price beyond the outer edge caps the combined
+   trade at that edge (at the symmetric headline ranges the two legs
+   to price 4 are exactly 10,000 in and 5,000 out in total), and
+   past it a live pool would need a third range nobody modelled.
+   Second, crossing is not free: the fee is charged again on the
+   second leg, so a gap that only just clears the first range's fee
+   can still lose money once it crosses. Two ranges only, floating
+   point like every CLMM tool here. Model only: a real CLMM pool's
+   liquidity varies tick by tick and its live quote is on the pool
+   page. */
+function clmmCrossArbitrage(liquidityStr, lowerStr, upperStr, priceStr, externalPriceStr, feeBps, secondLiquidityStr, secondOuterStr) {
+  var raw = [liquidityStr, lowerStr, upperStr, priceStr, externalPriceStr, feeBps, secondLiquidityStr, secondOuterStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var liquidity = Number(liquidityStr), lower = Number(lowerStr), upper = Number(upperStr);
+  var price = Number(priceStr), pe = Number(externalPriceStr), fee = Number(feeBps);
+  var liquidity2 = Number(secondLiquidityStr), outer = Number(secondOuterStr);
+  if (![liquidity, lower, upper, price, pe, liquidity2, outer].every(Number.isFinite)) return null;
+  if (liquidity <= 0 || lower <= 0 || upper <= 0 || price <= 0 || pe <= 0) return null;
+  if (liquidity2 <= 0 || outer <= 0) return null;
+  if (lower >= upper) return null;
+  if (price <= lower || price >= upper) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var f = fee / 10000, s = Math.sqrt(price);
+  var noGap = Math.abs(pe - price) / price < 1e-12;
+  if (noGap && outer >= lower && outer <= upper) return null;
+  if (!noGap && pe > price && !(outer > upper)) return null;
+  if (!noGap && pe < price && !(outer < lower)) return null;
+  var up = pe > price;
+  var boundary = noGap ? null : (up ? upper : lower);
+  var base = { liquidity: liquidity, lowerPrice: lower, upperPrice: upper,
+    secondLiquidity: liquidity2,
+    secondLowerPrice: outer > upper ? upper : outer,
+    secondUpperPrice: outer > upper ? outer : lower,
+    boundaryPrice: boundary,
+    price: price, spotPrice: price, externalPrice: pe,
+    priceGapPct: (pe / price - 1) * 100, feeBps: fee, feePct: fee / 100 };
+  var result;
+  if (noGap) {
+    result = Object.assign(base, { direction: "none", inToken: null, outToken: null,
+      leg1NetIn: 0, leg1GrossIn: 0, leg1Out: 0, leg2NetIn: 0, leg2GrossIn: 0, leg2Out: 0,
+      netIn: 0, grossIn: 0, amountOut: 0, profitInB: 0,
+      postTradeSpot: price, targetPrice: price,
+      crossed: false, hitBoundary: false, hitSecondBoundary: false });
+  } else if (up) {
+    var target1 = Math.min(pe, upper), s1 = Math.sqrt(target1);
+    var net1 = liquidity * (s1 - s), out1 = liquidity * (1 / s - 1 / s1);
+    if (!(net1 > 0) || !(out1 > 0)) return null;
+    var gross1 = net1 / (1 - f);
+    if (pe <= upper) {
+      result = Object.assign(base, { direction: "buy-a", inToken: "B", outToken: "A",
+        leg1NetIn: net1, leg1GrossIn: gross1, leg1Out: out1,
+        leg2NetIn: 0, leg2GrossIn: 0, leg2Out: 0,
+        netIn: net1, grossIn: gross1, amountOut: out1,
+        profitInB: out1 * pe - gross1,
+        postTradeSpot: target1, targetPrice: target1,
+        crossed: false, hitBoundary: false, hitSecondBoundary: false });
+    } else {
+      var sB = Math.sqrt(upper), target2 = Math.min(pe, outer), s2 = Math.sqrt(target2);
+      var net2 = liquidity2 * (s2 - sB), out2 = liquidity2 * (1 / sB - 1 / s2);
+      if (!(net2 > 0) || !(out2 > 0)) return null;
+      var gross2 = net2 / (1 - f);
+      result = Object.assign(base, { direction: "buy-a", inToken: "B", outToken: "A",
+        leg1NetIn: net1, leg1GrossIn: gross1, leg1Out: out1,
+        leg2NetIn: net2, leg2GrossIn: gross2, leg2Out: out2,
+        netIn: net1 + net2, grossIn: gross1 + gross2, amountOut: out1 + out2,
+        profitInB: (out1 + out2) * pe - (gross1 + gross2),
+        postTradeSpot: target2, targetPrice: target2,
+        crossed: true, hitBoundary: true, hitSecondBoundary: pe >= outer });
+    }
+  } else {
+    var target1d = Math.max(pe, lower), s1d = Math.sqrt(target1d);
+    var net1d = liquidity * (1 / s1d - 1 / s), out1d = liquidity * (s - s1d);
+    if (!(net1d > 0) || !(out1d > 0)) return null;
+    var gross1d = net1d / (1 - f);
+    if (pe >= lower) {
+      result = Object.assign(base, { direction: "sell-a", inToken: "A", outToken: "B",
+        leg1NetIn: net1d, leg1GrossIn: gross1d, leg1Out: out1d,
+        leg2NetIn: 0, leg2GrossIn: 0, leg2Out: 0,
+        netIn: net1d, grossIn: gross1d, amountOut: out1d,
+        profitInB: out1d - gross1d * pe,
+        postTradeSpot: target1d, targetPrice: target1d,
+        crossed: false, hitBoundary: false, hitSecondBoundary: false });
+    } else {
+      var sBd = Math.sqrt(lower), target2d = Math.max(pe, outer), s2d = Math.sqrt(target2d);
+      var net2d = liquidity2 * (1 / s2d - 1 / sBd), out2d = liquidity2 * (sBd - s2d);
+      if (!(net2d > 0) || !(out2d > 0)) return null;
+      var gross2d = net2d / (1 - f);
+      result = Object.assign(base, { direction: "sell-a", inToken: "A", outToken: "B",
+        leg1NetIn: net1d, leg1GrossIn: gross1d, leg1Out: out1d,
+        leg2NetIn: net2d, leg2GrossIn: gross2d, leg2Out: out2d,
+        netIn: net1d + net2d, grossIn: gross1d + gross2d, amountOut: out1d + out2d,
+        profitInB: (out1d + out2d) - (gross1d + gross2d) * pe,
+        postTradeSpot: target2d, targetPrice: target2d,
+        crossed: true, hitBoundary: true, hitSecondBoundary: pe <= outer });
+    }
+  }
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    var v = result[fields[j]];
+    if (typeof v === "number" && !Number.isFinite(v)) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -7712,6 +7838,48 @@ if (typeof document !== "undefined") {
           : " The sized trade lands exactly on your cap and stays inside the range, whose own ceiling impact (walking to its edge) is ≈ " + fmt(res.boundaryImpactPct, 4) + "%.";
         out.textContent = "Model output: the largest trade at a " + fmt(res.maxImpactPct, 4) + "% impact cap pays ≈ " + fmt(res.maxAmountIn, 6) + " of token " + res.inToken + " in (≈ " + fmt(res.netIn, 6) + " after the fee reaches the range) and takes ≈ " + fmt(res.amountOut, 6) + " of token " + res.outToken + " out, leaving the range at ≈ " + fmt(res.newPrice, 6) + " B per A with an actual impact of ≈ " + fmt(res.actualImpactPct, 4) + "%." + wallText + " A CLMM price-impact sizer model over one range — not live pool data, not a live quote, not financial advice.";
         document.getElementById("cis-out").value = fmt(res.maxAmountIn, 6);
+      }
+    });
+
+    document.getElementById("xarb-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = clmmCrossArbitrage(
+        document.getElementById("xarb-l").value,
+        document.getElementById("xarb-lower").value,
+        document.getElementById("xarb-upper").value,
+        document.getElementById("xarb-price").value,
+        document.getElementById("xarb-ext").value,
+        document.getElementById("xarb-fee").value,
+        document.getElementById("xarb-l2").value,
+        document.getElementById("xarb-outer").value
+      );
+      var out = document.getElementById("xarb-result");
+      if (res === null) {
+        out.textContent = "Enter liquidity above 0 for both ranges, a range with lower below upper, a current price strictly inside the first range, an external price above 0, a fee tier in whole basis points (0–9999), and a second range whose outer edge sits beyond the first range on the side of your external price.";
+        document.getElementById("xarb-out").value = "";
+      } else if (res.direction === "none") {
+        out.textContent = "Model output: the range's spot price is already ≈ " + fmt(res.spotPrice, 6) + " B per A, so there is no price-aligning trade to size at your external price and neither range is touched. A CLMM two-range arbitrage model, not live pool data — not financial advice.";
+        document.getElementById("xarb-out").value = fmt(0, 6);
+      } else {
+        var dirText = res.direction === "buy-a"
+          ? "token A is cheap in the pool: pay token B in and take token A out"
+          : "token A is expensive in the pool: pay token A in and take token B out";
+        var crossText;
+        if (!res.crossed) {
+          crossText = " Your external price sits inside the first range, so the trade never crosses: this is tool 77's single-range answer and the second range is untouched.";
+        } else if (res.hitSecondBoundary) {
+          crossText = " The trade crosses the shared edge at ≈ " + fmt(res.boundaryPrice, 6) + " B per A (leg 1: ≈ " + fmt(res.leg1GrossIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg1Out, 6) + " " + res.outToken + " out) and continues into the second range (leg 2: ≈ " + fmt(res.leg2GrossIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg2Out, 6) + " " + res.outToken + " out), but your external price sits beyond the second range's outer edge, so the combined trade stops at that edge — the post-trade spot is the edge, not your price, and a live pool would need a third range to finish aligning.";
+        } else {
+          crossText = " The trade crosses the shared edge at ≈ " + fmt(res.boundaryPrice, 6) + " B per A (leg 1: ≈ " + fmt(res.leg1GrossIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg1Out, 6) + " " + res.outToken + " out) and finishes aligning inside the second range (leg 2: ≈ " + fmt(res.leg2GrossIn, 6) + " " + res.inToken + " in for ≈ " + fmt(res.leg2Out, 6) + " " + res.outToken + " out). The fee is charged on each leg, so crossing costs the fee twice.";
+        }
+        out.textContent = "Model output: the range's spot price is ≈ " + fmt(res.spotPrice, 6) +
+          " B per A against your external price of ≈ " + fmt(res.externalPrice, 6) + " (a gap of ≈ " + fmt(res.priceGapPct, 4) + "%) — " + dirText +
+          ". The price-aligning trade pays ≈ " + fmt(res.grossIn, 6) + " of token " + res.inToken + " in (≈ " + fmt(res.netIn, 6) +
+          " after the fees reach the ranges) and takes ≈ " + fmt(res.amountOut, 6) + " of token " + res.outToken +
+          " out, leaving the price at ≈ " + fmt(res.postTradeSpot, 6) + " B per A." + crossText +
+          " Modelled profit valued in B at your external price: ≈ " + fmt(res.profitInB, 6) +
+          " B — a gap smaller than the combined fees honestly comes out negative. A CLMM two-range arbitrage model over a price you typed — not a live feed, not a found opportunity, not financial advice.";
+        document.getElementById("xarb-out").value = fmt(res.profitInB, 6);
       }
     });
 
