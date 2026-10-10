@@ -3459,7 +3459,20 @@ function clmmQuadSwapExactOut(liquidityStr, lowerStr, upperStr, priceStr, amount
    STARTING spot, the only price that exists before the deposit
    moves it; and the mint buys a share of the invariant, not a
    fixed claim on either token — what that share redeems for
-   depends on the reserves when it is withdrawn. Stableswap pools
+   depends on the reserves when it is withdrawn. Precision: the
+   growth is NOT taken as the float64 difference newD − D — for
+   a deposit tiny next to the pool that difference is a few ulps
+   of D and rounds away (a 1e-9 deposit into 1,000/1,000 came
+   back 0.024% off, wearing a phantom 0.0238% shortfall against
+   the proportional benchmark whose true value is ≈0). Instead
+   δ = newD − D is solved directly, by Newton on the invariant
+   equation differenced against the pre-deposit state,
+   (Ann−1)δ + ((D+δ)³−D³)/(4x′y′) + D³(1/(4x′y′)−1/(4xy))
+   − Ann(depA+depB) = 0 with Ann = 2A, where x′y′ − xy is
+   formed as reserveA·depB + reserveB·depA + depA·depB so no
+   two large reserves are ever subtracted; minted is then
+   supply × δ / D, which matches a 50-digit oracle on that
+   dust deposit to every printed digit. Stableswap pools
    are a generalised design used elsewhere for pegged pairs.
    Educational model only — your reserves, amplification, supply
    and deposits, not live pool data, not a live quote, not
@@ -3480,7 +3493,29 @@ function stableDepositPlan(reserveAStr, reserveBStr, ampStr, totalSupplyStr, dep
   var newReserveA = reserveA + depositA, newReserveB = reserveB + depositB;
   var newD = stableInvariantD(newReserveA, newReserveB, amp);
   if (newD === null || !(newD > D)) return null;
-  var minted = totalSupply * (newD - D) / D;
+  /* Solve the growth δ = newD − D directly (see the header's
+     precision note): Newton on the differenced invariant
+     equation, seeded with the float difference, which is
+     already relatively accurate whenever the deposit is not
+     dust next to the pool. Every term is deposit-scale, so
+     nothing cancels; on any non-finite or non-positive result
+     fall back to the plain difference. */
+  var ann87 = 2 * amp;
+  var prod87 = reserveA * reserveB;
+  var cross87 = reserveA * depositB + reserveB * depositA + depositA * depositB;
+  var newProd87 = prod87 + cross87;
+  var const87 = D * D * D * (-cross87 / (4 * newProd87 * prod87)) - ann87 * (depositA + depositB);
+  var deltaD = newD - D;
+  for (var k = 0; k < 60; k++) {
+    var grown87 = deltaD * (3 * D * D + 3 * D * deltaD + deltaD * deltaD) / (4 * newProd87);
+    var fVal87 = (ann87 - 1) * deltaD + grown87 + const87;
+    var fDer87 = (ann87 - 1) + 3 * (D + deltaD) * (D + deltaD) / (4 * newProd87);
+    var step87 = fVal87 / fDer87;
+    deltaD -= step87;
+    if (Math.abs(step87) <= Math.abs(deltaD) * 1e-15) break;
+  }
+  if (!Number.isFinite(deltaD) || !(deltaD > 0)) deltaD = newD - D;
+  var minted = totalSupply * deltaD / D;
   if (!(minted > 0)) return null;
   var spotB = stableSpotBInA(reserveA, reserveB, amp, D);
   if (!Number.isFinite(spotB) || !(spotB > 0)) return null;

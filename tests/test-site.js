@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=107"));
+check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=108"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v107", html.includes("app.js?v=107"));
+check("app.js cache key bumped to v108", html.includes("app.js?v=108"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -5797,7 +5797,19 @@ check("SDEP rejects zero amp", app.stableDepositPlan("1000", "1000", "0", "2000"
 check("SDEP rejects zero reserve", app.stableDepositPlan("0", "1000", "100", "2000", "1", "1") === null);
 check("SDEP rejects empty input", app.stableDepositPlan("", "1000", "100", "2000", "1", "1") === null);
 check("SDEP rejects non-numeric input", app.stableDepositPlan("1000", "1000", "100", "2000", "abc", "1") === null);
-check("SDEP composes Tool 58 in source", appSrc.includes("function stableDepositPlan") && appSrc.includes("totalSupply * (newD - D) / D") && appSrc.includes("stableSpotBInA(reserveA, reserveB, amp, D)"));
+check("SDEP composes Tool 58 in source", appSrc.includes("function stableDepositPlan") && appSrc.includes("totalSupply * deltaD / D") && appSrc.includes("stableSpotBInA(reserveA, reserveB, amp, D)"));
+/* dust deposits: the growth must be solved, not subtracted — the plain
+   float64 difference newD - D returned a mint 0.024% off for a 1e-9
+   deposit into 1000/1000, with a phantom -0.0238% vs-proportional
+   shortfall whose true value is ~0 (50-digit oracle pins). */
+near("SDEP dust deposit 1e-9 minted matches the oracle",
+  app.stableDepositPlan("1000", "1000", "100", "2000", "0.000000001", "0").minted, 9.999999999999976e-10, 1e-16);
+near("SDEP dust deposit 1e-9 has no phantom shortfall",
+  app.stableDepositPlan("1000", "1000", "100", "2000", "0.000000001", "0").vsProportionalPct, 0, 1e-9);
+near("SDEP dust deposit 1e-6 minted matches the oracle",
+  app.stableDepositPlan("1000", "1000", "100", "2000", "0.000001", "0").minted, 9.999999999975247e-7, 1e-15);
+near("SDEP dust deposit 1e-6 has no phantom shortfall",
+  app.stableDepositPlan("1000", "1000", "100", "2000", "0.000001", "0").vsProportionalPct, 0, 1e-7);
 check("all sdep controls labelled", ["sdep-ra", "sdep-rb", "sdep-amp", "sdep-supply", "sdep-da", "sdep-db", "sdep-out", "sdep-share"].every(id => html.includes(`for="${id}"`)));
 check("sdep tool present in index.html", html.includes('id="sdep-calc"') && html.includes('id="sdep-result"'));
 check("sdep handler wired to its own form", appSrc.includes('getElementById("sdep-calc")') && appSrc.includes('getElementById("sdep-result")'));
