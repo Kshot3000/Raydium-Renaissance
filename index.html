@@ -2072,6 +2072,27 @@
         <button type="submit" class="btn primary">Plan this stableswap deposit</button>
         <p id="sdep-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="swd-calc">
+        <h3>88 · Stableswap withdrawal planner</h3>
+        <p>Tool 87's exit mirror: tools 5 and 7 plan entries and exits for constant-product pools, and a stableswap withdrawal is priced by the invariant itself. Burning a fraction of the LP supply shrinks the invariant D by exactly that fraction — a pro-rata withdrawal scales both reserves by the same factor and D is homogeneous — so burning 200 of 2,000 LP outstanding on balanced 1,000/1,000 reserves at A = 100 pays exactly 100 A and 100 B, the pool's own ratio at no price cost. Taking the whole exit in one token instead walks the spot away from you as it pays out: a single-sided exit pays ≈199.8888 of either token, ≈0.0556% under the pro-rata payout's value at the starting spot (≈194.7223, ≈2.6389% under, at A = 1; ≈199.9978 at A = 5,000). On an unbalanced pool the sides differ — on 1,500/500 reserves at A = 100 the plentiful side costs ≈0.0511% while the scarce side costs ≈0.7010% — and the cost grows with the share burned, because the last of a reserve is the most expensive part of the curve. Burning the entire supply is reported as a full pro-rata drain with no single-sided figure: at an invariant of zero there is no curve left to take one side from. No withdrawal or imbalance fee is modelled: real Curve-style pools may charge one, so a real single-sided exit pays a little less than this shows. Stableswap pools are a generalised design used elsewhere for pegged pairs. Educational model only — your reserves, amplification, supply and burn, not live pool data, not a live quote, not financial advice.</p>
+        <label for="swd-ra">Reserve of token A</label>
+        <input id="swd-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="swd-rb">Reserve of token B</label>
+        <input id="swd-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="swd-amp">Amplification A (pool property, above 0)</label>
+        <input id="swd-amp" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="swd-supply">LP tokens outstanding (total supply)</label>
+        <input id="swd-supply" inputmode="decimal" placeholder="e.g. 2000" autocomplete="off">
+        <label for="swd-burn">LP tokens you burn (above 0, at most the supply)</label>
+        <input id="swd-burn" inputmode="decimal" placeholder="e.g. 200" autocomplete="off">
+        <label for="swd-outa">Token A paid out pro-rata (model)</label>
+        <input id="swd-outa" readonly placeholder="—" autocomplete="off">
+        <label for="swd-outb">Token B paid out pro-rata (model)</label>
+        <input id="swd-outb" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan this stableswap withdrawal</button>
+        <p id="swd-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2099,6 +2120,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=108"></script>
+<script src="app.js?v=109"></script>
 </body>
 </html>

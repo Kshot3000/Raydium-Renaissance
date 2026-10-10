@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=108"));
+check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=109"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1358,7 +1358,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists eighty-seven tools", readme.includes("eighty-seven pool tools") || readme.includes("all eighty-seven"));
+check("README lists eighty-eight tools", readme.includes("eighty-eight pool tools") || readme.includes("all eighty-eight"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2001,8 +2001,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts eighty-seven tools and names the newest tools",
-  appSrc.includes("plus eighty-seven fully") && appSrc.includes("a CLMM four-range price-impact\n   sizer, a CLMM four-range exact-out swap model,\n   and a stableswap deposit planner.\n   These are educational MODELS"));
+check("app.js header counts eighty-eight tools and names the newest tools",
+  appSrc.includes("plus eighty-eight fully") && appSrc.includes("a CLMM four-range exact-out swap model,\n   a stableswap deposit planner, and a stableswap\n   withdrawal planner.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v108", html.includes("app.js?v=108"));
+check("app.js cache key bumped to v109", html.includes("app.js?v=109"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -5816,6 +5816,102 @@ check("sdep handler wired to its own form", appSrc.includes('getElementById("sde
 check("sdep honesty: no imbalance fee modelled and not-live labels", html.includes("No imbalance fee is modelled") && html.includes("not live pool data") && html.includes("not financial advice"));
 check("guide covers stableswap deposits", guide.includes("Deposit into a stable pool in the pool's own ratio"));
 check("README lists tool 87", readme.includes("87. **Stableswap deposit planner**"));
+
+/* ---------- 88 · Stableswap withdrawal planner (SWD) ---------- */
+/* Prototype-verified before these tests were written (clean
+   foreground run on the shipped solvers): burning 200/2000 on
+   balanced 1,000/1,000 @A100 pays exactly 100/100 pro-rata and
+   199.88876683908074 single-sided either way (-0.055616580459627585%
+   vs the pro-rata value); the remaining reserves under all three
+   exits return invariant exactly 1800 = D x (1 - 200/2000). */
+const sw1 = app.stableWithdrawPlan("1000", "1000", "100", "2000", "200");
+check("SWD headline is not null", sw1 !== null && sw1.feasible === true);
+near("SWD headline burn share", sw1.burnSharePct, 10, 1e-12);
+near("SWD headline invariant D", sw1.invariantD, 2000, 1e-9);
+near("SWD headline new D is D shrunk by the burn fraction", sw1.newInvariantD, 1800, 1e-9);
+near("SWD headline pro-rata A", sw1.proOutA, 100, 1e-12);
+near("SWD headline pro-rata B", sw1.proOutB, 100, 1e-12);
+near("SWD headline remaining supply", sw1.remainingSupply, 1800, 1e-12);
+near("SWD headline remaining reserves", sw1.remainingReserveA + sw1.remainingReserveB, 1800, 1e-9);
+near("SWD headline single A", sw1.singleOutA, 199.88876683908074, 1e-9);
+near("SWD headline single B mirrors A on a balanced pool", sw1.singleOutB, 199.88876683908074, 1e-9);
+near("SWD headline single A vs pro-rata value", sw1.singleAVsProRataPct, -0.055616580459627585, 1e-9);
+near("SWD headline single B vs pro-rata value", sw1.singleBVsProRataPct, -0.055616580459627585, 1e-9);
+near("SWD single A remaining reserve", sw1.singleRemainingA, 800.1112331609193, 1e-9);
+near("SWD headline spot is exactly par", sw1.spotBInA, 1, 1e-12);
+near("SWD single A at A1", app.stableWithdrawPlan("1000", "1000", "1", "2000", "200").singleOutA, 194.72226733066418, 1e-9);
+near("SWD single A at A5000", app.stableWithdrawPlan("1000", "1000", "5000", "2000", "200").singleOutA, 199.9977505124599, 1e-9);
+check("SWD single-sided penalty grows as amp falls",
+  app.stableWithdrawPlan("1000", "1000", "1", "2000", "200").singleAVsProRataPct <
+  sw1.singleAVsProRataPct &&
+  sw1.singleAVsProRataPct <
+  app.stableWithdrawPlan("1000", "1000", "5000", "2000", "200").singleAVsProRataPct);
+check("SWD single-sided cost grows with the share burned",
+  app.stableWithdrawPlan("1000", "1000", "100", "2000", "1000").singleAVsProRataPct <
+  sw1.singleAVsProRataPct &&
+  sw1.singleAVsProRataPct <
+  app.stableWithdrawPlan("1000", "1000", "100", "2000", "2").singleAVsProRataPct);
+near("SWD half exit single A", app.stableWithdrawPlan("1000", "1000", "100", "2000", "1000").singleOutA, 967.0563828031054, 1e-9);
+near("SWD 95% exit single A", app.stableWithdrawPlan("1000", "1000", "100", "2000", "1900").singleOutA, 999.9986118844274, 1e-9);
+const swU = app.stableWithdrawPlan("1500", "500", "100", "2000", "200");
+near("SWD unbalanced pro-rata", swU.proOutA + swU.proOutB, 200, 1e-12);
+near("SWD unbalanced spot is tool 76's documented figure", swU.spotBInA, 1.0175352411985896, 1e-12);
+near("SWD unbalanced plentiful single A", swU.singleOutA, 200.77410699820575, 1e-9);
+near("SWD unbalanced scarce single B", swU.singleOutB, 196.03113638927948, 1e-9);
+near("SWD unbalanced plentiful side vs pro-rata", swU.singleAVsProRataPct, -0.05110350279994291, 1e-9);
+near("SWD unbalanced scarce side vs pro-rata", swU.singleBVsProRataPct, -0.701013097378711, 1e-9);
+check("SWD plentiful side is cheaper than the scarce side", swU.singleAVsProRataPct > swU.singleBVsProRataPct);
+const swM = app.stableWithdrawPlan("500", "1500", "100", "2000", "200");
+near("SWD mirrored pool swaps the side costs", swM.singleAVsProRataPct, swU.singleBVsProRataPct, 1e-9);
+near("SWD mirrored pool swaps the single outs", swM.singleOutB, swU.singleOutA, 1e-9);
+/* sweeps: pro-rata always pays the burn fraction of both reserves,
+   newD is always D x (1 - fraction), singles always consolidate
+   more of their token than pro-rata yet are always worth less at
+   the starting spot */
+for (const [ra, rb, amp, supply, burn] of [[1000, 1000, 100, 2000, 200], [1500, 500, 100, 2000, 100], [500, 1500, 25, 3000, 999], [2000, 800, 500, 4000, 40], [750, 1250, 5, 1500, 333], [10000, 10000, 1000, 20000, 1]]) {
+  const r = app.stableWithdrawPlan(String(ra), String(rb), String(amp), String(supply), String(burn));
+  const tag = "SWD sweep " + ra + "/" + rb + " @A" + amp + " burn " + burn;
+  check(tag + " feasible", r !== null && r.feasible === true);
+  near(tag + " pro-rata fraction", r.proOutA / ra, burn / supply, 1e-12);
+  near(tag + " newD identity", r.newInvariantD / r.invariantD, 1 - burn / supply, 1e-12);
+  check(tag + " singles consolidate yet cost value", r.singleOutA > r.proOutA && r.singleOutB > r.proOutB && r.singleAVsProRataPct < 0 && r.singleBVsProRataPct < 0);
+  near(tag + " remaining supply", r.remainingSupply, supply - burn, 1e-9);
+}
+/* Tool 87 composition: an in-ratio deposit burned back pro-rata
+   returns the deposit exactly; a single-sided deposit taken back
+   single-sided in the same token returns it exactly; and a
+   pro-rata withdrawal re-deposited into the remaining pool mints
+   back exactly the burned amount */
+const swDep = app.stableDepositPlan("1000", "1000", "100", "2000", "100", "100");
+const swBack = app.stableWithdrawPlan(String(swDep.newReserveA), String(swDep.newReserveB), "100", String(swDep.newTotalSupply), String(swDep.minted));
+near("SWD in-ratio deposit round-trips pro-rata A", swBack.proOutA, 100, 1e-9);
+near("SWD in-ratio deposit round-trips pro-rata B", swBack.proOutB, 100, 1e-9);
+const swDepS = app.stableDepositPlan("1000", "1000", "100", "2000", "100", "0");
+const swBackS = app.stableWithdrawPlan(String(swDepS.newReserveA), String(swDepS.newReserveB), "100", String(swDepS.newTotalSupply), String(swDepS.minted));
+near("SWD single-sided deposit round-trips single-sided A", swBackS.singleOutA, 100, 1e-9);
+const swRe = app.stableDepositPlan(String(swU.remainingReserveA), String(swU.remainingReserveB), "100", String(swU.remainingSupply), String(swU.proOutA), String(swU.proOutB));
+near("SWD pro-rata withdrawal re-deposits to the burn", swRe.minted, 200, 1e-9);
+near("SWD 10x scale singles scale exactly", app.stableWithdrawPlan("10000", "10000", "100", "20000", "2000").singleOutA, sw1.singleOutA * 10, 1e-9);
+const swFull = app.stableWithdrawPlan("1000", "1000", "100", "2000", "2000");
+check("SWD full burn is a pro-rata drain with no single-sided figure",
+  swFull !== null && swFull.feasible === false && swFull.fullExit === true &&
+  swFull.proOutA === 1000 && swFull.proOutB === 1000 && swFull.remainingSupply === 0 &&
+  swFull.singleOutA === null && swFull.singleOutB === null);
+check("SWD rejects burn above supply", app.stableWithdrawPlan("1000", "1000", "100", "2000", "2001") === null);
+check("SWD rejects zero burn", app.stableWithdrawPlan("1000", "1000", "100", "2000", "0") === null);
+check("SWD rejects negative burn", app.stableWithdrawPlan("1000", "1000", "100", "2000", "-5") === null);
+check("SWD rejects zero supply", app.stableWithdrawPlan("1000", "1000", "100", "0", "1") === null);
+check("SWD rejects zero amp", app.stableWithdrawPlan("1000", "1000", "0", "2000", "1") === null);
+check("SWD rejects zero reserve", app.stableWithdrawPlan("0", "1000", "100", "2000", "1") === null);
+check("SWD rejects empty input", app.stableWithdrawPlan("", "1000", "100", "2000", "1") === null);
+check("SWD rejects non-numeric input", app.stableWithdrawPlan("1000", "1000", "100", "2000", "abc") === null);
+check("SWD composes Tool 58 in source", appSrc.includes("function stableWithdrawPlan") && appSrc.includes("stableSolveY(reserveB, reserveA, amp, newD)") && appSrc.includes("stableSpotBInA(reserveA, reserveB, amp, D)"));
+check("all swd controls labelled", ["swd-ra", "swd-rb", "swd-amp", "swd-supply", "swd-burn", "swd-outa", "swd-outb"].every(id => html.includes(`for="${id}"`)));
+check("swd tool present in index.html", html.includes('id="swd-calc"') && html.includes('id="swd-result"'));
+check("swd handler wired to its own form", appSrc.includes('getElementById("swd-calc")') && appSrc.includes('getElementById("swd-result")'));
+check("swd honesty: no withdrawal fee modelled and not-live labels", html.includes("No withdrawal or imbalance fee is modelled") && html.includes("not live pool data") && html.includes("not financial advice"));
+check("guide covers stableswap withdrawals", guide.includes("Leave a stable pool in its own ratio"));
+check("README lists tool 88", readme.includes("88. **Stableswap withdrawal planner**"));
 
 /* ---------- Accessibility guards (global — every tool, present and future) ---------- */
 /* The per-tool "all X controls labelled" checks above only cover the

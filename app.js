@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus eighty-seven fully
+/* Raydium Renaissance hub logic: project filtering plus eighty-eight fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -58,7 +58,8 @@
    four-range swap model, a CLMM four-range
    arbitrage model, a CLMM four-range price-impact
    sizer, a CLMM four-range exact-out swap model,
-   and a stableswap deposit planner.
+   a stableswap deposit planner, and a stableswap
+   withdrawal planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -3541,6 +3542,112 @@ function stableDepositPlan(reserveAStr, reserveBStr, ampStr, totalSupplyStr, dep
   return result;
 }
 
+/* ---------- 88 · Stableswap withdrawal planner ---------- */
+/* Tool 87's exit mirror. Tool 7 plans withdrawals from a
+   constant-product pool and the CLMM tools plan them by range;
+   a stableswap withdrawal is priced by the invariant itself.
+   Burning a fraction f = burn / totalSupply of the LP tokens
+   shrinks the invariant by exactly that fraction,
+     D_new = D * (1 - f),
+   because a pro-rata withdrawal scales both reserves by (1 - f)
+   and D is homogeneous. The three exits off that one fact:
+     pro-rata:      outA = reserveA * f, outB = reserveB * f —
+                    the pool's own ratio, no price paid;
+     single-sided:  the other reserve stays put and tool 58's own
+                    stableSolveY finds the reserve that satisfies
+                    D_new against it — taking everything in one
+                    token walks the spot away from you as it pays
+                    out, the mirror of tool 87's single-sided
+                    deposit costing mint.
+   Both single-sided payouts are struck against the pro-rata
+   payout's value at the pool's STARTING spot (tool 61's own
+   stableSpotBInA), the only price that exists before the exit
+   moves it, and both cost something at every amplification: on
+   balanced 1,000/1,000 reserves with 2,000 LP outstanding,
+   burning 200 (10%) pro-rata pays exactly 100/100, while a
+   single-sided exit pays ≈199.8888 of either token —
+   ≈0.0556% under the pro-rata payout's 200 value at A = 100,
+   ≈194.7223 (≈2.6389% under) at A = 1, and ≈199.9978
+   (≈0.0011% under) at A = 5,000. On an unbalanced pool the two
+   sides cost differently: taking the PLENTIFUL token moves the
+   pool toward balance and is cheap (1,500/500 at A = 100: single
+   A ≈200.7741, ≈0.0511% under the pro-rata value), taking the
+   SCARCE token deepens the imbalance and is dear (single B
+   ≈196.0311, worth ≈0.7010% under). The cost also grows with the
+   share burned — a 95% exit of that balanced pool pays only
+   ≈999.9986 single-sided against a 1,900 pro-rata value —
+   because the last of a reserve is the most expensive part of
+   the curve. Honest edges: NO withdrawal or imbalance fee is
+   modelled — real Curve-style pools may charge one, so a real
+   single-sided exit pays a little less again; and burning the
+   ENTIRE supply returns feasible: false for the single-sided
+   figures (D_new = 0 leaves no curve to solve and no pool to
+   take one side from — the full pro-rata drain of both reserves
+   is still reported, and a sole LP simply keeps both tokens).
+   Stableswap pools are a generalised design used elsewhere for
+   pegged pairs. Educational model only — your reserves,
+   amplification, supply and burn, not live pool data, not a
+   live quote, not financial advice. */
+function stableWithdrawPlan(reserveAStr, reserveBStr, ampStr, totalSupplyStr, burnStr) {
+  var raw = [reserveAStr, reserveBStr, ampStr, totalSupplyStr, burnStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var reserveA = Number(reserveAStr), reserveB = Number(reserveBStr);
+  var amp = Number(ampStr), totalSupply = Number(totalSupplyStr);
+  var burn = Number(burnStr);
+  if (![reserveA, reserveB, amp, totalSupply, burn].every(Number.isFinite)) return null;
+  if (reserveA <= 0 || reserveB <= 0 || amp <= 0 || totalSupply <= 0) return null;
+  if (burn <= 0 || burn > totalSupply) return null;
+  var D = stableInvariantD(reserveA, reserveB, amp);
+  if (D === null || !(D > 0)) return null;
+  var spotB = stableSpotBInA(reserveA, reserveB, amp, D);
+  if (!Number.isFinite(spotB) || !(spotB > 0)) return null;
+  var frac = burn / totalSupply;
+  var newD = D * (1 - frac);
+  var base = {
+    reserveA: reserveA, reserveB: reserveB, amp: amp,
+    totalSupply: totalSupply, burn: burn,
+    burnSharePct: frac * 100, remainingSupply: totalSupply - burn,
+    invariantD: D, newInvariantD: newD, spotBInA: spotB,
+    proOutA: reserveA * frac, proOutB: reserveB * frac,
+    proRataValueA: reserveA * frac + spotB * reserveB * frac
+  };
+  if (burn === totalSupply) {
+    return Object.assign(base, {
+      feasible: false, fullExit: true,
+      remainingReserveA: 0, remainingReserveB: 0,
+      singleOutA: null, singleOutB: null,
+      singleRemainingA: null, singleRemainingB: null,
+      singleAValueA: null, singleBValueA: null,
+      singleAVsProRataPct: null, singleBVsProRataPct: null
+    });
+  }
+  var remSingleA = stableSolveY(reserveB, reserveA, amp, newD);
+  var remSingleB = stableSolveY(reserveA, reserveB, amp, newD);
+  if (!Number.isFinite(remSingleA) || !Number.isFinite(remSingleB)) return null;
+  if (!(remSingleA > 0) || !(remSingleA < reserveA)) return null;
+  if (!(remSingleB > 0) || !(remSingleB < reserveB)) return null;
+  var singleOutA = reserveA - remSingleA;
+  var singleOutB = reserveB - remSingleB;
+  if (!(singleOutA > base.proOutA) || !(singleOutB > base.proOutB)) return null;
+  var result = Object.assign(base, {
+    feasible: true, fullExit: false,
+    remainingReserveA: reserveA - base.proOutA,
+    remainingReserveB: reserveB - base.proOutB,
+    singleOutA: singleOutA, singleOutB: singleOutB,
+    singleRemainingA: remSingleA, singleRemainingB: remSingleB,
+    singleAValueA: singleOutA, singleBValueA: singleOutB * spotB,
+    singleAVsProRataPct: (singleOutA / base.proRataValueA - 1) * 100,
+    singleBVsProRataPct: (singleOutB * spotB / base.proRataValueA - 1) * 100
+  });
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -6514,7 +6621,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -8258,6 +8365,31 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: depositing " + fmt(res.depositA, 4) + " A and " + fmt(res.depositB, 4) + " B grows the invariant from " + fmt(res.invariantD, 4) + " to " + fmt(res.newInvariantD, 4) + ", minting ≈ " + fmt(res.minted, 4) + " LP tokens — ≈ " + fmt(-res.vsProportionalPct, 4) + "% less than the ≈ " + fmt(res.proportionalMinted, 4) + " the same value, struck at the pool's starting spot of " + fmt(res.spotBInA, 4) + " A per B, would mint in the pool's own ratio, because the deposit walks the spot away from you as it lands. The shortfall shrinks as amplification rises: a curve that defends par hard barely taxes imbalance, a low-A curve taxes it like a product curve. Your share after the deposit is ≈ " + fmt(res.shareAfterPct, 4) + "% of " + fmt(res.newTotalSupply, 4) + " LP outstanding. No imbalance fee is modelled — real Curve-style pools charge one on the non-proportional part, so a real deposit this shape mints a little less again. A stableswap deposit model, not a live Raydium quote. Not financial advice.";
         document.getElementById("sdep-out").value = fmt(res.minted, 4);
         document.getElementById("sdep-share").value = fmt(res.shareAfterPct, 4) + "%";
+      }
+    });
+
+    document.getElementById("swd-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = stableWithdrawPlan(
+        document.getElementById("swd-ra").value,
+        document.getElementById("swd-rb").value,
+        document.getElementById("swd-amp").value,
+        document.getElementById("swd-supply").value,
+        document.getElementById("swd-burn").value
+      );
+      var out = document.getElementById("swd-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, an amplification above 0, an LP supply above 0, and a burn above 0 and at most the whole supply.";
+        document.getElementById("swd-outa").value = "";
+        document.getElementById("swd-outb").value = "";
+      } else if (!res.feasible) {
+        out.textContent = "Model output: burning all " + fmt(res.burn, 4) + " LP tokens (100% of the supply) drains the pool pro-rata — " + fmt(res.proOutA, 4) + " A and " + fmt(res.proOutB, 4) + " B, leaving nothing behind. A single-sided figure is not quoted: with the invariant at zero there is no curve left to take one side from, so a sole LP simply keeps both tokens (or swaps elsewhere). No withdrawal fee is modelled. A stableswap withdrawal model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("swd-outa").value = fmt(res.proOutA, 4);
+        document.getElementById("swd-outb").value = fmt(res.proOutB, 4);
+      } else {
+        out.textContent = "Model output: burning " + fmt(res.burn, 4) + " LP tokens (" + fmt(res.burnSharePct, 4) + "% of the supply) shrinks the invariant from " + fmt(res.invariantD, 4) + " to " + fmt(res.newInvariantD, 4) + ". Pro-rata, it pays " + fmt(res.proOutA, 4) + " A and " + fmt(res.proOutB, 4) + " B — the pool's own ratio, worth " + fmt(res.proRataValueA, 4) + " A at the starting spot of " + fmt(res.spotBInA, 4) + " A per B. Taken entirely in A it pays ≈ " + fmt(res.singleOutA, 4) + " A (≈ " + fmt(-res.singleAVsProRataPct, 4) + "% under the pro-rata value), and entirely in B ≈ " + fmt(res.singleOutB, 4) + " B (≈ " + fmt(-res.singleBVsProRataPct, 4) + "% under, struck at the same spot), because a single-sided exit walks the spot away from you as it pays out — cheaper in the plentiful token, dearer in the scarce one, and dearer the larger the share burned. No withdrawal or imbalance fee is modelled — real Curve-style pools may charge one, so a real single-sided exit pays a little less again. A stableswap withdrawal model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("swd-outa").value = fmt(res.proOutA, 4);
+        document.getElementById("swd-outb").value = fmt(res.proOutB, 4);
       }
     });
 
