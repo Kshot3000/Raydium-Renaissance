@@ -1713,6 +1713,23 @@
         <button type="submit" class="btn primary">Find the tolerance band</button>
         <p id="wband-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="sband-calc">
+        <h3>76 · Stableswap IL tolerance band</h3>
+        <p>Tools 21, 30 and 75 ask how far the price can move before the fees you have earned stop covering the loss — for a 50/50 constant-product pool, a CLMM position and a weighted pool; this asks it for the stableswap pools of tool 58, with the hurdle taken from tool 61's own depeg-loss calculator at every candidate price. The fees here are the whole pool's, in token A: 64.2757 A of fees on a balanced 1,000/1,000 pool at A = 100 covers token B falling to exactly 0.90 A — tool 61's own depeg figure — and rising to ≈1.1020 A. The band is centred on the pool's own starting spot, not on 1: an unbalanced pool spots B somewhere else before any move, and its band is measured from there. The honest asymmetry mirrors tool 75's: as B's price falls toward zero the hurdle approaches the whole token A reserve and never passes it, so fees at or above that reserve cover any fall at all — while the upside hurdle grows without bound, and a higher amplification narrows the band (at 50 A of fees: ≈0.7051–1.3450 at A = 1, ≈0.9179–1.0835 at A = 100, ≈0.9456–1.0545 at A = 5,000), because a curve that defends par longer drains further. Stableswap pools are a generalised design used elsewhere for pegged pairs. Educational model only — your reserves, amplification and fees inputs; not live pool data, not a live quote, not financial advice.</p>
+        <label for="sband-ra">Pool reserve of token A</label>
+        <input id="sband-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sband-rb">Pool reserve of token B</label>
+        <input id="sband-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="sband-amp">Amplification A (above 0)</label>
+        <input id="sband-amp" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="sband-fees">Fees earned by the whole pool so far, in token A (0 or more)</label>
+        <input id="sband-fees" inputmode="decimal" placeholder="e.g. 50" autocomplete="off">
+        <label for="sband-out">Token B price band your fees cover, in A per B (model)</label>
+        <input id="sband-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Find the tolerance band</button>
+        <p id="sband-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1740,6 +1757,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=93"></script>
+<script src="app.js?v=94"></script>
 </body>
 </html>

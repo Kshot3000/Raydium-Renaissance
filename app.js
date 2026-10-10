@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus seventy-five fully
+/* Raydium Renaissance hub logic: project filtering plus seventy-six fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -48,8 +48,9 @@
    required-volume planner, a weighted-pool
    break-even days calculator, a stableswap
    break-even days calculator, a curve
-   comparison exact-out model, and a weighted-pool
-   IL tolerance band.
+   comparison exact-out model, a weighted-pool
+   IL tolerance band, and a stableswap IL
+   tolerance band.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -5083,8 +5084,124 @@ function weightedIlBand(weightAPctStr, depositStr, feesStr) {
   });
 }
 
+/* ---------- 76 · Stableswap IL tolerance band (Tool 61 inverted) ---------- */
+/* Tools 21, 30 and 75 ask "how far can the price move before the
+   fees I have earned stop covering the loss?" for a 50/50 pool, a
+   CLMM position and a weighted pool; the stableswap pools of
+   Tool 58 had no such band. The hurdle here is Tool 61's own
+   depeg loss in token A — the whole pool's shortfall against
+   holding, at the external price of token B — so both edges are
+   found by geometric bisection directly on stableDepegLoss, and
+   the loss at each reported edge equals the fees fed in.
+   Headline: 64.275666 A of fees on a balanced 1,000/1,000 pool at
+   A = 100 covers token B falling to exactly 0.90 A (Tool 61's
+   own depeg figure) and rising to ≈1.1020394289 A. The band is
+   centred on the pool's own starting spot, not on 1: an
+   unbalanced 1,500/500 pool at A = 100 spots B at
+   ≈1.0175352412 A before any move, and its band is measured
+   from there. The band's honest asymmetry is the mirror of
+   Tool 75's: as B's price falls toward zero the hurdle
+   approaches the whole token A reserve and never passes it
+   (the pool ends up holding almost nothing but the worthless
+   side, and holding loses exactly that same A side), so fees
+   at or above the A reserve cover ANY fall, reported as
+   down-unbounded; as B's price rises the hurdle grows without
+   bound (≈ price × reserveB — holding's B side keeps
+   appreciating while the pool has sold almost all of its B),
+   so every finite fee total has a finite upper edge. The band
+   narrows as the amplification rises at fixed fees (at 50 A of
+   fees on the balanced pool: ≈0.7051–1.3450 at A = 1,
+   ≈0.9179–1.0835 at A = 100, ≈0.9456–1.0545 at A = 5,000),
+   because a higher A defends par longer and drains further.
+   Zero fees collapse the band to exactly the starting spot on
+   both sides, honestly. The fees are the WHOLE pool's, in
+   token A, assumed already earned and held outside the pool —
+   an individual LP's band is this one scaled by their share
+   only if both the loss and the fees are scaled, which is
+   Tool 69's accounting. No swap fees are modelled inside
+   Tool 61's drain (it says so itself), so live edges sit
+   slightly wider than these. Stableswap pools are a
+   generalised design used elsewhere for pegged pairs.
+   Educational model only — your reserves, amplification and
+   fees inputs; not live pool data, not a live quote, not
+   financial advice. */
+function stableIlBand(reserveAStr, reserveBStr, ampStr, feesStr) {
+  var raw = [reserveAStr, reserveBStr, ampStr, feesStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var reserveA = Number(reserveAStr), reserveB = Number(reserveBStr);
+  var amp = Number(ampStr), fees = Number(feesStr);
+  if (![reserveA, reserveB, amp, fees].every(Number.isFinite)) return null;
+  if (reserveA <= 0 || reserveB <= 0 || amp <= 0 || fees < 0) return null;
+  var D = stableInvariantD(reserveA, reserveB, amp);
+  if (D === null || !(D > 0)) return null;
+  var spot = stableSpotBInA(reserveA, reserveB, amp, D);
+  if (!Number.isFinite(spot) || !(spot > 0)) return null;
+  function hurdle(p) {
+    var d = stableDepegLoss(reserveAStr, reserveBStr, ampStr, String(p));
+    return d === null ? null : -d.lossA;
+  }
+  var poolValueA = reserveA + spot * reserveB;
+  var base = {
+    reserveA: reserveA, reserveB: reserveB, amp: amp, feesEarned: fees,
+    startSpotB: spot, poolValueA: poolValueA,
+    feePctOfPoolValue: fees / poolValueA * 100,
+    maxDownHurdle: reserveA,
+    maxDownHurdlePctOfPoolValue: reserveA / poolValueA * 100
+  };
+  if (fees === 0) {
+    return Object.assign(base, {
+      priceHigh: spot, priceLow: spot, moveUpPct: 0, moveDownPct: 0,
+      downUnbounded: false
+    });
+  }
+  /* upper edge: the hurdle grows without bound as B's price
+     rises, so a doubling bracket always finds it; bisect
+     geometrically on Tool 61 itself */
+  var lo = spot, hi = spot * 2, hHi = hurdle(hi), guard = 0;
+  while ((hHi === null || hHi < fees) && guard++ < 300 && hi < 1e300) { lo = hi; hi *= 2; hHi = hurdle(hi); }
+  if (hHi === null || hHi < fees) return null;
+  for (var a = 0; a < 90; a++) {
+    var mid = Math.sqrt(lo * hi);
+    var hm = hurdle(mid);
+    if (hm === null) return null;
+    if (hm < fees) lo = mid; else hi = mid;
+  }
+  var priceHigh = Math.sqrt(lo * hi);
+  var result = Object.assign(base, {
+    priceHigh: priceHigh, moveUpPct: (priceHigh / spot - 1) * 100
+  });
+  /* lower edge: the hurdle caps at the whole token A reserve as
+     B's price falls to zero, so fees at or above the reserve
+     cover any fall */
+  if (fees >= reserveA) {
+    return Object.assign(result, { downUnbounded: true, priceLow: null, moveDownPct: null });
+  }
+  var hiD = spot, loD = spot / 2, hLo = hurdle(loD); guard = 0;
+  while ((hLo === null || hLo < fees) && guard++ < 300 && loD > 1e-300) { hiD = loD; loD /= 2; hLo = hurdle(loD); }
+  if (hLo === null || hLo < fees) return null;
+  for (var b = 0; b < 90; b++) {
+    var midD = Math.sqrt(loD * hiD);
+    var hmd = hurdle(midD);
+    if (hmd === null) return null;
+    if (hmd < fees) hiD = midD; else loD = midD;
+  }
+  var priceLow = Math.sqrt(loD * hiD);
+  var out = Object.assign(result, {
+    downUnbounded: false, priceLow: priceLow,
+    moveDownPct: (1 - priceLow / spot) * 100
+  });
+  var fields = Object.keys(out);
+  for (var j = 0; j < fields.length; j++) {
+    var v = out[fields[j]];
+    if (typeof v === "number" && !Number.isFinite(v)) return null;
+  }
+  return out;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -7340,6 +7457,30 @@ if (typeof document !== "undefined") {
       } else {
         out.textContent = "Model output: at a " + fmt(res.weightAPct, 2) + "% weight on token A, $" + fmt(res.feesEarned, 4) + " of fees on a $" + fmt(res.deposit, 2) + " deposit covers price multiples from ≈ " + fmt(res.priceRatioLow, 4) + "x (−" + fmt(res.moveDownPct, 2) + "%) to ≈ " + fmt(res.priceRatioHigh, 4) + "x (+" + fmt(res.moveUpPct, 2) + "%). The band is not symmetric: the downside hurdle caps at ≈ $" + fmt(res.maxDownHurdle, 4) + " (" + fmt(res.maxDownHurdlePctOfDeposit, 2) + "% of the deposit) while the upside hurdle grows without bound, and the weight sets both shapes. At either edge the fees exactly equal tool 60's hurdle. A weighted-pool IL tolerance band model, not a live Raydium quote. Not financial advice.";
         document.getElementById("wband-out").value = fmt(res.priceRatioLow, 4) + "x to " + fmt(res.priceRatioHigh, 4) + "x";
+      }
+    });
+
+    document.getElementById("sband-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = stableIlBand(
+        document.getElementById("sband-ra").value,
+        document.getElementById("sband-rb").value,
+        document.getElementById("sband-amp").value,
+        document.getElementById("sband-fees").value
+      );
+      var out = document.getElementById("sband-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, an amplification above 0, and fees earned of 0 or more in token A.";
+        document.getElementById("sband-out").value = "";
+      } else if (res.feesEarned === 0) {
+        out.textContent = "Model output: with 0 A of fees earned there is nothing to cover any depeg loss, so the tolerance band collapses to exactly the pool's starting spot of " + fmt(res.startSpotB, 4) + " A per B on both sides — any move at all leaves the pool behind holding. A stableswap IL tolerance band model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("sband-out").value = fmt(res.startSpotB, 4) + " A to " + fmt(res.startSpotB, 4) + " A per B";
+      } else if (res.downUnbounded) {
+        out.textContent = "Model output: " + fmt(res.feesEarned, 4) + " A of fees earned by this pool covers token B rising to ≈ " + fmt(res.priceHigh, 4) + " A (+" + fmt(res.moveUpPct, 2) + "% from the starting spot of " + fmt(res.startSpotB, 4) + " A per B), and covers ANY fall: the worst possible downside hurdle is ≈ " + fmt(res.maxDownHurdle, 4) + " A (" + fmt(res.maxDownHurdlePctOfPoolValue, 2) + "% of the pool's value at its starting spot — the whole token A reserve), because as token B's price falls toward zero the pool ends up holding almost nothing but B, and holding loses exactly that same A side. A stableswap IL tolerance band model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("sband-out").value = "any fall to " + fmt(res.priceHigh, 4) + " A per B";
+      } else {
+        out.textContent = "Model output: " + fmt(res.feesEarned, 4) + " A of fees earned by this pool covers token B prices from ≈ " + fmt(res.priceLow, 4) + " A (−" + fmt(res.moveDownPct, 2) + "%) to ≈ " + fmt(res.priceHigh, 4) + " A (+" + fmt(res.moveUpPct, 2) + "%) around its starting spot of " + fmt(res.startSpotB, 4) + " A per B. The band is measured from the pool's own spot, not from 1, and it is not symmetric: the downside hurdle caps at ≈ " + fmt(res.maxDownHurdle, 4) + " A (the whole token A reserve) while the upside hurdle grows without bound, and the amplification narrows the band as it rises. At either edge the fees exactly equal tool 61's depeg loss. A stableswap IL tolerance band model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("sband-out").value = fmt(res.priceLow, 4) + " A to " + fmt(res.priceHigh, 4) + " A per B";
       }
     });
 
