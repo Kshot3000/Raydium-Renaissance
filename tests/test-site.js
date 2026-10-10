@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=90"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=91"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1357,7 +1357,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists seventy-two tools", readme.includes("seventy-two pool tools") || readme.includes("all seventy-two"));
+check("README lists seventy-three tools", readme.includes("seventy-three pool tools") || readme.includes("all seventy-three"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2000,8 +2000,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts seventy-two tools and names the weighted-pool break-even days calculator",
-  appSrc.includes("plus seventy-two fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, and a weighted-pool\n   break-even days calculator.\n   These are educational MODELS"));
+check("app.js header counts seventy-three tools and names the stableswap break-even days calculator",
+  appSrc.includes("plus seventy-three fully") && appSrc.includes("CLMM single-sided zap-in\n   planner from token B, a CLMM single-sided zap-out\n   planner to token B, a single-sided zap-in planner\n   from token B, a single-sided zap-out planner\n   to token B, a fee compounding calculator, a\n   loss-versus-rebalancing round-trip calculator, a\n   pool seeding / initial-liquidity planner, a CLMM range\n   probability calculator, a weighted-pool swap model, a\n   CLMM range-order (limit-order) planner, a stableswap\n   swap model, a stableswap exact-out swap model, a\n   weighted-pool impermanent-loss calculator, a\n   stableswap depeg-loss calculator, a weighted-pool\n   arbitrage model, a weighted-pool exact-out\n   swap model, a weighted-pool price-impact\n   sizer, a stableswap arbitrage model, a\n   stableswap price-impact sizer, a curve\n   comparison model, a weighted-pool net\n   return calculator, a stableswap net\n   return calculator, a weighted-pool\n   required-volume planner, a stableswap\n   required-volume planner, a weighted-pool\n   break-even days calculator, and a stableswap\n   break-even days calculator.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -4330,6 +4330,108 @@ check("wbed handler wired to its own form", appSrc.includes('getElementById("wbe
 check("wbed honesty: mirror-half and not-live labels", html.includes("breaks even in half the days") && html.includes("not live pool data, not a live quote, not financial advice"));
 check("guide covers weighted break-even days", guide.includes("the weight sets the hurdle before the days are counted"));
 check("README lists tool 72", readme.includes("72. **Weighted-pool break-even days calculator**"));
+
+/* ---------- 73 · Stableswap break-even days calculator ---------- */
+const sbed = app.stableBreakEvenDays("1000", "1000", "100", "0.9", "10", "10000", 25);
+check("SBED headline exists", sbed !== null);
+near("SBED headline hurdle (Tool 69's figure)", sbed.feesNeeded, 6.42756656932977, 1e-9);
+near("SBED headline hold value (10% of Tool 61's)", sbed.holdValueA, 190, 1e-9);
+near("SBED headline LP value (10% of Tool 61's)", sbed.lpValueA, 183.57243343067023, 1e-9);
+near("SBED headline deposit value", sbed.depositValueA, 200, 1e-9);
+near("SBED headline loss % (Tool 61's figure)", sbed.lossPct, -3.3829297733314667, 1e-9);
+near("SBED headline daily fees", sbed.dailyFees, 2.5, 1e-12);
+near("SBED headline days", sbed.daysToBreakEven, 2.571026627731908, 1e-9);
+check("SBED headline share/fee reported", sbed.sharePct === 10 && sbed.feeBps === 25 && sbed.feePct === 0.25);
+/* Composition: hurdle = Tool 61's shortfall pro-rata = Tool 69's
+   feesNeeded verbatim, across a sweep, so days can never drift */
+{
+  const combos = [
+    ["1000", "1000", "100", "0.9", "10", "10000", 25],
+    ["1000", "1000", "1", "0.9", "25", "5000", 30],
+    ["1000", "1000", "5000", "0.95", "5", "7777", 100],
+    ["2000", "500", "50", "0.85", "20", "5000", 30],
+    ["500", "1500", "200", "1.1", "50", "123456", 5],
+    ["1000", "1000", "100", "1.1", "10", "10000", 25],
+    ["750", "1250", "10", "0.8", "100", "999", 0]
+  ];
+  for (const [ra, rb, amp, price, share, vol, fee] of combos) {
+    const x = app.stableBreakEvenDays(ra, rb, amp, price, share, vol, fee);
+    const dep = app.stableDepegLoss(ra, rb, amp, price);
+    const snet = app.stableNetReturn(ra, rb, amp, price, share, "0");
+    check("SBED composes Tools 61+69 @" + amp + "/" + price + "/" + share, x !== null && dep !== null && snet !== null &&
+      x.feesNeeded === snet.feesNeeded && x.holdValueA === snet.holdValueA && x.lpValueA === snet.lpValueA &&
+      x.lossPct === dep.lossPct && x.newReserveA === dep.newReserveA && x.newReserveB === dep.newReserveB);
+    if (x !== null && x.dailyFees > 0) {
+      near("SBED days = hurdle / daily fees @" + amp + "/" + price + "/" + share, x.daysToBreakEven * x.dailyFees, x.feesNeeded, 1e-6);
+    }
+  }
+}
+/* Exact inverse of Tool 71: feeding its required volume for a target
+   day count back through this calculator returns that count */
+{
+  for (const days of ["1", "7", "30", "90", "365"]) {
+    const srv = app.stableRequiredVolume("1000", "1000", "100", "0.9", "10", 25, days);
+    const back = app.stableBreakEvenDays("1000", "1000", "100", "0.9", "10", String(srv.requiredVolumePerDay), 25);
+    near("SBED inverts Tool 71 @" + days + "d", back.daysToBreakEven, Number(days), 1e-6);
+  }
+}
+/* Tool 69 settles exactly even when fed the fees this count earns */
+{
+  const earned = sbed.dailyFees * sbed.daysToBreakEven;
+  const settled = app.stableNetReturn("1000", "1000", "100", "0.9", "10", String(earned));
+  check("SBED fees over the count settle Tool 69 even", settled !== null && settled.verdict === "even");
+  near("SBED earned fees = hurdle", earned, sbed.feesNeeded, 1e-9);
+}
+/* Share invariance: hurdle and daily fees both scale with the share,
+   so the day count is identical at every share */
+{
+  let first = null;
+  for (const s of ["5", "10", "25", "100"]) {
+    const x = app.stableBreakEvenDays("1000", "1000", "100", "0.9", s, "10000", 25);
+    if (first === null) first = x;
+    near("SBED days share-invariant @" + s + "%", x.daysToBreakEven, first.daysToBreakEven, 1e-9);
+    near("SBED hurdle scales with share @" + s + "%", x.feesNeeded, first.feesNeeded * (Number(s) / 5), 1e-9);
+  }
+}
+/* Amplification ordering: a higher A defends par longer, drains
+   further, and so takes more days at the same rate */
+near("SBED days at A=1", app.stableBreakEvenDays("1000", "1000", "1", "0.9", "10", "10000", 25).daysToBreakEven, 0.21009390949783438, 1e-9);
+near("SBED days at A=5000", app.stableBreakEvenDays("1000", "1000", "5000", "0.9", "10", "10000", 25).daysToBreakEven, 3.7655692173934883, 1e-9);
+check("SBED days grow with amplification",
+  app.stableBreakEvenDays("1000", "1000", "1", "0.9", "10", "10000", 25).daysToBreakEven <
+  sbed.daysToBreakEven &&
+  sbed.daysToBreakEven <
+  app.stableBreakEvenDays("1000", "1000", "5000", "0.9", "10", "10000", 25).daysToBreakEven);
+/* Depeg severity ordering and the reverse drain above the spot */
+check("SBED days grow with depeg severity",
+  app.stableBreakEvenDays("1000", "1000", "100", "0.99", "10", "10000", 25).daysToBreakEven <
+  app.stableBreakEvenDays("1000", "1000", "100", "0.95", "10", "10000", 25).daysToBreakEven &&
+  app.stableBreakEvenDays("1000", "1000", "100", "0.95", "10", "10000", 25).daysToBreakEven <
+  app.stableBreakEvenDays("1000", "1000", "100", "0.8", "10", "10000", 25).daysToBreakEven);
+near("SBED reverse drain hurdle @1.1", app.stableBreakEvenDays("1000", "1000", "100", "1.1", "10", "10000", 25).feesNeeded, 6.268172217424308, 1e-9);
+near("SBED reverse drain days @1.1", app.stableBreakEvenDays("1000", "1000", "100", "1.1", "10", "10000", 25).daysToBreakEven, 2.5072688869697233, 1e-9);
+/* Scaling: doubling volume halves the days */
+near("SBED doubling volume halves days",
+  app.stableBreakEvenDays("1000", "1000", "100", "0.9", "10", "20000", 25).daysToBreakEven * 2, sbed.daysToBreakEven, 1e-9);
+/* Honest edges: peg holds -> honestly 0 even at zero fee/volume; real
+   hurdle with no daily fees -> Infinity, never a made-up count */
+check("SBED peg holds is 0 days", app.stableBreakEvenDays("1000", "1000", "100", "1", "10", "10000", 25).daysToBreakEven === 0);
+check("SBED peg holds at zero fee and zero volume is still 0", app.stableBreakEvenDays("1000", "1000", "100", "1", "10", "0", 0).daysToBreakEven === 0);
+check("SBED real hurdle with zero volume never breaks even", app.stableBreakEvenDays("1000", "1000", "100", "0.9", "10", "0", 25).daysToBreakEven === Infinity);
+check("SBED real hurdle with zero fee tier never breaks even", app.stableBreakEvenDays("1000", "1000", "100", "0.9", "10", "10000", 0).daysToBreakEven === Infinity);
+check("SBED rejects bad reserves/amp/price via Tool 61", app.stableBreakEvenDays("0", "1000", "100", "0.9", "10", "10000", 25) === null && app.stableBreakEvenDays("1000", "", "100", "0.9", "10", "10000", 25) === null && app.stableBreakEvenDays("1000", "1000", "0", "0.9", "10", "10000", 25) === null && app.stableBreakEvenDays("1000", "1000", "100", "0", "10", "10000", 25) === null && app.stableBreakEvenDays("1000", "1000", "100", "-0.9", "10", "10000", 25) === null);
+check("SBED rejects bad share", app.stableBreakEvenDays("1000", "1000", "100", "0.9", "0", "10000", 25) === null && app.stableBreakEvenDays("1000", "1000", "100", "0.9", "101", "10000", 25) === null && app.stableBreakEvenDays("1000", "1000", "100", "0.9", "", "10000", 25) === null && app.stableBreakEvenDays("1000", "1000", "100", "0.9", "abc", "10000", 25) === null);
+check("SBED rejects bad volume", app.stableBreakEvenDays("1000", "1000", "100", "0.9", "10", "-1", 25) === null && app.stableBreakEvenDays("1000", "1000", "100", "0.9", "10", "", 25) === null && app.stableBreakEvenDays("1000", "1000", "100", "0.9", "10", "abc", 25) === null && app.stableBreakEvenDays("1000", "1000", "100", "0.9", "10", null, 25) === null);
+check("SBED rejects bad fee tier", app.stableBreakEvenDays("1000", "1000", "100", "0.9", "10", "10000", 2.5) === null && app.stableBreakEvenDays("1000", "1000", "100", "0.9", "10", "10000", -1) === null && app.stableBreakEvenDays("1000", "1000", "100", "0.9", "10", "10000", 10001) === null && app.stableBreakEvenDays("1000", "1000", "100", "0.9", "10", "10000", "") === null);
+check("SBED composes Tool 61 in source", appSrc.includes("function stableBreakEvenDays") && appSrc.includes("var dailyFees = volume * (fee / 10000) * share;"));
+check("all sbed controls labelled",
+  ["sbed-ra", "sbed-rb", "sbed-amp", "sbed-price", "sbed-share", "sbed-volume", "sbed-fee", "sbed-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("sbed tool present in index.html", html.includes('id="sbed-calc"') && html.includes('id="sbed-result"'));
+check("sbed handler wired to its own form", appSrc.includes('getElementById("sbed-calc")') && appSrc.includes('getElementById("sbed-result")'));
+check("sbed honesty: share-invariance and not-live labels", html.includes("the day count does not depend on your share") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers stableswap break-even days", guide.includes("the amplification sets the hurdle before the days are counted"));
+check("README lists tool 73", readme.includes("73. **Stableswap break-even days calculator**"));
 
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);

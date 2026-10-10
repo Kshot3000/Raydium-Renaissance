@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus seventy-two fully
+/* Raydium Renaissance hub logic: project filtering plus seventy-three fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -45,7 +45,8 @@
    return calculator, a stableswap net
    return calculator, a weighted-pool
    required-volume planner, a stableswap
-   required-volume planner, and a weighted-pool
+   required-volume planner, a weighted-pool
+   break-even days calculator, and a stableswap
    break-even days calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
@@ -4831,8 +4832,95 @@ function weightedBreakEvenDays(weightAPctStr, priceRatioStr, depositStr, volumeS
   };
 }
 
+/* ---------- 73 · Stableswap break-even days calculator (Tools 61/69 + 3) ---------- */
+/* Tools 15, 40 and 72 ask "at this daily volume, how many days
+   until the fees cover the break-even hurdle?" for a CLMM
+   position, a 50/50 constant-product pool and a weighted pool;
+   stableswap pools had the inverse question (Tool 71's required
+   volume) but not this one. The hurdle is Tool 69's own
+   feesNeeded — your share of Tool 61's depeg shortfall (hold
+   value minus LP value after arbitrage has rebalanced the pool
+   to your external price of token B, both in token A terms) —
+   and the fee rate is Tool 3's own formula with the share taken
+   directly, the way Tools 69/71 take it:
+     your fees per day = volume * (feeBps / 10000) * share
+     days              = hurdle / daily fees
+   so the two stableswap tools are exact inverses: feeding Tool
+   71's required daily volume for a 30-day target back through
+   this calculator returns exactly 30 days (asserted in tests at
+   1, 7, 30, 90 and 365 days). Headline: on balanced 1,000/1,000
+   reserves at A = 100 with B at 0.90, a 10% share owes
+   ≈6.4276 A; at 10,000 A of pool volume a day and a 25 bps tier
+   the share earns 2.5 A a day, so break-even takes ≈2.5710
+   days. The amplification sets the hurdle before volume enters
+   it, exactly as in Tools 61/69/71: at that same rate the count
+   runs ≈0.2101 days at A = 1 and ≈3.7656 days at A = 5,000,
+   because a higher A defends par longer and drains further. One
+   honest shape, the mirror of Tool 71's: the day count does NOT
+   depend on your share — a bigger share owes a bigger slice of
+   the hurdle but takes the same bigger slice of every fee, so
+   the two cancel (asserted identical at 5%, 10%, 25% and 100%
+   shares, while the hurdle itself scales with the share). A
+   price above the starting spot runs the same count on Tool
+   61's reverse drain (B at 1.1: hurdle ≈6.2682 A, ≈2.5073 days
+   at the headline rate). Two honest edges, mirroring Tools
+   40/72: if the peg holds at your price there is no shortfall,
+   so the answer is honestly 0 days even at zero volume or a
+   zero fee tier (a hurdle at or below Tool 69's own verdict
+   tolerance counts as none); and with a real hurdle but no
+   daily fees (zero volume or a 0 bps tier) the answer is
+   Infinity — never breaks even at that rate — not a large
+   made-up number. Validation rides on the source tools: the
+   reserves, amplification and price are rejected exactly as
+   Tool 61 rejects them (an unbracketable price is rejected
+   there too), the share must lie in (0, 100] exactly as Tool
+   69 requires, and the fee tier must be an integer 0..10000
+   bps exactly as Tool 3 requires. The day count assumes the
+   volume, tier, share, price and amplification all hold still
+   — in a live pool none of them will, and a further depeg
+   reopens the hurdle. Stableswap pools are a generalised
+   design used elsewhere for pegged pairs, modelled for
+   comparison. Educational model only — your reserves,
+   amplification, depeg price, share, volume and fee inputs,
+   with amounts in token A terms; not live pool data, not a
+   live quote, not financial advice. */
+function stableBreakEvenDays(reserveAStr, reserveBStr, ampStr, priceBStr, sharePctStr, volumeStr, feeBps) {
+  var raw = [reserveAStr, reserveBStr, ampStr, priceBStr, sharePctStr, volumeStr, feeBps];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var volume = Number(volumeStr), sharePct = Number(sharePctStr), fee = Number(feeBps);
+  if (!Number.isFinite(volume) || volume < 0) return null;
+  if (!Number.isFinite(sharePct) || sharePct <= 0 || sharePct > 100) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 10000) return null;
+  var dep = stableDepegLoss(reserveAStr, reserveBStr, ampStr, priceBStr);
+  if (dep === null) return null;
+  var share = sharePct / 100;
+  var holdValueA = share * dep.holdValueA;
+  var lpValueA = share * dep.lpValueA;
+  var feesNeeded = holdValueA - lpValueA;
+  var dailyFees = volume * (fee / 10000) * share;
+  var days;
+  if (feesNeeded <= 1e-9 * Math.max(1, holdValueA)) days = 0;
+  else if (dailyFees > 0) days = feesNeeded / dailyFees;
+  else days = Infinity;
+  var depositValueA = share * (dep.reserveA + dep.startSpotB * dep.reserveB);
+  return {
+    reserveA: dep.reserveA, reserveB: dep.reserveB, amp: dep.amp, priceB: dep.priceB,
+    startSpotB: dep.startSpotB, endSpotB: dep.endSpotB,
+    newReserveA: dep.newReserveA, newReserveB: dep.newReserveB,
+    sharePct: sharePct, depositValueA: depositValueA,
+    holdValueA: holdValueA, lpValueA: lpValueA, lossPct: dep.lossPct,
+    feesNeeded: feesNeeded,
+    feesNeededPctOfDeposit: depositValueA > 0 ? feesNeeded / depositValueA * 100 : 0,
+    dailyFees: dailyFees, monthlyFees: dailyFees * 30,
+    feeBps: fee, feePct: fee / 100,
+    daysToBreakEven: days
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -7013,6 +7101,33 @@ if (typeof document !== "undefined") {
       } else {
         out.textContent = "Model output: at a " + fmt(res.weightAPct, 2) + "% weight on token A and a price multiple of " + fmt(res.priceRatio, 4) + ", the position is ≈ $" + fmt(res.feesNeeded, 4) + " behind holding (impermanent loss " + fmt(res.ilPct, 2) + "%). At ≈ $" + fmt(res.dailyFees, 4) + " of fees a day to you (your " + fmt(res.sharePct, 4) + "% share of a " + fmt(res.feeBps, 0) + " bps tier), that takes ≈ " + fmt(res.daysToBreakEven, 2) + " days. The weight moves the hurdle before volume enters it — and the mirror move (a " + fmt(res.weightBPct, 2) + "% weight on a token that moved the other way by the reciprocal multiple) carries the same impermanent-loss percentage but a hurdle scaled by its hold value. A weighted-pool break-even days model, not a live Raydium quote — it assumes the volume, tier, share and price all hold still. Not financial advice.";
         document.getElementById("wbed-out").value = fmt(res.daysToBreakEven, 2);
+      }
+    });
+
+    document.getElementById("sbed-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = stableBreakEvenDays(
+        document.getElementById("sbed-ra").value,
+        document.getElementById("sbed-rb").value,
+        document.getElementById("sbed-amp").value,
+        document.getElementById("sbed-price").value,
+        document.getElementById("sbed-share").value,
+        document.getElementById("sbed-volume").value,
+        document.getElementById("sbed-fee").value
+      );
+      var out = document.getElementById("sbed-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, an amplification above 0, an external price for token B above 0, your share of the pool (above 0 and at most 100%), a daily pool volume of 0 or more in token A, and a fee tier from 0 to 10,000 bps.";
+        document.getElementById("sbed-out").value = "";
+      } else if (res.daysToBreakEven === 0) {
+        out.textContent = "Model output: at an external price of " + fmt(res.priceB, 4) + " A per B the peg holds against the pool's own starting spot of " + fmt(res.startSpotB, 4) + ", so there is no depeg shortfall to cover and the position breaks even in honestly 0 days — not a small number — whatever the volume or fee tier. A stableswap break-even days model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("sbed-out").value = "0";
+      } else if (!isFinite(res.daysToBreakEven)) {
+        out.textContent = "Model output: the depeg leaves your share ≈ " + fmt(res.feesNeeded, 4) + " A behind holding (depeg loss " + fmt(res.lossPct, 2) + "% on the pool), but at this volume and fee tier your daily fees are 0 A, so it never breaks even at that rate. A stableswap break-even days model, not a live Raydium quote. Not financial advice.";
+        document.getElementById("sbed-out").value = "never at this fee rate";
+      } else {
+        out.textContent = "Model output: with token B at " + fmt(res.priceB, 4) + " A, your " + fmt(res.sharePct, 2) + "% share is ≈ " + fmt(res.feesNeeded, 4) + " A behind holding (depeg loss " + fmt(res.lossPct, 2) + "% on the pool). At ≈ " + fmt(res.dailyFees, 4) + " A of fees a day to you (your share of a " + fmt(res.feeBps, 0) + " bps tier), that takes ≈ " + fmt(res.daysToBreakEven, 2) + " days. Amplification sets the hurdle before volume enters it — a higher A defends par longer and drains further, so the count grows with A. One honest shape: the day count does not depend on your share — a bigger share owes a bigger slice of the hurdle but takes the same bigger slice of every fee, so the two cancel. A stableswap break-even days model, not a live Raydium quote — it assumes the volume, tier, share, price and amplification all hold still. Not financial advice.";
+        document.getElementById("sbed-out").value = fmt(res.daysToBreakEven, 2);
       }
     });
 
