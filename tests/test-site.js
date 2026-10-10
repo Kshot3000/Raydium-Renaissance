@@ -56,7 +56,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=104"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=105"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5106,7 +5106,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v104", html.includes("app.js?v=104"));
+check("app.js cache key bumped to v105", html.includes("app.js?v=105"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -5531,6 +5531,115 @@ check("qarb handler wired to its own form", appSrc.includes('getElementById("qar
 check("qarb honesty: fourth wall and not-live labels", html.includes("The fourth range is a wall too") && html.includes("not live pool data, not a found opportunity, not financial advice"));
 check("guide covers CLMM four-range arbitrage", guide.includes("price the fourth range too — and pay its fee"));
 check("README lists tool 84", readme.includes("84. **CLMM four-range arbitrage model**"));
+
+/* ---------- Tool 85: CLMM four-range price-impact sizer (QCIS) ---------- */
+const qcis = app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "70", 0, "ba", "10000", "4", "10000", "8", "10000", "16");
+check("QCIS headline exists and enters the fourth range", qcis !== null && qcis.feasible === true && qcis.enteredFourth === true && qcis.hitThirdBoundary === true && qcis.hitFourthBoundary === false);
+check("QCIS headline tokens and boundaries", qcis.inToken === "B" && qcis.outToken === "A" && qcis.boundaryPrice === 2 && qcis.secondBoundaryPrice === 4 && qcis.thirdBoundaryPrice === 8);
+near("QCIS headline max in is exactly 23333.3333", qcis.maxAmountIn, 23333.333333333332, 1e-6);
+near("QCIS headline amount out is exactly 7000", qcis.amountOut, 7000, 1e-6);
+near("QCIS headline lands on the cap", qcis.actualImpactPct, 70, 1e-9);
+near("QCIS headline new price is 100/9", qcis.newPrice, 100 / 9, 1e-9);
+near("QCIS headline leg 4 in", qcis.leg4UsedIn, 5049.062085871443, 1e-6);
+near("QCIS headline leg 4 out", qcis.leg4Out, 535.5339059327384, 1e-9);
+near("QCIS headline four-range ceiling is exactly 75", qcis.fourthBoundaryImpactPct, 75, 1e-9);
+near("QCIS headline three-range ceiling", qcis.thirdBoundaryImpactPct, 64.64466094067262, 1e-9);
+check("QCIS headline ranges chain 0.5-2, 2-4, 4-8, 8-16", qcis.secondLowerPrice === 2 && qcis.secondUpperPrice === 4 && qcis.thirdLowerPrice === 4 && qcis.thirdUpperPrice === 8 && qcis.fourthLowerPrice === 8 && qcis.fourthUpperPrice === 16);
+/* mirror direction: same sizes, reciprocal landing price */
+{
+  const m = app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "70", 0, "ab", "10000", "0.25", "10000", "0.125", "10000", "0.0625");
+  check("QCIS mirror enters the fourth range downward", m !== null && m.enteredFourth === true && m.inToken === "A" && m.fourthLowerPrice === 0.0625 && m.fourthUpperPrice === 0.125);
+  near("QCIS mirror max in", m.maxAmountIn, 23333.333333333332, 1e-6);
+  near("QCIS mirror amount out", m.amountOut, 7000, 1e-6);
+  near("QCIS mirror new price", m.newPrice, 0.09, 1e-9);
+  near("QCIS mirror lands on the cap", m.actualImpactPct, 70, 1e-9);
+  near("QCIS mirror ceiling is exactly 75", m.fourthBoundaryImpactPct, 75, 1e-9);
+}
+/* inside three ranges the answer is tool 82's verbatim */
+{
+  const caps = [["5", 0], ["40", 0], ["60", 0], ["55", 25]];
+  check("QCIS inside three ranges equals Tool 82 field by field", caps.every(([c, f]) => {
+    const q = app.clmmQuadImpactSizer("10000", "0.5", "2", "1", c, f, "ba", "10000", "4", "10000", "8", "10000", "16");
+    const t = app.clmmTripleImpactSizer("10000", "0.5", "2", "1", c, f, "ba", "10000", "4", "10000", "8");
+    return q !== null && q.enteredFourth === false && q.leg4UsedIn === 0 && q.leg4Out === 0 &&
+      q.maxAmountIn === t.maxAmountIn && q.netIn === t.netIn && q.amountOut === t.amountOut &&
+      q.effectiveRate === t.effectiveRate && q.actualImpactPct === t.actualImpactPct && q.newPrice === t.newPrice &&
+      q.leg1UsedIn === t.leg1UsedIn && q.leg2UsedIn === t.leg2UsedIn && q.leg3UsedIn === t.leg3UsedIn;
+  }));
+}
+/* a cap exactly on the three-range ceiling stays at the third wall */
+{
+  const t = app.clmmTripleImpactSizer("10000", "0.5", "2", "1", "64.64466094067262", 0, "ba", "10000", "4", "10000", "8");
+  const q = app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "64.64466094067262", 0, "ba", "10000", "4", "10000", "8", "10000", "16");
+  check("QCIS cap on the three-range ceiling stays unentered", q !== null && q.enteredFourth === false && q.hitThirdBoundary === true && q.maxAmountIn === t.maxAmountIn && q.amountOut === t.amountOut);
+}
+/* the sized input through tool 83 itself lands on the cap across a sweep */
+{
+  let ok = true;
+  for (const dir of ["ab", "ba"]) for (const cap of [5, 40, 60, 68, 70, 74]) for (const fee of [0, 25]) for (const L4 of [1000, 10000, 50000]) {
+    const o2 = dir === "ab" ? "0.25" : "4", o3 = dir === "ab" ? "0.125" : "8", o4 = dir === "ab" ? "0.0625" : "16";
+    const q = app.clmmQuadImpactSizer("10000", "0.5", "2", "1", String(cap), fee, dir, "10000", o2, "10000", o3, String(L4), o4);
+    if (q === null || !q.feasible) { ok = false; break; }
+    const sw = app.clmmQuadSwap("10000", "0.5", "2", "1", String(q.maxAmountIn), fee, dir, "10000", o2, "10000", o3, String(L4), o4);
+    if (sw === null || Math.abs(sw.priceImpactPct - q.actualImpactPct) > 1e-9) ok = false;
+    if (q.actualImpactPct > cap + 1e-9) ok = false;
+    if (!q.hitFourthBoundary && Math.abs(q.actualImpactPct - cap) > 1e-6) ok = false;
+    if (q.hitFourthBoundary && Math.abs(q.actualImpactPct - q.fourthBoundaryImpactPct) > 1e-9) ok = false;
+    if (q.enteredFourth !== sw.enteredFourth) ok = false;
+  }
+  check("QCIS composes Tool 83 across a 144-combo sweep", ok);
+}
+/* at or above the four-range ceiling the trade empties all four ranges */
+{
+  const d = app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "90", 0, "ba", "10000", "4", "10000", "8", "10000", "16");
+  check("QCIS ceiling case empties all four ranges", d !== null && d.hitFourthBoundary === true && d.enteredFourth === true);
+  near("QCIS ceiling case max in is exactly 30000", d.maxAmountIn, 30000, 1e-6);
+  near("QCIS ceiling case amount out is exactly 7500", d.amountOut, 7500, 1e-6);
+  near("QCIS ceiling case actual impact is the ceiling, not the cap", d.actualImpactPct, 75, 1e-9);
+  near("QCIS ceiling case new price is the fourth edge", d.newPrice, 16, 1e-9);
+  const thin = app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "90", 0, "ba", "10000", "4", "10000", "8", "1000", "16");
+  check("QCIS a thin fourth range lowers the ceiling", thin !== null && thin.hitFourthBoundary === true && thin.fourthBoundaryImpactPct < 75);
+  near("QCIS thin ceiling value", thin.fourthBoundaryImpactPct, 66.24140570188865, 1e-9);
+  near("QCIS thin ceiling max in", thin.maxAmountIn, 19455.844122715713, 1e-6);
+  near("QCIS thin ceiling amount out", thin.amountOut, 6568.019484660536, 1e-6);
+}
+/* fee floor and a fee-bearing entry into the fourth range */
+{
+  const fl = app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "0.2", 25, "ba", "10000", "4", "10000", "8", "10000", "16");
+  check("QCIS cap at or below the fee is infeasible", fl !== null && fl.feasible === false && fl.maxAmountIn === 0 && fl.enteredFourth === false);
+  const f70 = app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "70", 25, "ba", "10000", "4", "10000", "8", "10000", "16");
+  check("QCIS fee-bearing entry exists", f70 !== null && f70.enteredFourth === true && f70.hitFourthBoundary === false);
+  near("QCIS fee-bearing entry lands on the cap", f70.actualImpactPct, 70, 1e-9);
+  near("QCIS fee-bearing max in", f70.maxAmountIn, 23308.270676691744, 1e-6);
+  near("QCIS fee-bearing amount out", f70.amountOut, 6992.481203007521, 1e-6);
+  near("QCIS fee-bearing new price", f70.newPrice, 11.055625, 1e-9);
+  near("QCIS fee-bearing four-range ceiling", f70.fourthBoundaryImpactPct, 75.0625, 1e-9);
+  check("QCIS fee is charged across all four legs", f70.feePaid > 0 && Math.abs(f70.netIn - (f70.maxAmountIn - f70.feePaid)) < 1e-9 && Math.abs(f70.leg1UsedIn + f70.leg2UsedIn + f70.leg3UsedIn + f70.leg4UsedIn - f70.maxAmountIn) < 1e-9);
+}
+/* rejections */
+check("QCIS rejects bad inputs", [
+  () => app.clmmQuadImpactSizer("", "0.5", "2", "1", "70", 0, "ba", "10000", "4", "10000", "8", "10000", "16"),
+  () => app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "70", 0, "ba", "10000", "4", "10000", "8", "0", "16"),
+  () => app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "70", 0, "ba", "10000", "4", "10000", "8", "10000", "8"),
+  () => app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "70", 0, "ba", "10000", "4", "10000", "8", "10000", "6"),
+  () => app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "70", 0, "ab", "10000", "0.25", "10000", "0.125", "10000", "0.125"),
+  () => app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "70", 0, "ab", "10000", "0.25", "10000", "0.125", "10000", "0.2"),
+  () => app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "70", 0, "ba", "10000", "4", "10000", "4", "10000", "16"),
+  () => app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "0", 0, "ba", "10000", "4", "10000", "8", "10000", "16"),
+  () => app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "100", 0, "ba", "10000", "4", "10000", "8", "10000", "16"),
+  () => app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "70", 25.5, "ba", "10000", "4", "10000", "8", "10000", "16"),
+  () => app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "70", 0, "xx", "10000", "4", "10000", "8", "10000", "16"),
+  () => app.clmmQuadImpactSizer("10000", "0.5", "2", "1", "70", 0, "ba", "10000", "4", "10000", "8", "10000", "")
+].every(fn => fn() === null));
+check("QCIS composes Tools 82 and 83 in source", appSrc.includes("function clmmQuadImpactSizer") && appSrc.includes("clmmTripleImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpactPctStr, feeBps, direction, secondLiquidityStr, secondOuterStr, thirdLiquidityStr, thirdOuterStr)") && appSrc.includes("clmmQuadSwap(liquidityStr, lowerStr, upperStr, priceStr, String(grossTotal), feeBps, direction, secondLiquidityStr, secondOuterStr, thirdLiquidityStr, thirdOuterStr, fourthLiquidityStr, fourthOuterStr)"));
+check("all qcis controls labelled",
+  ["qcis-l", "qcis-lower", "qcis-upper", "qcis-price", "qcis-dir", "qcis-cap", "qcis-fee", "qcis-l2", "qcis-outer", "qcis-l3", "qcis-outer3", "qcis-l4", "qcis-outer4", "qcis-out"]
+    .every(id => html.includes(`for="${id}"`)));
+check("qcis tool present in index.html", html.includes('id="qcis-calc"') && html.includes('id="qcis-result"'));
+check("qcis handler wired to its own form", appSrc.includes('getElementById("qcis-calc")') && appSrc.includes('getElementById("qcis-result")'));
+check("qcis honesty: fourth wall, fee floor and not-live labels", html.includes("emptying all four ranges costs exactly 75% impact at zero fee") && html.includes("a cap at or below the fee tier admits no trade at all") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers CLMM four-range impact sizing", guide.includes("size the trade across the fourth range too"));
+check("README lists tool 85", readme.includes("85. **CLMM four-range price-impact sizer**"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
