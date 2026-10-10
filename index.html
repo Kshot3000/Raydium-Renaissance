@@ -1936,6 +1936,39 @@
         <button type="submit" class="btn primary">Price this four-range CLMM swap</button>
         <p id="qswap-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="qarb-calc">
+        <h3>84 · CLMM four-range arbitrage model</h3>
+        <p>Tool 80 prices the trade that aligns three CLMM ranges with an external price and stops honestly at the third wall; this supplies the fourth range, the way tool 83 did for the swap models. At liquidity 10,000 over 0.5–2 and price 1, an external price of 12 crosses equal second and third ranges out to 4 and 8 — exactly 18,284.2712 B in and 6,464.4661 A out across the three capped legs — then pays ≈6,356.7449 B for ≈648.7826 A more inside an equal fourth range out to 16, landing exactly on 12 for a modelled profit of ≈60,717.9677 B. Two honest edges: the fourth wall — an external price beyond the fourth range's outer edge caps the combined trade there (at 20 the trade stops at 16 with exactly 30,000 in and 7,500 out in total), and a live pool would need a fifth range; and crossing three times is not free, because the fee is charged again on the fourth range's leg. The fourth range's depth scales its leg, not its reach. Four ranges only. Educational model only — your liquidities, ranges, prices and fee inputs; not live pool data, not a found opportunity, not financial advice.</p>
+        <label for="qarb-l">First range liquidity L (model units, above 0)</label>
+        <input id="qarb-l" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="qarb-lower">First range lower price (B per A, above 0)</label>
+        <input id="qarb-lower" inputmode="decimal" placeholder="e.g. 0.5" autocomplete="off">
+        <label for="qarb-upper">First range upper price (B per A, above the lower price)</label>
+        <input id="qarb-upper" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="qarb-price">Current price (B per A, strictly inside the first range)</label>
+        <input id="qarb-price" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="qarb-ext">External price of token A (B per A, above 0)</label>
+        <input id="qarb-ext" inputmode="decimal" placeholder="e.g. 12" autocomplete="off">
+        <label for="qarb-fee">Pool fee tier (whole basis points, 0–9999)</label>
+        <input id="qarb-fee" inputmode="decimal" placeholder="e.g. 25" autocomplete="off">
+        <label for="qarb-l2">Second range liquidity L (model units, above 0)</label>
+        <input id="qarb-l2" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="qarb-outer">Second range outer edge price (B per A, beyond the first range on the side of your external price)</label>
+        <input id="qarb-outer" inputmode="decimal" placeholder="e.g. 4" autocomplete="off">
+        <label for="qarb-l3">Third range liquidity L (model units, above 0)</label>
+        <input id="qarb-l3" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="qarb-outer3">Third range outer edge price (B per A, beyond the second range on the side of your external price)</label>
+        <input id="qarb-outer3" inputmode="decimal" placeholder="e.g. 8" autocomplete="off">
+        <label for="qarb-l4">Fourth range liquidity L (model units, above 0)</label>
+        <input id="qarb-l4" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="qarb-outer4">Fourth range outer edge price (B per A, beyond the third range on the side of your external price)</label>
+        <input id="qarb-outer4" inputmode="decimal" placeholder="e.g. 16" autocomplete="off">
+        <label for="qarb-out">Modelled profit in token B at your external price (model)</label>
+        <input id="qarb-out" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Size the aligning trade across all four ranges</button>
+        <p id="qarb-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -1963,6 +1996,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=103"></script>
+<script src="app.js?v=104"></script>
 </body>
 </html>
