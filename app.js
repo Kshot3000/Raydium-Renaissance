@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus one hundred three fully
+/* Raydium Renaissance hub logic: project filtering plus one hundred four fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -73,8 +73,9 @@
    delta-hedge calculator, a
    weighted-pool delta-hedge calculator,
    a leveraged LP position model, a
-   sliced (TWAP-style) swap planner, and a
-   Solana transaction cost estimator.
+   sliced (TWAP-style) swap planner, a
+   Solana transaction cost estimator, and a
+   stableswap delta-hedge calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -4955,6 +4956,133 @@ function weightedDeltaHedge(reserveAStr, reserveBStr, weightAPctStr, sharePctStr
   return result;
 }
 
+/* ---------- 104 · Stableswap delta-hedge calculator ---------- */
+/* Tools 98-100 price a delta hedge for constant-product, CLMM and
+   weighted positions; the stableswap family had none, and its answer
+   is the family's warning, not its comfort. The identity is the same
+   — a position's value moves with token A's price at exactly the
+   rate of its own token-A holding, so shorting that many A zeroes
+   the delta at the current price — but there is no closed form for
+   where arbitrage takes the reserves: the post-move reserves lie on
+   the stableswap invariant (Tool 58's stableInvariantD) at the point
+   where Tool 58's spot formula equals the check price, bisected
+   geometrically on reserve A exactly the way Tools 61/65 bisect
+   their endpoints, the other reserve from stableSolveY. The
+   endpoint is asserted verbatim against Tool 65's zero-fee arbitrage
+   target and Tool 61's depeg endpoint (at the reciprocal price), and
+   the IL is Tool 61's loss figure exactly. The honest shape is what
+   amplification does to a hedge: the curve defends par, so a move
+   that does happen is paid for with almost the whole token-A side.
+   On balanced 1,000/1,000 reserves at A = 100 a 10% share is
+   100 A / 100 B worth 200 B and the hedge is a short of 100 A; at a
+   doubling the pool is left holding 68.3309 A / 1,995.0250 B, the
+   position is worth 213.1687 B (+6.5843%, against 300 B for holding,
+   IL -28.9438%), the short loses exactly 100 B, and the hedged
+   settle is 113.1687 B — -43.4157%, far worse than Tool 98's
+   -8.5786% on the same move, because a stableswap position that
+   depegs is not a curved position, it is a nearly binary one. More
+   amplification makes the modelled hedge worse, not better, at the
+   same check price (at 1.1x: -0.2377% at A = 1, -3.1341% at
+   A = 100, -4.6915% at A = 5,000, where moving the spot 10% costs
+   the pool all but 31.5692 of its 1,000 A). The hedge also drifts
+   violently: after the doubling the position holds only 6.8331 A,
+   so re-hedging means covering 93.1669 A of the short. Within any
+   single move the hedged change is never positive (the value curve
+   is concave; the hedge is its tangent — sweep-asserted). Honest
+   edges, stated in the UI too: the hedge is modelled as a
+   frictionless short held outside the pool — no borrow or funding
+   cost, no margin or liquidation, no fees on establishing or
+   adjusting it, and no rebalancing inside the scenario. Model
+   only — your reserves, amplification, share and price move, not
+   live pool data, not a live quote, not financial advice. */
+function stableDeltaHedge(reserveAStr, reserveBStr, ampStr, sharePctStr, priceRatio) {
+  var required = [reserveAStr, reserveBStr, ampStr, sharePctStr, priceRatio];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var reserveA = Number(reserveAStr), reserveB = Number(reserveBStr), amp = Number(ampStr);
+  var sharePct = Number(sharePctStr), ratio = Number(priceRatio);
+  if (![reserveA, reserveB, amp, sharePct, ratio].every(Number.isFinite)) return null;
+  if (reserveA <= 0 || reserveB <= 0 || amp <= 0 || ratio <= 0) return null;
+  if (sharePct <= 0 || sharePct > 100) return null;
+  var share = sharePct / 100;
+  var D = stableInvariantD(reserveA, reserveB, amp);
+  if (D === null || !(D > 0)) return null;
+  var spot = stableSpotAInB(reserveA, reserveB, amp, D);
+  if (!Number.isFinite(spot) || !(spot > 0)) return null;
+  var newPrice = spot * ratio;
+  var end;
+  if (ratio === 1) {
+    end = { x: reserveA, y: reserveB, spot: spot };
+  } else {
+    var at = function (x) {
+      var y = stableSolveY(x, reserveB, amp, D);
+      if (!(y > 0) || !Number.isFinite(y)) return null;
+      var s2 = stableSpotAInB(x, y, amp, D);
+      if (!Number.isFinite(s2) || !(s2 > 0)) return null;
+      return { x: x, y: y, spot: s2 };
+    };
+    var lo = null, hi = null, k;
+    if (newPrice > spot) {
+      hi = { x: reserveA, y: reserveB, spot: spot };
+      var xd = reserveA;
+      for (k = 0; k < 200 && lo === null; k++) {
+        xd /= 1.5;
+        var ad = at(xd);
+        if (ad !== null && ad.spot >= newPrice) lo = ad;
+      }
+    } else {
+      lo = { x: reserveA, y: reserveB, spot: spot };
+      var xu = reserveA;
+      for (k = 0; k < 200 && hi === null; k++) {
+        xu *= 1.5;
+        var au = at(xu);
+        if (au !== null && au.spot <= newPrice) hi = au;
+      }
+    }
+    if (lo === null || hi === null) return null;
+    for (var b = 0; b < 200; b++) {
+      var mid = at(Math.sqrt(lo.x * hi.x));
+      if (mid === null) return null;
+      if (mid.spot < newPrice) hi = mid; else lo = mid;
+      if (hi.x / lo.x - 1 < 1e-12) break;
+    }
+    end = at(Math.sqrt(lo.x * hi.x));
+    if (end === null) return null;
+  }
+  var yourANow = share * reserveA, yourBNow = share * reserveB;
+  var valueNow = yourANow * spot + yourBNow;
+  var hedgeA = yourANow;
+  var yourAAfter = share * end.x, yourBAfter = share * end.y;
+  var lpValueAfter = yourAAfter * newPrice + yourBAfter;
+  var holdValueAfter = yourANow * newPrice + yourBNow;
+  var hedgePnl = hedgeA * (spot - newPrice);
+  var hedgedValueAfter = lpValueAfter + hedgePnl;
+  var result = {
+    reserveA: reserveA, reserveB: reserveB, amp: amp,
+    sharePct: sharePct, priceRatio: ratio, invariantD: D,
+    spotPrice: spot, newPrice: newPrice,
+    newReserveA: end.x, newReserveB: end.y,
+    yourANow: yourANow, yourBNow: yourBNow, valueNow: valueNow,
+    hedgeA: hedgeA, hedgeValueB: hedgeA * spot,
+    hedgeValuePct: hedgeA * spot / valueNow * 100,
+    yourAAfter: yourAAfter, yourBAfter: yourBAfter,
+    lpValueAfter: lpValueAfter, holdValueAfter: holdValueAfter,
+    hedgePnl: hedgePnl, hedgedValueAfter: hedgedValueAfter,
+    unhedgedChange: lpValueAfter - valueNow,
+    unhedgedChangePct: (lpValueAfter - valueNow) / valueNow * 100,
+    hedgedChange: hedgedValueAfter - valueNow,
+    hedgedChangePct: (hedgedValueAfter - valueNow) / valueNow * 100,
+    newHedgeA: yourAAfter, hedgeAdjustment: yourAAfter - hedgeA,
+    ilPct: (lpValueAfter / holdValueAfter - 1) * 100
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 /* ---------- 101 · Leveraged LP position model ---------- */
 /* Every return tool on this hub prices an UNLEVERED position: your
    own money, in the pool, riding tool 27's sqrt(r) value curve.
@@ -8188,7 +8316,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, leveragedLp, slicedSwap, txCostEstimate, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, slicedSwap, txCostEstimate, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -10318,6 +10446,32 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: your " + fmt(res.sharePct, 4) + "% share of an " + fmt(res.weightAPct, 4) + "/" + fmt(res.weightBPct, 4) + " weighted pool holding " + fmt(res.reserveA, 4) + " A / " + fmt(res.reserveB, 4) + " B (spot " + fmt(res.spotPrice, 6) + " B per A — the weight is part of the price) is " + fmt(res.yourANow, 4) + " A and " + fmt(res.yourBNow, 4) + " B, worth " + fmt(res.valueNow, 4) + " B. Shorting " + fmt(res.hedgeA, 4) + " A (worth " + fmt(res.hedgeValueB, 4) + " B — " + fmt(res.hedgeValuePct, 4) + "% of your position's value, exactly its token-A weight, not automatically half) zeroes its price delta at this price. If the price moves " + fmt(res.priceRatio, 4) + "x to " + fmt(res.newPrice, 6) + " B per A, the position alone is worth " + fmt(res.lpValueAfter, 4) + " B (" + fmt(res.unhedgedChangePct, 4) + "% unhedged, against " + fmt(res.holdValueAfter, 4) + " B for holding); the hedge pays " + fmt(res.hedgePnl, 4) + " B, settling the hedged position at " + fmt(res.hedgedValueAfter, 4) + " B (" + fmt(res.hedgedChangePct, 4) + "%). Hedging removed the direction, not the convexity cost — and the hedge has drifted: at the new price a fresh hedge is " + fmt(res.newHedgeA, 4) + " A, so re-hedging means you " + adjWord + ". The hedge is modelled as a frictionless short held outside the pool: no borrow or funding cost, no margin or liquidation, and no rebalancing inside the scenario. A weighted-pool delta-hedge model, not live pool data. Not financial advice.";
         document.getElementById("whedge-size").value = fmt(res.hedgeA, 4);
         document.getElementById("whedge-net").value = fmt(res.hedgedChangePct, 4);
+      }
+    });
+
+
+    /* --- Stableswap delta-hedge calculator --- */
+    document.getElementById("shedge-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = stableDeltaHedge(
+        document.getElementById("shedge-ra").value,
+        document.getElementById("shedge-rb").value,
+        document.getElementById("shedge-amp").value,
+        document.getElementById("shedge-share").value,
+        document.getElementById("shedge-ratio").value
+      );
+      var out = document.getElementById("shedge-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, a positive amplification, your share of the pool above 0 and at most 100%, and a positive price multiple for the check price (2 = doubled, 0.5 = halved).";
+        document.getElementById("shedge-size").value = "";
+        document.getElementById("shedge-net").value = "";
+      } else {
+        var adjWord = res.hedgeAdjustment < 0
+          ? "cover " + fmt(Math.abs(res.hedgeAdjustment), 4) + " A of the short"
+          : (res.hedgeAdjustment > 0 ? "short " + fmt(res.hedgeAdjustment, 4) + " A more" : "no adjustment needed");
+        out.textContent = "Model output: your " + fmt(res.sharePct, 4) + "% share of a stableswap pool (amplification " + fmt(res.amp, 4) + ") holding " + fmt(res.reserveA, 4) + " A / " + fmt(res.reserveB, 4) + " B (spot " + fmt(res.spotPrice, 6) + " B per A) is " + fmt(res.yourANow, 4) + " A and " + fmt(res.yourBNow, 4) + " B, worth " + fmt(res.valueNow, 4) + " B. Shorting " + fmt(res.hedgeA, 4) + " A (worth " + fmt(res.hedgeValueB, 4) + " B — " + fmt(res.hedgeValuePct, 4) + "% of your position's value) zeroes its price delta at this price. If the price moves " + fmt(res.priceRatio, 4) + "x to " + fmt(res.newPrice, 6) + " B per A, arbitrage leaves the pool holding " + fmt(res.newReserveA, 4) + " A / " + fmt(res.newReserveB, 4) + " B and the position alone is worth " + fmt(res.lpValueAfter, 4) + " B (" + fmt(res.unhedgedChangePct, 4) + "% unhedged, against " + fmt(res.holdValueAfter, 4) + " B for holding); the hedge pays " + fmt(res.hedgePnl, 4) + " B, settling the hedged position at " + fmt(res.hedgedValueAfter, 4) + " B (" + fmt(res.hedgedChangePct, 4) + "%). On a curve that defends par, a hedge removes the direction of small moves and keeps the near-binary cost of a real depeg — and the hedge has drifted: at the new price a fresh hedge is " + fmt(res.newHedgeA, 4) + " A, so re-hedging means you " + adjWord + ". The hedge is modelled as a frictionless short held outside the pool: no borrow or funding cost, no margin or liquidation, and no rebalancing inside the scenario. A stableswap delta-hedge model, not live pool data. Not financial advice.";
+        document.getElementById("shedge-size").value = fmt(res.hedgeA, 4);
+        document.getElementById("shedge-net").value = fmt(res.hedgedChangePct, 4);
       }
     });
 

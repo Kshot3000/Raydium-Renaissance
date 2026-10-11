@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred three</label>
+      <label for="tool-q">Find a tool among the one hundred four</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred three tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred four tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred three.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred four.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2447,6 +2447,27 @@
         <button type="submit" class="btn primary">Estimate my transaction costs</button>
         <p id="txcost-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="shedge-calc">
+        <h3>104 · Stableswap delta-hedge calculator</h3>
+        <p>Tools 98–100 size a delta hedge for constant-product, CLMM and weighted positions; this is the stableswap family's turn, and its answer is a warning. The identity is the same — a position's value moves with token A's price at exactly the rate of its own token-A holding, so shorting that many A zeroes its delta at the current price — but a stableswap curve defends par, so a price move that actually happens is paid for with almost the whole token-A side. Enter the pool's reserves, its amplification, your share, and a price multiple to check. On balanced 1,000/1,000 reserves at amplification 100, a 10% share is 100 A and 100 B worth 200 B and the hedge is a short of 100 A; at a doubling, arbitrage leaves the pool holding ≈68.3309 A / ≈1,995.0250 B (the endpoint is tool 65's zero-fee arbitrage target and tool 61's depeg endpoint, and the impermanent loss is tool 61's −28.9438% exactly), the position alone is worth ≈213.1687 B (+6.5843%), the short loses exactly 100 B, and the hedged settle is ≈113.1687 B — −43.4157%, far worse than tool 98's −8.5786% on the same move, because a stableswap position that depegs is nearly binary. More amplification makes the modelled hedge worse, not better, at the same check price: at 1.1x the hedged change is −0.2377% at amplification 1, −3.1341% at 100 and −4.6915% at 5,000, where moving the spot 10% costs the pool all but ≈31.5692 of its 1,000 A. The hedge drifts violently too: after the doubling the position holds only ≈6.8331 A, so re-hedging means covering ≈93.1669 A of the short. The hedge is modelled as a frictionless short held outside the pool — no borrow or funding cost, no margin or liquidation, no fees on establishing or adjusting it, and no rebalancing inside the scenario. Educational model only — your reserves, amplification, share and price move, not live pool data, not a live quote, not financial advice.</p>
+        <label for="shedge-ra">Pool reserve of token A</label>
+        <input id="shedge-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="shedge-rb">Pool reserve of token B</label>
+        <input id="shedge-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="shedge-amp">Amplification (A)</label>
+        <input id="shedge-amp" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="shedge-share">Your share of the pool, %</label>
+        <input id="shedge-share" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="shedge-ratio">Price multiple to check (2 = doubled, 0.5 = halved)</label>
+        <input id="shedge-ratio" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="shedge-size">Hedge size: token A to short at the current price (model)</label>
+        <input id="shedge-size" readonly placeholder="—" autocomplete="off">
+        <label for="shedge-net">Hedged change at the check price, % of starting value (model)</label>
+        <input id="shedge-net" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Size my stableswap hedge</button>
+        <p id="shedge-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2474,6 +2495,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=134"></script>
+<script src="app.js?v=135"></script>
 </body>
 </html>
