@@ -6578,5 +6578,17 @@ check("ORDER tool numbers in page order are exactly 1 to 94, sequential", (() =>
 check("ORDER tool 74 sits between tools 73 and 75", (() => { const ids = [...html.matchAll(/<form class="tool" id="([^"]+)">/g)].map(m => m[1]); const at = ids.indexOf("ccx-calc"); return at > 0 && ids[at - 1] === "sbed-calc" && ids[at + 1] === "wband-calc"; })());
 check("ORDER jump menu built from the page reads in numeric order", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const nums = app.toolJumpOptions(items).map(o => Number(o.title.split(" ")[0])); return nums.length === 94 && nums.every((n, i) => n === i + 1); })());
 
+/* --- guide checklist order: the guide's section-3 checklist is
+   numbered 1..95 and readers follow it in order, so the items must
+   read sequentially AND live inside section 3. Until 2026-10-10 the
+   file had items 29-95 stranded after the closing "Building" and
+   "Support" sections, with item 39 orphaned inside Support itself —
+   every item's text was right, only its place was wrong. --- */
+check("GUIDE checklist numbers are exactly 1 to 95, sequential", (() => { const nums = [...guide.matchAll(/^(\d+)\. \*\*/gm)].map(m => Number(m[1])); return nums.length === 95 && nums.every((n, i) => n === i + 1); })());
+check("GUIDE item 39 sits between items 38 and 40", (() => { const at = guide.indexOf("\n39. **Plan a constant-product deposit from your wallet"); return at > guide.indexOf("\n38. **Size a CLMM exit") && at < guide.indexOf("\n40. **Price a routed trade backwards"); })());
+check("GUIDE whole checklist lives in section 3, before Building and Support", (() => { const s3 = guide.indexOf("## 3 ·"); const first = guide.indexOf("\n1. **Fee tier**"); const last = guide.indexOf("\n95. **Liquidity that is in for exactly one trade"); const s4 = guide.indexOf("## 4 ·"); const sup = guide.indexOf("## Support"); return s3 !== -1 && s3 < first && first < last && last < s4 && s4 < sup; })());
+check("GUIDE no checklist item appears after the Support heading", (() => { const sup = guide.indexOf("## Support"); return sup !== -1 && !/^\d+\. \*\*/m.test(guide.slice(sup)); })());
+check("GUIDE Support section still carries the SOL tips line", (() => { const sup = guide.indexOf("## Support"); return sup !== -1 && guide.slice(sup).includes("Tips in SOL: `9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8`"); })());
+
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
