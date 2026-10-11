@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred seven</label>
+      <label for="tool-q">Find a tool among the one hundred eight</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred seven tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred eight tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred seven.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred eight.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2563,6 +2563,40 @@
         <button type="submit" class="btn primary">Compare the cost of my routes</button>
         <p id="rxo-result" role="status" aria-live="polite"></p>
       </form>
+      <form class="tool" id="hop3-calc">
+        <h3>108 · Three-hop swap model</h3>
+        <p>Tool 23 routes a swap through one intermediate token, but plenty of pairs need two: a thin token trades into a liquid intermediate, that intermediate into a second one — a stablecoin or SOL itself — and only then into the token you want. This model runs tool 1's own constant-product maths three times, each hop's input the previous hop's output exactly as tool 1 reports it, floored at 9 decimal places, so the legs cannot drift from tool 1 and the first two legs together are tool 23's own result. The fee and the price impact are paid three times, once per pool, and the combined impact compounds the hops, so it is always worse than any single hop: 100 through three pools holding 1,000 / 1,000 each at a 0.25% fee per hop pays ≈90.7024, then ≈82.9690, then ≈76.4356 — a combined impact of ≈23.5644% — while the same 100 through three pools holding 10,000 / 10,000 each pays ≈96.3751, a combined impact of ≈3.6249%. Depth along the whole route is what a third hop costs or saves; the shallowest pool sets the route's ceiling, and a route is only as good as its worst hop. Each hop is priced against the reserves you entered, in order: between hops a real route is exposed to other trades moving the later pools, and each hop pays its own network and priority fees on top of the pool fees modelled here; neither is modelled. Every pool is constant-product here; a real route may cross CLMM pools or other venues, and no routing search is done. Educational model only — your pools, amount and fees, not live pool data, not a live quote, not financial advice.</p>
+        <label for="hop3-r1in">First pool reserve of the token you pay in</label>
+        <input id="hop3-r1in" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hop3-r1out">First pool reserve of the first intermediate token</label>
+        <input id="hop3-r1out" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hop3-r2in">Second pool reserve of the first intermediate token</label>
+        <input id="hop3-r2in" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hop3-r2out">Second pool reserve of the second intermediate token</label>
+        <input id="hop3-r2out" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hop3-r3in">Third pool reserve of the second intermediate token</label>
+        <input id="hop3-r3in" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hop3-r3out">Third pool reserve of the token you receive</label>
+        <input id="hop3-r3out" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hop3-amt">Amount you pay in</label>
+        <input id="hop3-amt" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="hop3-fee1">First pool fee (basis points, 25 = 0.25%)</label>
+        <input id="hop3-fee1" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="hop3-fee2">Second pool fee (basis points, 25 = 0.25%)</label>
+        <input id="hop3-fee2" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="hop3-fee3">Third pool fee (basis points, 25 = 0.25%)</label>
+        <input id="hop3-fee3" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="hop3-mid1">First hop pays you (first intermediate token, model)</label>
+        <input id="hop3-mid1" readonly placeholder="—" autocomplete="off">
+        <label for="hop3-mid2">Second hop pays you (second intermediate token, model)</label>
+        <input id="hop3-mid2" readonly placeholder="—" autocomplete="off">
+        <label for="hop3-out">Third hop pays you (token you receive, model)</label>
+        <input id="hop3-out" readonly placeholder="—" autocomplete="off">
+        <label for="hop3-impact">Combined price impact across all three hops, % (model)</label>
+        <input id="hop3-impact" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Run my three-hop swap</button>
+        <p id="hop3-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2590,6 +2624,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=141"></script>
+<script src="app.js?v=142"></script>
 </body>
 </html>

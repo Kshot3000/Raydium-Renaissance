@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus one hundred seven fully
+/* Raydium Renaissance hub logic: project filtering plus one hundred eight fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -77,8 +77,9 @@
    Solana transaction cost estimator, a
    stableswap delta-hedge calculator, a
    leveraged CLMM position model, a swap
-   route comparison model, and an exact-out
-   swap route comparison model.
+   route comparison model, an exact-out
+   swap route comparison model, and a three-hop
+   swap model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -8677,8 +8678,76 @@ function routeCompareExactOut(directInStr, directOutStr, hop1InStr, hop1OutStr, 
   return result;
 }
 
+/* ---------- 108 · Three-hop swap model ---------- */
+/* Tool 23 routes a swap through ONE intermediate token; plenty of
+   real pairs need TWO — a thin token trades into a liquid
+   intermediate, that intermediate into a second one (a stablecoin
+   or SOL itself), and only then into the target. This runs tool 1's
+   own cpSwap three times, each hop's input the previous hop's
+   output exactly as tool 1 reports it, floored at 9 dp — that, not
+   a hidden-precision value, is what the next pool would receive —
+   so the legs can never drift from tool 1, and the first two legs
+   together are tool 23's own two-hop result verbatim (the tests
+   assert both). The fee and the impact are paid three times, once
+   per pool, and the combined impact — measured against the product
+   of the three pools' spot prices — compounds the hops:
+   1 − (1−i1)(1−i2)(1−i3), always worse than any single hop.
+   Headline: 100 through three 1,000/1,000 pools at 25 bps per hop
+   pays 90.70243237, then 82.968999911, then 76.435643023, a
+   combined impact of 23.5644% against a combined spot of 1; the
+   same 100 through three 10,000/10,000 pools pays 96.375053994
+   (combined impact 3.6249%), so depth along the whole route is
+   what a third hop costs or saves — the shallowest pool sets the
+   route's ceiling, and a route is only as good as its worst hop.
+   Each hop is priced against the reserves you entered, in order:
+   between hops a real route is exposed to other trades moving the
+   later pools, and each hop in reality pays its own network and
+   priority fees on top of the pool fees modelled here; neither is
+   modelled. Every pool is constant-product here; a real route may
+   cross CLMM pools or other venues, and no routing search is
+   done. Dust that any hop floors to zero ends the route there —
+   rejected, not carried forward as a phantom fill. Model only:
+   your pools, amount and fees, not live pool data, not a live
+   quote, not financial advice. */
+function threeHopSwap(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2OutStr, reserve3InStr, reserve3OutStr, amountInStr, fee1Bps, fee2Bps, fee3Bps) {
+  var raw = [reserve1InStr, reserve1OutStr, reserve2InStr, reserve2OutStr, reserve3InStr, reserve3OutStr, amountInStr, fee1Bps, fee2Bps, fee3Bps];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var hop1 = cpSwap(reserve1InStr, reserve1OutStr, amountInStr, fee1Bps);
+  if (hop1 === null) return null;
+  var hop2 = cpSwap(reserve2InStr, reserve2OutStr, hop1.out, fee2Bps);
+  if (hop2 === null) return null;
+  var hop3 = cpSwap(reserve3InStr, reserve3OutStr, hop2.out, fee3Bps);
+  if (hop3 === null) return null;
+  var amountIn = Number(amountInStr);
+  if (!Number.isFinite(amountIn) || amountIn <= 0) return null;
+  var spotPrice = hop1.spotPrice * hop2.spotPrice * hop3.spotPrice;
+  var effectivePrice = Number(hop3.out) / amountIn;
+  var result = {
+    amountIn: amountIn,
+    mid1Out: hop1.out,
+    mid2Out: hop2.out,
+    out: hop3.out,
+    hop1ImpactPct: hop1.priceImpactPct,
+    hop2ImpactPct: hop2.priceImpactPct,
+    hop3ImpactPct: hop3.priceImpactPct,
+    spotPrice: spotPrice,
+    effectivePrice: effectivePrice,
+    priceImpactPct: (1 - effectivePrice / spotPrice) * 100,
+    fee1Pct: hop1.feePct,
+    fee2Pct: hop2.feePct,
+    fee3Pct: hop3.feePct
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -10940,6 +11009,37 @@ if (typeof document !== "undefined") {
         document.getElementById("rxo-ind").value = res.directIn;
         document.getElementById("rxo-inh").value = res.routedIn;
         document.getElementById("rxo-save").value = fmt(res.savingsPct, 4);
+      }
+    });
+
+    /* --- Three-hop swap model --- */
+    document.getElementById("hop3-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = threeHopSwap(
+        document.getElementById("hop3-r1in").value,
+        document.getElementById("hop3-r1out").value,
+        document.getElementById("hop3-r2in").value,
+        document.getElementById("hop3-r2out").value,
+        document.getElementById("hop3-r3in").value,
+        document.getElementById("hop3-r3out").value,
+        document.getElementById("hop3-amt").value,
+        document.getElementById("hop3-fee1").value,
+        document.getElementById("hop3-fee2").value,
+        document.getElementById("hop3-fee3").value
+      );
+      var out = document.getElementById("hop3-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for all three pools, a positive amount to swap (up to 9 decimal places), and a fee in whole basis points from 0 to 9999 for each pool (25 = 0.25%). An amount so small that any hop's output rounds to zero at 9 decimal places cannot complete the route and is rejected rather than priced.";
+        document.getElementById("hop3-mid1").value = "";
+        document.getElementById("hop3-mid2").value = "";
+        document.getElementById("hop3-out").value = "";
+        document.getElementById("hop3-impact").value = "";
+      } else {
+        out.textContent = "Model output: paying " + fmt(res.amountIn, 4) + " in, the first hop pays " + res.mid1Out + " of the first intermediate token (impact " + fmt(res.hop1ImpactPct, 4) + "%, fee " + fmt(res.fee1Pct, 4) + "%), the second hop pays " + res.mid2Out + " of the second intermediate token (impact " + fmt(res.hop2ImpactPct, 4) + "%, fee " + fmt(res.fee2Pct, 4) + "%), and the third hop pays " + res.out + " of the token you receive (impact " + fmt(res.hop3ImpactPct, 4) + "%, fee " + fmt(res.fee3Pct, 4) + "%) — a combined price impact of " + fmt(res.priceImpactPct, 4) + "% against a combined spot of " + fmt(res.spotPrice, 6) + " out per in, the product of the three pools' spot prices. Each hop is priced against the reserves you entered, in order; between hops a real route is exposed to other trades moving the later pools, and each hop pays its own network and priority fees on top of the pool fees modelled here — neither is modelled. Every pool is constant-product here; a real route may cross CLMM pools or other venues, and no routing search is done. A three-hop swap model, not live pool data. Not financial advice.";
+        document.getElementById("hop3-mid1").value = res.mid1Out;
+        document.getElementById("hop3-mid2").value = res.mid2Out;
+        document.getElementById("hop3-out").value = res.out;
+        document.getElementById("hop3-impact").value = fmt(res.priceImpactPct, 4);
       }
     });
 
