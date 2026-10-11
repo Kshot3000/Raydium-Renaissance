@@ -9051,7 +9051,11 @@ function routeLengthCompare(directInStr, directOutStr, two1InStr, two1OutStr, tw
    also takes slightly less price impact. The flooring cuts the
    other way for dust: a fee that floors to zero is reported as
    zero, honestly — a real interface that rounds up or charges a
-   minimum would take more. The effective price and impact are
+   minimum would take more. The cost share is NOT always under the
+   headline rate, though: at dust scale the payout's own flooring
+   can push it to or past the rate, so the handler compares the
+   exact scaled cost against the exact rate and says which one
+   happened. The effective price and impact are
    measured against the FULL amount paid in (tool 91's convention),
    so the platform layer's drag is inside them, not hidden beside
    them. At a zero platform fee the model degenerates exactly to
@@ -11507,7 +11511,33 @@ if (typeof document !== "undefined") {
         document.getElementById("pfee-out").value = "";
         document.getElementById("pfee-cost").value = "";
       } else {
-        out.textContent = "Model output: of the " + res.amountIn + " you pay in, the platform fee takes " + res.platformFeeAmount + " (a disclosed " + fmt(res.platformFeePct, 4) + "% of the amount in, charged in the token you pay and routed to the interface's own fee wallet — on an interface I build, that wallet is my SOL address in the support section below, labelled before any trade, never added after) and " + res.netAmountIn + " reaches the pool (spot " + fmt(res.spotPrice, 6) + " out per in, pool fee " + fmt(res.poolFeePct, 4) + "%), which pays " + res.out + " at a modelled price impact of " + fmt(res.priceImpactPct, 4) + "% measured against everything you paid in, platform fee included. With no platform fee the same trade pays " + res.noPlatformFeeOut + ", so the platform layer costs you " + res.costOut + " of the token you receive — " + fmt(res.costPct, 4) + "% of what you would have received, a little less than the headline platform rate here because the slightly smaller trade also takes slightly less price impact. The platform fee is rounded down to the smallest unit the model can state, so a small enough trade at a small enough rate can model a fee of exactly zero; a real interface rounding the other way, or charging a minimum, would take more. Network and priority fees, and any fee an interface charges on the output side or as a flat amount, are not modelled. This page executes nothing: no wallet connects here and no fee is taken by using this model. A platform-fee swap model, not live pool data. Not financial advice.";
+        /* The cost sentence branches on the EXACT scaled relation
+           between the cost and the headline rate (cost·10000 vs
+           baseline·platformBps, in BigInt): the impact saving usually
+           puts the cost a little under the rate, but at dust scale the
+           payout's own smallest-unit rounding can push it to or past
+           the rate, and a fee that floors to zero costs nothing for a
+           different reason again — prose must say which one happened. */
+        var platBps = Number(document.getElementById("pfee-platfee").value);
+        var costSentence;
+        if (platBps === 0) {
+          costSentence = "With no platform fee charged, the same trade pays the same " + res.noPlatformFeeOut + ", so the platform layer costs you nothing.";
+        } else if (res.platformFeeAmount === "0") {
+          costSentence = "With no platform fee the same trade pays " + res.noPlatformFeeOut + ", so the platform layer costs you nothing here either — the fee itself rounded down to zero at this trade size, so the full amount you paid in reached the pool.";
+        } else if (res.costOut === "0") {
+          costSentence = "With no platform fee the same trade pays " + res.noPlatformFeeOut + ", so the platform layer costs you nothing in the token you receive here — at this size the smaller trade's payout rounds to the same smallest unit as the full trade's.";
+        } else {
+          var costLhs = parseScaled(res.costOut) * 10000n;
+          var costRhs = parseScaled(res.noPlatformFeeOut) * BigInt(platBps);
+          if (costLhs < costRhs) {
+            costSentence = "With no platform fee the same trade pays " + res.noPlatformFeeOut + ", so the platform layer costs you " + res.costOut + " of the token you receive — " + fmt(res.costPct, 4) + "% of what you would have received, a little less than the headline platform rate here because the slightly smaller trade also takes slightly less price impact.";
+          } else if (costLhs > costRhs) {
+            costSentence = "With no platform fee the same trade pays " + res.noPlatformFeeOut + ", so the platform layer costs you " + res.costOut + " of the token you receive — " + fmt(res.costPct, 4) + "% of what you would have received, slightly MORE than the headline platform rate here: at this size the payout's rounding down to the smallest unit costs more than the smaller trade's lower price impact saves.";
+          } else {
+            costSentence = "With no platform fee the same trade pays " + res.noPlatformFeeOut + ", so the platform layer costs you " + res.costOut + " of the token you receive — exactly the headline platform rate as a percentage of what you would have received: here the smaller trade's lower price impact and the payout's smallest-unit rounding happen to cancel out.";
+          }
+        }
+        out.textContent = "Model output: of the " + res.amountIn + " you pay in, the platform fee takes " + res.platformFeeAmount + " (a disclosed " + fmt(res.platformFeePct, 4) + "% of the amount in, charged in the token you pay and routed to the interface's own fee wallet — on an interface I build, that wallet is my SOL address in the support section below, labelled before any trade, never added after) and " + res.netAmountIn + " reaches the pool (spot " + fmt(res.spotPrice, 6) + " out per in, pool fee " + fmt(res.poolFeePct, 4) + "%), which pays " + res.out + " at a modelled price impact of " + fmt(res.priceImpactPct, 4) + "% measured against everything you paid in, platform fee included. " + costSentence + " The platform fee is rounded down to the smallest unit the model can state, so a small enough trade at a small enough rate can model a fee of exactly zero; a real interface rounding the other way, or charging a minimum, would take more. Network and priority fees, and any fee an interface charges on the output side or as a flat amount, are not modelled. This page executes nothing: no wallet connects here and no fee is taken by using this model. A platform-fee swap model, not live pool data. Not financial advice.";
         document.getElementById("pfee-feeamt").value = res.platformFeeAmount;
         document.getElementById("pfee-net").value = res.netAmountIn;
         document.getElementById("pfee-out").value = res.out;

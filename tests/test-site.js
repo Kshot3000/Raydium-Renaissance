@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=148"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=149"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v148", html.includes("app.js?v=148"));
+check("app.js cache key bumped to v149", html.includes("app.js?v=149"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -7306,6 +7306,8 @@ check("PFEE rejects zero reserves and amounts", app.platformFeeSwap("0", "1000",
 check("PFEE rejects bad fees in both slots", app.platformFeeSwap("1000", "1000", "100", 10000, 50) === null && app.platformFeeSwap("1000", "1000", "100", 25, 10000) === null && app.platformFeeSwap("1000", "1000", "100", -1, 50) === null && app.platformFeeSwap("1000", "1000", "100", 25, -1) === null && app.platformFeeSwap("1000", "1000", "100", 25.5, 50) === null && app.platformFeeSwap("1000", "1000", "100", 25, 50.5) === null);
 check("PFEE rejects a dust amount the pool would round to nothing", app.platformFeeSwap("1000", "1000", "0.000000001", 25, 50) === null);
 check("PFEE source composes Tool 1 for both legs rather than re-implementing it", (() => { const at = appSrc.indexOf("function platformFeeSwap"); const body = appSrc.slice(at, at + 2600); return at !== -1 && body.includes("cpSwap(reserveInStr, reserveOutStr, formatScaled(netIn), poolFee)") && body.includes("cpSwap(reserveInStr, reserveOutStr, amountInStr, poolFee)"); })());
+check("PFEE cost can exceed the headline rate at dust scale (exact relation, not the float)", (() => { const r = app.platformFeeSwap("8529.514086850", "67.435104075", "3.387926107", 9958, 6794); return r !== null && app.parseScaled(r.costOut) * 10000n > app.parseScaled(r.noPlatformFeeOut) * 6794n && r.costPct > r.platformFeePct; })());
+check("PFEE handler branches its cost sentence on the exact relation, never a blanket claim", appSrc.includes('parseScaled(res.costOut) * 10000n') && appSrc.includes("slightly MORE than the headline platform rate here") && appSrc.includes("exactly the headline platform rate as a percentage") && appSrc.includes("the fee itself rounded down to zero at this trade size") && appSrc.includes("With no platform fee charged, the same trade pays the same"));
 check("all pfee controls labelled", ["pfee-rin", "pfee-rout", "pfee-ain", "pfee-poolfee", "pfee-platfee", "pfee-feeamt", "pfee-net", "pfee-out", "pfee-cost"].every(id => html.includes(`for="${id}"`)));
 check("pfee tool present in index.html", html.includes('id="pfee-calc"') && html.includes('id="pfee-result"'));
 check("pfee handler wired to its own form", appSrc.includes('getElementById("pfee-calc")') && appSrc.includes('getElementById("pfee-result")'));
