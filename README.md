@@ -16,6 +16,8 @@ For the Raydium team — [@raydium-io](https://github.com/raydium-io) on GitHub 
 
 ## Pool tools on the hub (all local, no wallet, no signing)
 
+Ninety-four tools is a lot to scroll: the hub's tool finder (top of the tools section) filters them as you type — every word you type must appear in the tool, in any order, so “clmm zap” or a tool's number (“94”) finds it directly. Filtering only hides tools on the page; it changes nothing typed into them, and clearing the search brings all ninety-four back.
+
 1. **Constant-product swap model** — the x × y = k maths behind AMM v4 / CPMM pools, with fee and price-impact output. Exact scaled-BigInt arithmetic (9 dp).
 2. **Impermanent-loss calculator** — LP-vs-hold at any price multiple for a 50/50 constant-product position, with optional deposit value.
 3. **LP fee estimator** — your share of a pool's swap fees from its volume, TVL and fee tier, with a naively-annualised APR.

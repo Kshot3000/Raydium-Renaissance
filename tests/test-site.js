@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=116"));
+check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=117"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v116", html.includes("app.js?v=116"));
+check("app.js cache key bumped to v117", html.includes("app.js?v=117"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6534,6 +6534,20 @@ check("A11Y text contrast meets WCAG AA (4.5:1) for every themed text/background
     return pairs.every(([fg, bg]) => vars[fg] && vars[bg] && ratio(vars[fg], vars[bg]) >= 4.5)
       && ratio("#ffffff", vars.accent) >= 4.5;
   })());
+
+/* ---------- Tool finder (not a tool: page navigation for the 94 tools) ---------- */
+check("FINDER empty query matches every tool", app.toolSearchMatch("anything at all", "") === true && app.toolSearchMatch("anything at all", "   ") === true && app.toolSearchMatch("anything at all", null) === true);
+check("FINDER single word matches case-insensitively", app.toolSearchMatch("2 · Impermanent-loss calculator", "impermanent") === true && app.toolSearchMatch("2 · Impermanent-loss calculator", "IMPERMANENT") === true);
+check("FINDER every word must appear (AND, any order)", app.toolSearchMatch("CLMM single-sided zap-in planner", "zap clmm") === true && app.toolSearchMatch("CLMM single-sided zap-in planner", "clmm zap") === true);
+check("FINDER a missing word rejects the tool", app.toolSearchMatch("CLMM single-sided zap-in planner", "clmm sandwich") === false && app.toolSearchMatch("Constant-product swap model", "stableswap") === false);
+check("FINDER tool numbers are searchable", app.toolSearchMatch("94 · Just-in-time (JIT) liquidity model", "94") === true && app.toolSearchMatch("94 · Just-in-time (JIT) liquidity model", "jit 94") === true);
+check("FINDER extra whitespace in the query is ignored", app.toolSearchMatch("sandwich (MEV) attack model", "  sandwich   mev ") === true);
+check("FINDER non-string haystack never matches", app.toolSearchMatch(null, "swap") === false && app.toolSearchMatch(undefined, "") === false);
+check("FINDER finder controls present and labelled", html.includes('id="tool-q"') && html.includes('for="tool-q"') && html.includes('id="tool-filter-status"') && html.includes('id="tool-no-results"'));
+check("FINDER status is a polite live region", /id="tool-filter-status"[^>]*role="status"[^>]*aria-live="polite"/.test(html));
+check("FINDER finder sits above the tool grid and counts the tools honestly", html.indexOf('id="tool-q"') > html.indexOf('id="tools"') && html.indexOf('id="tool-q"') < html.indexOf('class="tool-grid"') && html.includes("Find a tool among the ninety-four"));
+check("FINDER wiring uses the shared matcher over every tool form", appSrc.includes('querySelectorAll(".tool-grid .tool")') && appSrc.includes('getElementById("tool-q")') && appSrc.includes("toolSearchMatch(form.textContent, toolQ.value)") && appSrc.includes('addEventListener("input", applyToolFilter)'));
+check("FINDER hiding never deletes: filter toggles hidden only", appSrc.includes("form.hidden = !show") && !/toolForms\.forEach[\s\S]{0,400}remove\(\)/.test(appSrc));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

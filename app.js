@@ -83,6 +83,19 @@ function formatScaled(nano) {
   var frac = (nano % SCALE).toString().padStart(9, "0").replace(/0+$/, "");
   return frac ? whole.toString() + "." + frac : whole.toString();
 }
+
+/* Tool finder matching: a tool matches when EVERY whitespace-separated
+   word of the query appears in its text (title, description, labels),
+   case-insensitively. An empty query matches every tool. Word order
+   does not matter, so "loss impermanent" finds the impermanent-loss
+   tools and "clmm zap" finds only the CLMM zap tools. */
+function toolSearchMatch(haystack, query) {
+  if (typeof haystack !== "string") return false;
+  var tokens = String(query == null ? "" : query).toLowerCase().split(/\s+/).filter(function (t) { return t.length > 0; });
+  if (!tokens.length) return true;
+  var text = haystack.toLowerCase();
+  return tokens.every(function (t) { return text.indexOf(t) !== -1; });
+}
 function scaledToNumber(nano) { return Number(nano) / 1e9; }
 
 /* ---------- 1 · Constant-product swap model (x * y = k) ---------- */
@@ -7321,7 +7334,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, toolSearchMatch, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -7355,6 +7368,28 @@ if (typeof document !== "undefined") {
       });
     });
     applyFilter();
+
+    /* --- tool finder: with ninety-four tools stacked on one page, a
+       visitor who knows the question ("impermanent loss", "sandwich")
+       should not have to scroll past every other tool to find it.
+       Matches against each tool form's own text; hiding a form never
+       touches its state, and clearing the search restores all tools. --- */
+    var toolForms = Array.prototype.slice.call(document.querySelectorAll(".tool-grid .tool"));
+    var toolQ = document.getElementById("tool-q");
+    var toolStatus = document.getElementById("tool-filter-status");
+    var toolNoResults = document.getElementById("tool-no-results");
+    function applyToolFilter() {
+      var shown = 0;
+      toolForms.forEach(function (form) {
+        var show = toolSearchMatch(form.textContent, toolQ.value);
+        form.hidden = !show;
+        if (show) shown++;
+      });
+      toolNoResults.hidden = shown !== 0;
+      toolStatus.textContent = shown + " of " + toolForms.length + (toolForms.length === 1 ? " tool shown" : " tools shown");
+    }
+    toolQ.addEventListener("input", applyToolFilter);
+    applyToolFilter();
 
     function fmt(n, dp) { return n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp }); }
 
