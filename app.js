@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus one hundred five fully
+/* Raydium Renaissance hub logic: project filtering plus one hundred six fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -75,8 +75,9 @@
    a leveraged LP position model, a
    sliced (TWAP-style) swap planner, a
    Solana transaction cost estimator, a
-   stableswap delta-hedge calculator, and a
-   leveraged CLMM position model.
+   stableswap delta-hedge calculator, a
+   leveraged CLMM position model, and a swap
+   route comparison model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -8493,8 +8494,80 @@ function clmmLeveragedLp(lowerStr, upperStr, entryPriceStr, equityStr, leverageS
   return result;
 }
 
+/* ---------- 106 · Swap route comparison model ---------- */
+/* Tool 1 prices a direct swap through one pool and tool 23 prices a
+   two-hop swap through an intermediate token; neither says which
+   route a trader should take. This puts the same amount into both
+   and compares what comes out — the direct leg is tool 1's own
+   cpSwap and the routed leg is tool 23's own twoHopSwap, both
+   called verbatim (the tests assert every reported leg equals
+   those tools across a sweep), so the comparison can never drift
+   from the models it compares. The winner is decided on the exact
+   scaled outputs, and the advantage is the gap over the WORSE
+   route's output. Depth beats directness until it doesn't: 100
+   into a 1,000/1,000 direct pool at 25 bps pays 90.70243237, while
+   routing through two 10,000/10,000 pools at 25 bps each pays
+   97.556799668 (+7.5570%) — the second fee costs less than the
+   impact it avoids — but through two 1,000/1,000 pools the routed
+   trade pays only 82.968999911, because now it pays the fee and
+   the impact twice. The identity underneath: two zero-fee curves
+   compose into another constant-product curve (effective reserves
+   N*P/(N+M) and Q*M/(N+M) for hop reserves P/M and N/Q), so a
+   routed path built to compose into the direct pool — direct
+   1,000/2,000 against hops 2,000/1,000 and 1,000/4,000, all zero
+   fee — pays exactly the direct output, 181.818181818 for 100
+   in, a tie to the last scaled unit. Two honest edges, both
+   stated on the tool. First, the routes are priced independently
+   against the SAME starting state: if the two routes share a
+   pool — the direct pool doubling as a hop leg is the common
+   case — executing one route would move the other, and this
+   comparison double-counts that pool's depth. Second, a real
+   router can also split one trade across both routes at once and
+   nets out per-transaction network costs; neither is modelled
+   here. Model only: your pools, amount and fees, not live pool
+   data, not a live quote, not financial advice. */
+function routeCompare(directInStr, directOutStr, hop1InStr, hop1OutStr, hop2InStr, hop2OutStr, amountInStr, directFeeBps, hop1FeeBps, hop2FeeBps) {
+  var raw = [directInStr, directOutStr, hop1InStr, hop1OutStr, hop2InStr, hop2OutStr, amountInStr, directFeeBps, hop1FeeBps, hop2FeeBps];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var direct = cpSwap(directInStr, directOutStr, amountInStr, directFeeBps);
+  if (direct === null) return null;
+  var routed = twoHopSwap(hop1InStr, hop1OutStr, hop2InStr, hop2OutStr, amountInStr, hop1FeeBps, hop2FeeBps);
+  if (routed === null) return null;
+  var dOut = parseScaled(direct.out), rOut = parseScaled(routed.out);
+  var best = dOut === rOut ? "tie" : (dOut > rOut ? "direct" : "routed");
+  var diff = dOut >= rOut ? dOut - rOut : rOut - dOut;
+  var worse = dOut <= rOut ? dOut : rOut;
+  var result = {
+    amountIn: routed.amountIn,
+    directOut: direct.out,
+    routedOut: routed.out,
+    midOut: routed.midOut,
+    directImpactPct: direct.priceImpactPct,
+    routedImpactPct: routed.priceImpactPct,
+    hop1ImpactPct: routed.hop1ImpactPct,
+    hop2ImpactPct: routed.hop2ImpactPct,
+    directSpot: direct.spotPrice,
+    routedSpot: routed.spotPrice,
+    directEffective: direct.effectivePrice,
+    routedEffective: routed.effectivePrice,
+    best: best,
+    diffOut: formatScaled(diff),
+    advantagePct: Number(diff) / Number(worse) * 100,
+    directFeePct: direct.feePct,
+    fee1Pct: routed.fee1Pct,
+    fee2Pct: routed.fee2Pct
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -10685,6 +10758,40 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: your " + fmt(res.equity, 4) + " B of equity at " + fmt(res.leverage, 4) + "x leverage controls a CLMM position worth " + fmt(res.positionValue, 4) + " B in the " + fmt(res.lower, 4) + "–" + fmt(res.upper, 4) + " range entered at " + fmt(res.entryPrice, 6) + " B per A — model liquidity " + fmt(res.liquidity, 4) + ", holding " + fmt(res.entryAmountA, 4) + " A and " + fmt(res.entryAmountB, 4) + " B at entry, with " + fmt(res.debtStart, 4) + " B borrowed. Over " + fmt(res.days, 4) + " day(s) at " + fmt(res.borrowAprPct, 4) + "% borrow APR the debt grows by " + fmt(res.interest, 4) + " B to " + fmt(res.debtEnd, 4) + " B. If the price moves " + fmt(res.priceRatio, 4) + "x to " + fmt(res.checkPrice, 6) + " B per A, the position holds " + fmt(res.checkAmountA, 4) + " A and " + fmt(res.checkAmountB, 4) + " B and is worth " + fmt(res.valueAfter, 4) + " B." + settleWord + beWord + marginWord + " Simple interest at a constant APR, one borrow in token B, no trading fees earned (the fee tools price that leg — fees are what a real levered position races the interest with), no liquidation penalty, and real protocols set their own margin rules and liquidate on their own oracle's price — this model's multiples are not any protocol's. A leveraged CLMM model, not live pool data. Not financial advice.";
         document.getElementById("clev-out").value = fmt(res.equityAfter, 4);
         document.getElementById("clev-be").value = res.breakEvenUnreachable ? "unreachable" : fmt(res.breakEvenRatio, 4);
+      }
+    });
+
+    /* --- Swap route comparison model --- */
+    document.getElementById("route-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = routeCompare(
+        document.getElementById("route-drin").value,
+        document.getElementById("route-drout").value,
+        document.getElementById("route-h1in").value,
+        document.getElementById("route-h1out").value,
+        document.getElementById("route-h2in").value,
+        document.getElementById("route-h2out").value,
+        document.getElementById("route-ain").value,
+        document.getElementById("route-dfee").value,
+        document.getElementById("route-fee1").value,
+        document.getElementById("route-fee2").value
+      );
+      var out = document.getElementById("route-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for the direct pool and for both hop pools, a positive amount to pay in (up to 9 decimal places), and a fee in whole basis points from 0 to 9999 for each of the three pools (25 = 0.25%). Every leg must still pay something after its fee — a dust amount that a hop pool would round down to nothing is rejected rather than compared.";
+        document.getElementById("route-outd").value = "";
+        document.getElementById("route-outh").value = "";
+        document.getElementById("route-adv").value = "";
+      } else {
+        var verdict = res.best === "tie"
+          ? " The two routes TIE exactly — both pay " + res.directOut + ", so the routed path's two curves compose into the direct pool's curve at these reserves and fees, and neither route gains a single smallest unit over the other."
+          : (res.best === "routed"
+            ? " The ROUTED route wins: it pays " + res.diffOut + " more (" + fmt(res.advantagePct, 4) + "% over the direct route's output) — the deeper hop pools' lower impact more than pays the second fee."
+            : " The DIRECT route wins: it pays " + res.diffOut + " more (" + fmt(res.advantagePct, 4) + "% over the routed route's output) — the routed trade pays a second fee and a second helping of impact, and the hop pools are not deep enough to earn that back.");
+        out.textContent = "Model output: paying " + fmt(res.amountIn, 4) + " in directly (pool spot " + fmt(res.directSpot, 6) + " out per in, fee " + fmt(res.directFeePct, 4) + "%) pays " + res.directOut + " at a modelled price impact of " + fmt(res.directImpactPct, 4) + "%. Routed through the intermediate token instead — first hop pays " + res.midOut + " of it (impact " + fmt(res.hop1ImpactPct, 4) + "%, fee " + fmt(res.fee1Pct, 4) + "%), second hop pays " + res.routedOut + " (impact " + fmt(res.hop2ImpactPct, 4) + "%, fee " + fmt(res.fee2Pct, 4) + "%) — for a combined routed impact of " + fmt(res.routedImpactPct, 4) + "% against a combined spot of " + fmt(res.routedSpot, 6) + " out per in." + verdict + " Both routes are priced independently against the same starting state: if they share a pool — the direct pool doubling as a hop leg is the common case — executing one would move the other, and this comparison double-counts that pool's depth. A real router can also split one trade across both routes at once, and each route pays its own network and priority fees; neither is modelled here. A swap route comparison model, not live pool data. Not financial advice.";
+        document.getElementById("route-outd").value = res.directOut;
+        document.getElementById("route-outh").value = res.routedOut;
+        document.getElementById("route-adv").value = fmt(res.advantagePct, 4);
       }
     });
 
