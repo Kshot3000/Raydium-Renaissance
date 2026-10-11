@@ -8524,7 +8524,12 @@ function clmmLeveragedLp(lowerStr, upperStr, entryPriceStr, equityStr, leverageS
    comparison double-counts that pool's depth. Second, a real
    router can also split one trade across both routes at once and
    nets out per-transaction network costs; neither is modelled
-   here. Model only: your pools, amount and fees, not live pool
+   here. One scale corner: when the worse route pays a single
+   smallest unit beside the winner's astronomical output, the
+   winner's advantage percentage exceeds the largest double and is
+   reported as Infinity — the outputs and the gap stay exact, and
+   rejecting the comparison would misreport valid pools as invalid
+   input. Model only: your pools, amount and fees, not live pool
    data, not a live quote, not financial advice. */
 function routeCompare(directInStr, directOutStr, hop1InStr, hop1OutStr, hop2InStr, hop2OutStr, amountInStr, directFeeBps, hop1FeeBps, hop2FeeBps) {
   var raw = [directInStr, directOutStr, hop1InStr, hop1OutStr, hop2InStr, hop2OutStr, amountInStr, directFeeBps, hop1FeeBps, hop2FeeBps];
@@ -8559,8 +8564,18 @@ function routeCompare(directInStr, directOutStr, hop1InStr, hop1OutStr, hop2InSt
     fee1Pct: routed.fee1Pct,
     fee2Pct: routed.fee2Pct
   };
+  /* Every figure the tool reports must be finite, or the input is
+     rejected — except advantagePct, whose Infinity is the honest
+     answer when the worse route pays dust beside the winner's output:
+     the true percentage then exceeds the largest double, and rejecting
+     a comparison whose outputs are exact scaled integers would misreport
+     valid pools as invalid input (the break-even tools' convention,
+     e.g. Tool 96's daysToBreakEven). advantagePct can never be NaN
+     here: both outputs are positive, so the ratio is a finite
+     non-negative double and only the ×100 can overflow, to +Infinity. */
   var fields = Object.keys(result);
   for (var j = 0; j < fields.length; j++) {
+    if (fields[j] === "advantagePct") continue;
     if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
   }
   return result;
@@ -10783,15 +10798,18 @@ if (typeof document !== "undefined") {
         document.getElementById("route-outh").value = "";
         document.getElementById("route-adv").value = "";
       } else {
+        var advPhrase = res.advantagePct === Infinity
+          ? "an advantage too large to express as a percentage — the losing route pays next to nothing beside the winner's output"
+          : fmt(res.advantagePct, 4) + "% over the " + (res.best === "routed" ? "direct" : "routed") + " route's output";
         var verdict = res.best === "tie"
           ? " The two routes TIE exactly — both pay " + res.directOut + ", so the routed path's two curves compose into the direct pool's curve at these reserves and fees, and neither route gains a single smallest unit over the other."
           : (res.best === "routed"
-            ? " The ROUTED route wins: it pays " + res.diffOut + " more (" + fmt(res.advantagePct, 4) + "% over the direct route's output) — the deeper hop pools' lower impact more than pays the second fee."
-            : " The DIRECT route wins: it pays " + res.diffOut + " more (" + fmt(res.advantagePct, 4) + "% over the routed route's output) — the routed trade pays a second fee and a second helping of impact, and the hop pools are not deep enough to earn that back.");
+            ? " The ROUTED route wins: it pays " + res.diffOut + " more (" + advPhrase + ") — the deeper hop pools' lower impact more than pays the second fee."
+            : " The DIRECT route wins: it pays " + res.diffOut + " more (" + advPhrase + ") — the routed trade pays a second fee and a second helping of impact, and the hop pools are not deep enough to earn that back.");
         out.textContent = "Model output: paying " + fmt(res.amountIn, 4) + " in directly (pool spot " + fmt(res.directSpot, 6) + " out per in, fee " + fmt(res.directFeePct, 4) + "%) pays " + res.directOut + " at a modelled price impact of " + fmt(res.directImpactPct, 4) + "%. Routed through the intermediate token instead — first hop pays " + res.midOut + " of it (impact " + fmt(res.hop1ImpactPct, 4) + "%, fee " + fmt(res.fee1Pct, 4) + "%), second hop pays " + res.routedOut + " (impact " + fmt(res.hop2ImpactPct, 4) + "%, fee " + fmt(res.fee2Pct, 4) + "%) — for a combined routed impact of " + fmt(res.routedImpactPct, 4) + "% against a combined spot of " + fmt(res.routedSpot, 6) + " out per in." + verdict + " Both routes are priced independently against the same starting state: if they share a pool — the direct pool doubling as a hop leg is the common case — executing one would move the other, and this comparison double-counts that pool's depth. A real router can also split one trade across both routes at once, and each route pays its own network and priority fees; neither is modelled here. A swap route comparison model, not live pool data. Not financial advice.";
         document.getElementById("route-outd").value = res.directOut;
         document.getElementById("route-outh").value = res.routedOut;
-        document.getElementById("route-adv").value = fmt(res.advantagePct, 4);
+        document.getElementById("route-adv").value = res.advantagePct === Infinity ? "∞" : fmt(res.advantagePct, 4);
       }
     });
 

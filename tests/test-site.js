@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=138"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=139"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v138", html.includes("app.js?v=138"));
+check("app.js cache key bumped to v139", html.includes("app.js?v=139"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -7112,6 +7112,14 @@ check("ROUTE routed output rises monotonically with hop depth and the verdict fl
 const routeFeeDrag = app.routeCompare("1000", "1000", "10000", "10000", "10000", "10000", "100", 25, 100, 100);
 check("ROUTE deep hops win even at 100 bps per hop", routeFeeDrag !== null && routeFeeDrag.best === "routed" && routeFeeDrag.routedOut === "96.116410594");
 near("ROUTE fee-drag advantage pct", routeFeeDrag.advantagePct, 5.968944914194697, 1e-9);
+/* when the worse route pays a single smallest unit beside the winner's
+   astronomical output, the true advantage percentage exceeds the largest
+   double: it is reported as Infinity (the break-even tools' convention),
+   not used to reject a comparison whose outputs are exact */
+const routeDustRouted = app.routeCompare("1000000000000000000", "1000000000.000000001", "1", "10000000000", "1", "1" + "0".repeat(298), "1", 0, 0, 0);
+check("ROUTE dust-worse routed win reports advantage Infinity, outputs exact", routeDustRouted !== null && routeDustRouted.best === "routed" && routeDustRouted.directOut === "0.000000001" && routeDustRouted.routedOut === app.twoHopSwap("1", "10000000000", "1", "1" + "0".repeat(298), "1", 0, 0).out && routeDustRouted.diffOut === app.formatScaled(app.parseScaled(routeDustRouted.routedOut) - 1n) && routeDustRouted.advantagePct === Infinity);
+const routeDustDirect = app.routeCompare("1", "1" + "0".repeat(298), "1000000000000000000", "1000000000.000000001", "1", "1.000000001", "1", 0, 0, 0);
+check("ROUTE dust-worse direct win reports advantage Infinity, outputs exact", routeDustDirect !== null && routeDustDirect.best === "direct" && routeDustDirect.routedOut === "0.000000001" && routeDustDirect.directOut === app.cpSwap("1", "1" + "0".repeat(298), "1", 0).out && routeDustDirect.advantagePct === Infinity);
 /* the verdict and the advantage are consistent with the two outputs */
 check("ROUTE verdict and advantage agree with the outputs across a sweep", [["1000", "1000", "10000", "10000", "10000", "10000", "100", 25, 25, 25], ["1000", "1000", "1000", "1000", "1000", "1000", "100", 25, 25, 25], ["2000", "500", "9000", "3000", "3000", "9000", "75", 30, 25, 25], ["500", "8000", "4000", "4000", "4000", "4000", "12.5", 25, 100, 30]].every(([d1, d2, a, b, c, e, amt, f0, f1, f2]) => { const r = app.routeCompare(d1, d2, a, b, c, e, amt, f0, f1, f2); if (r === null) return false; const d = Number(r.directOut), h = Number(r.routedOut); const wantBest = d === h ? "tie" : (d > h ? "direct" : "routed"); return r.best === wantBest && Math.abs(r.advantagePct - Math.abs(d - h) / Math.min(d, h) * 100) < 1e-9 && Math.abs(Number(r.diffOut) - Math.abs(d - h)) < 1e-9; }));
 check("ROUTE rejects blanks and junk in every field", ["", " ", "abc", "1e3", "-5"].every(v => app.routeCompare(v, "1000", "10000", "10000", "10000", "10000", "100", 25, 25, 25) === null && app.routeCompare("1000", "1000", "10000", "10000", "10000", v, "100", 25, 25, 25) === null && app.routeCompare("1000", "1000", "10000", "10000", "10000", "10000", v, 25, 25, 25) === null) && app.routeCompare(null, "1000", "10000", "10000", "10000", "10000", "100", 25, 25, 25) === null);
