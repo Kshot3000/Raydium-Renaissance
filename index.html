@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred six</label>
+      <label for="tool-q">Find a tool among the one hundred seven</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred six tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred seven tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred six.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred seven.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2530,6 +2530,39 @@
         <button type="submit" class="btn primary">Compare my routes</button>
         <p id="route-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="rxo-calc">
+        <h3>107 · Exact-out route comparison model</h3>
+        <p>Tool 106 compares the two routes by what they pay for a fixed amount in; this compares them by what they charge for a fixed amount out — the question when you need an exact quantity of the token you receive. The direct leg is tool 6's own exact-out maths and the routed leg is tool 39's own two-hop exact-out maths, run backwards hop by hop, so the comparison cannot drift from the models it compares. Depth beats directness in this direction too: receiving exactly 90 from a direct pool holding 1,000 / 1,000 at a 0.25% fee costs ≈99.1490 in, while routing the purchase through two pools holding 10,000 / 10,000 each at 0.25% per hop costs ≈92.1118 — about 7.10% of the direct cost saved, because the second fee costs less than the price impact it avoids. Buy through two pools the same size as the direct one instead and the routed purchase costs ≈110.3373: the fee and the impact are both charged twice, on the way back as well. The target must be smaller than every reserve it is drawn against — a route that would have to drain a pool is rejected rather than priced. The two routes are priced independently against the same starting state — if they share a pool, as they often do when the direct pool doubles as a hop leg, executing one route would move the other, and this comparison double-counts that pool's depth. A real router can also split one trade across both routes at once, and each route pays its own network and priority fees; neither is modelled here. Educational model only — your pools, target and fees, not live pool data, not a live quote, not financial advice.</p>
+        <label for="rxo-drin">Direct pool reserve of the token you pay in</label>
+        <input id="rxo-drin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="rxo-drout">Direct pool reserve of the token you receive</label>
+        <input id="rxo-drout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="rxo-dfee">Direct pool fee (basis points, 25 = 0.25%)</label>
+        <input id="rxo-dfee" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="rxo-h1in">First hop pool reserve of the token you pay in</label>
+        <input id="rxo-h1in" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rxo-h1out">First hop pool reserve of the intermediate token</label>
+        <input id="rxo-h1out" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rxo-h2in">Second hop pool reserve of the intermediate token</label>
+        <input id="rxo-h2in" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rxo-h2out">Second hop pool reserve of the token you receive</label>
+        <input id="rxo-h2out" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rxo-aout">Exact amount you want to receive</label>
+        <input id="rxo-aout" inputmode="decimal" placeholder="e.g. 90" autocomplete="off">
+        <label for="rxo-fee1">First hop pool fee (basis points, 25 = 0.25%)</label>
+        <input id="rxo-fee1" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="rxo-fee2">Second hop pool fee (basis points, 25 = 0.25%)</label>
+        <input id="rxo-fee2" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="rxo-ind">Direct route charges you (model)</label>
+        <input id="rxo-ind" readonly placeholder="—" autocomplete="off">
+        <label for="rxo-inh">Routed route charges you (model)</label>
+        <input id="rxo-inh" readonly placeholder="—" autocomplete="off">
+        <label for="rxo-save">Winning route's saving over the other route's cost, % (model)</label>
+        <input id="rxo-save" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Compare the cost of my routes</button>
+        <p id="rxo-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2557,6 +2590,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=139"></script>
+<script src="app.js?v=140"></script>
 </body>
 </html>

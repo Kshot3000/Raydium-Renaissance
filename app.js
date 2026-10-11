@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus one hundred six fully
+/* Raydium Renaissance hub logic: project filtering plus one hundred seven fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -76,8 +76,9 @@
    sliced (TWAP-style) swap planner, a
    Solana transaction cost estimator, a
    stableswap delta-hedge calculator, a
-   leveraged CLMM position model, and a swap
-   route comparison model.
+   leveraged CLMM position model, a swap
+   route comparison model, and an exact-out
+   swap route comparison model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -8581,8 +8582,92 @@ function routeCompare(directInStr, directOutStr, hop1InStr, hop1OutStr, hop2InSt
   return result;
 }
 
+/* ---------- 107 · Exact-out route comparison model ---------- */
+/* Tool 106 compares two routes by what they PAY for a fixed amount
+   in; a trader who needs a fixed amount OUT asks the comparison the
+   other way round: "which route CHARGES less for exactly this much
+   out?" This runs the same target output through both routes
+   backwards — the direct leg is tool 6's own cpSwapExactOut and the
+   routed leg is tool 39's own twoHopExactOut, both called verbatim
+   (the tests assert every reported leg equals those tools across a
+   sweep), so the comparison can never drift from the models it
+   compares. The winner is decided on the exact scaled inputs, and
+   the saving is measured against the WORSE route's cost, so it can
+   never exceed 100% — the exact-out mirror has no overflow corner
+   of the kind tool 106's advantage needed. Depth beats directness
+   until it doesn't, in this direction too: receiving exactly 90
+   from a 1,000/1,000 direct pool at 25 bps costs 99.148971331 in,
+   while routing the purchase through two 10,000/10,000 pools at
+   25 bps per hop costs 92.111782947 — 7.037188384 less, 7.0976% of
+   the direct route's cost — but through two 1,000/1,000 hop pools
+   the routed purchase costs 110.337294215, because the second fee
+   and the second helping of impact are charged on the way back
+   too. The composition identity survives the inversion: two
+   zero-fee curves compose into another constant-product curve, so
+   a routed path built to compose into the direct pool — direct
+   2,000/1,000 against hops 3,000/1,000 and 2,000/3,000, all zero
+   fee — charges exactly the direct route's 2,000 in for 500 out,
+   a tie to the last scaled unit. Feasibility is inherited from
+   tools 6 and 39: the target must be less than the direct pool's
+   out reserve AND the second hop's out reserve, and the
+   intermediate the second hop demands must be less than the first
+   hop's out reserve — a route that would have to drain any pool
+   is rejected, not priced, and if either route is infeasible the
+   comparison itself is rejected rather than crowning the survivor
+   (the survivor's price is tools 6 and 39's own business). One
+   rounding nuance, stated honestly: each exact-out leg rounds its
+   required input UP at 9 dp, so buying back the exact output tool
+   106's headline reports (90.70243237, itself floored at 9 dp)
+   costs 99.999999999 directly — one smallest unit under the 100
+   that produced it. The same two honest edges as tool 106 apply:
+   the routes are priced independently against the SAME starting
+   state, so a pool shared by both routes is double-counted, and
+   splitting a trade across both routes and per-route network
+   costs are not modelled. Model only: your pools, target and
+   fees, not live pool data, not a live quote, not financial
+   advice. */
+function routeCompareExactOut(directInStr, directOutStr, hop1InStr, hop1OutStr, hop2InStr, hop2OutStr, amountOutStr, directFeeBps, hop1FeeBps, hop2FeeBps) {
+  var raw = [directInStr, directOutStr, hop1InStr, hop1OutStr, hop2InStr, hop2OutStr, amountOutStr, directFeeBps, hop1FeeBps, hop2FeeBps];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var direct = cpSwapExactOut(directInStr, directOutStr, amountOutStr, directFeeBps);
+  if (direct === null) return null;
+  var routed = twoHopExactOut(hop1InStr, hop1OutStr, hop2InStr, hop2OutStr, amountOutStr, hop1FeeBps, hop2FeeBps);
+  if (routed === null) return null;
+  var dIn = parseScaled(direct.amountIn), rIn = parseScaled(routed.amountIn);
+  var best = dIn === rIn ? "tie" : (dIn < rIn ? "direct" : "routed");
+  var diff = dIn >= rIn ? dIn - rIn : rIn - dIn;
+  var worse = dIn >= rIn ? dIn : rIn;
+  var result = {
+    amountOut: routed.out,
+    directIn: direct.amountIn,
+    routedIn: routed.amountIn,
+    midIn: routed.midIn,
+    directImpactPct: direct.priceImpactPct,
+    routedImpactPct: routed.priceImpactPct,
+    hop1ImpactPct: routed.hop1ImpactPct,
+    hop2ImpactPct: routed.hop2ImpactPct,
+    directSpot: direct.spotPrice,
+    routedSpot: routed.spotPrice,
+    directEffective: direct.effectivePrice,
+    routedEffective: routed.effectivePrice,
+    best: best,
+    savingsIn: formatScaled(diff),
+    savingsPct: Number(diff) / Number(worse) * 100,
+    directFeePct: direct.feePct,
+    fee1Pct: routed.fee1Pct,
+    fee2Pct: routed.fee2Pct
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -10810,6 +10895,40 @@ if (typeof document !== "undefined") {
         document.getElementById("route-outd").value = res.directOut;
         document.getElementById("route-outh").value = res.routedOut;
         document.getElementById("route-adv").value = res.advantagePct === Infinity ? "∞" : fmt(res.advantagePct, 4);
+      }
+    });
+
+    /* --- Exact-out swap route comparison model --- */
+    document.getElementById("rxo-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = routeCompareExactOut(
+        document.getElementById("rxo-drin").value,
+        document.getElementById("rxo-drout").value,
+        document.getElementById("rxo-h1in").value,
+        document.getElementById("rxo-h1out").value,
+        document.getElementById("rxo-h2in").value,
+        document.getElementById("rxo-h2out").value,
+        document.getElementById("rxo-aout").value,
+        document.getElementById("rxo-dfee").value,
+        document.getElementById("rxo-fee1").value,
+        document.getElementById("rxo-fee2").value
+      );
+      var out = document.getElementById("rxo-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for the direct pool and for both hop pools, a positive target amount to receive (up to 9 decimal places), and a fee in whole basis points from 0 to 9999 for each of the three pools (25 = 0.25%). The target must be smaller than the direct pool's receive reserve and the second hop pool's receive reserve, and the intermediate amount the second hop demands must be smaller than the first hop pool's intermediate reserve — a route that would have to drain a pool is rejected rather than priced.";
+        document.getElementById("rxo-ind").value = "";
+        document.getElementById("rxo-inh").value = "";
+        document.getElementById("rxo-save").value = "";
+      } else {
+        var verdict = res.best === "tie"
+          ? " The two routes TIE exactly — both charge " + res.directIn + " for the target, so the routed path's two curves compose into the direct pool's curve at these reserves and fees, and neither route saves a single smallest unit over the other."
+          : (res.best === "routed"
+            ? " The ROUTED route wins: it charges " + res.savingsIn + " less (" + fmt(res.savingsPct, 4) + "% of the direct route's cost) — the deeper hop pools' lower impact more than pays the second fee."
+            : " The DIRECT route wins: it charges " + res.savingsIn + " less (" + fmt(res.savingsPct, 4) + "% of the routed route's cost) — the routed purchase pays a second fee and a second helping of impact, and the hop pools are not deep enough to earn that back.");
+        out.textContent = "Model output: receiving exactly " + res.amountOut + " directly (pool spot " + fmt(res.directSpot, 6) + " out per in, fee " + fmt(res.directFeePct, 4) + "%) costs " + res.directIn + " in at a modelled price impact of " + fmt(res.directImpactPct, 4) + "%. Routed through the intermediate token instead — the second hop needs " + res.midIn + " of it to pay the target (impact " + fmt(res.hop2ImpactPct, 4) + "%, fee " + fmt(res.fee2Pct, 4) + "%), and buying that intermediate through the first hop (impact " + fmt(res.hop1ImpactPct, 4) + "%, fee " + fmt(res.fee1Pct, 4) + "%) brings the total cost to " + res.routedIn + " in, a combined routed impact of " + fmt(res.routedImpactPct, 4) + "% against a combined spot of " + fmt(res.routedSpot, 6) + " out per in." + verdict + " Each exact-out leg rounds the input it requires up at 9 decimal places, so a routed purchase rounds twice. Both routes are priced independently against the same starting state: if they share a pool — the direct pool doubling as a hop leg is the common case — executing one would move the other, and this comparison double-counts that pool's depth. A real router can also split one trade across both routes at once, and each route pays its own network and priority fees; neither is modelled here. An exact-out swap route comparison model, not live pool data. Not financial advice.";
+        document.getElementById("rxo-ind").value = res.directIn;
+        document.getElementById("rxo-inh").value = res.routedIn;
+        document.getElementById("rxo-save").value = fmt(res.savingsPct, 4);
       }
     });
 
