@@ -8926,7 +8926,15 @@ function threeHopExactOut(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2
    runner-up pays a single smallest unit beside the winner's
    astronomical output, the advantage percentage itself overflows
    and is reported as Infinity (tool 106's convention) — the
-   outputs and the gap stay exact. Model only: your pools,
+   outputs and the gap stay exact. One more conversion corner,
+   tool 107's family: the gap is a scaled BigInt, and converting
+   it to a double overflows once the gap passes ~1.8e299 tokens —
+   reachable when the two-hop route wins inside the spot band
+   above with a payout of ~1e300 tokens — so there the percentage
+   is evaluated from the exact BigInts at fixed scale, and
+   Infinity is reported only when the true percentage itself
+   overflows, never merely because the gap's conversion did.
+   Model only: your pools,
    amount and fees, not live pool data, not a live quote, not
    financial advice. */
 function routeLengthCompare(directInStr, directOutStr, two1InStr, two1OutStr, two2InStr, two2OutStr, three1InStr, three1OutStr, three2InStr, three2OutStr, three3InStr, three3OutStr, amountInStr, directFeeBps, twoFee1Bps, twoFee2Bps, threeFee1Bps, threeFee2Bps, threeFee3Bps) {
@@ -8961,6 +8969,23 @@ function routeLengthCompare(directInStr, directOutStr, two1InStr, two1OutStr, tw
     if (hOut !== max && hOut > runner) runner = hOut;
     diff = max - runner;
   }
+  /* The advantage is a ratio of two scaled BigInts, and a bounded
+     ratio is not overflow-safe when its operands are converted
+     first (tool 107's lesson): Number(diff) overflows once the gap
+     passes ~1.8e299 tokens — reachable here when the two-hop route
+     wins inside its combined-spot exemption band, its payout a
+     double-expressible ~1e300 tokens while the gap's scaled form is
+     not — and the naive formula then reports Infinity for a true
+     advantage of, say, 109%. When either conversion is non-finite
+     the percentage is evaluated from the exact BigInts at fixed
+     scale instead; Infinity survives only when the true percentage
+     itself overflows the double range (tool 106's dust runner-up),
+     which is the honest answer there. The ordinary path is the
+     naive formula untouched. */
+  var advantagePct = Number(diff) / Number(runner) * 100;
+  if (!Number.isFinite(Number(diff)) || !Number.isFinite(Number(runner))) {
+    advantagePct = Number(diff * (10n ** 18n) / runner) / 1e16;
+  }
   var result = {
     amountIn: three.amountIn,
     directOut: direct.out,
@@ -8978,7 +9003,7 @@ function routeLengthCompare(directInStr, directOutStr, two1InStr, two1OutStr, tw
     best: best,
     tiedRoutes: tiedRoutes,
     diffOut: formatScaled(diff),
-    advantagePct: Number(diff) / Number(runner) * 100,
+    advantagePct: advantagePct,
     directFeePct: direct.feePct,
     twoFee1Pct: two.fee1Pct,
     twoFee2Pct: two.fee2Pct,
