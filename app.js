@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus one hundred eleven fully
+/* Raydium Renaissance hub logic: project filtering plus one hundred twelve fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -81,8 +81,9 @@
    swap route comparison model, a three-hop
    swap model, a three-hop exact-out
    swap model, a route-length
-   comparison model, and a platform-fee
-   swap model.
+   comparison model, a platform-fee
+   swap model, and a platform-fee
+   exact-out swap model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -9115,8 +9116,111 @@ function platformFeeSwap(reserveInStr, reserveOutStr, amountInStr, poolFeeBps, p
   return result;
 }
 
+/* ---------- 112 · Platform-fee exact-out swap model (constant-product pools) ---------- */
+/* Tool 111 backwards. Tool 111 fixes what you pay in and lets the
+   output float; a trader who needs an exact quantity of the token
+   received asks the inverse through the same platform layer: how
+   much must I pay in TOTAL, platform fee included, for exactly
+   this much out? The amount that has to reach the pool is tool 6's
+   own cpSwapExactOut charge verbatim — the tests assert it field
+   by field — and the total is that amount grossed up for tool
+   111's floored platform fee. The gross-up has an exact closed
+   form, no search: tool 111's net for a total G is
+   G − floor(G·p/10000), which is exactly ceil(G·(10000−p)/10000),
+   so the smallest total whose net is the required N is
+   floor((N−1)·10000/(10000−p)) + 1 — its net is exactly N (the
+   net rises by 0 or 1 per unit of total, so it lands on N, never
+   past it), and its platform fee is exactly G − N. That identity
+   is the honest difference from tool 111's direction: there the
+   platform layer's cost in the token received came out a little
+   UNDER the fee, because the smaller trade took less price
+   impact; here the target is fixed and the net reaching the pool
+   is identical with or without the layer, so the platform layer
+   costs exactly its fee in the token paid — 0.498236036 on top of
+   tool 6's 99.148971331 for the headline target of exactly 90 out
+   of balanced 1,000/1,000 reserves at a 25 bps pool fee and a
+   50 bps platform fee, a total of 99.647207367. Measured against
+   the no-fee total that fee is ≈0.5025% — a little MORE than the
+   headline 0.5%, because the rate is a share of everything paid
+   while the baseline it is measured against is smaller; measured
+   as a share of the total it is the headline rate itself, up to
+   the fee's own smallest-unit flooring. Two edges stay honest.
+   First, the payout: tool 6 rounds its charge up twice, so
+   feeding this total back through tool 111 can pay a few
+   smallest units MORE than the target (54 units on a 54.321
+   target out of a 1,000/54,321 pool at zero pool fee) — the
+   model's amountOut is tool 111's actual payout and the excess
+   over the target is reported, never rounded away. Second, the
+   gross-up explodes as the platform rate approaches 100%: at
+   9999 bps a target whose pool charge is 3 smallest units needs
+   a total of 20,001 units, 19,998 of them fee — a disclosed rate
+   that large is a warning, not a price, and the model shows it
+   rather than capping it. At a zero platform fee the model
+   degenerates exactly to tool 6. Model only: your pool, target
+   and fees, one constant-product pool, no network or priority
+   fees, no output-side or flat platform charges; not live pool
+   data, not a live quote, not financial advice. This page
+   executes nothing — no wallet connects here and no fee is taken
+   by using the model. */
+function platformFeeSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, poolFeeBps, platformFeeBps) {
+  var raw = [reserveInStr, reserveOutStr, amountOutStr, poolFeeBps, platformFeeBps];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var rin = parseScaled(reserveInStr), rout = parseScaled(reserveOutStr), aout = parseScaled(amountOutStr);
+  var poolFee = Number(poolFeeBps), platFee = Number(platformFeeBps);
+  if (rin === null || rout === null || aout === null) return null;
+  if (rin <= 0n || rout <= 0n || aout <= 0n) return null;
+  if (!Number.isInteger(poolFee) || poolFee < 0 || poolFee > 9999) return null;
+  if (!Number.isInteger(platFee) || platFee < 0 || platFee > 9999) return null;
+  var base = cpSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, poolFee);
+  if (base === null) return null;
+  var netIn = parseScaled(base.amountIn);
+  var totalIn = (netIn - 1n) * 10000n / BigInt(10000 - platFee) + 1n;
+  var leg = platformFeeSwap(reserveInStr, reserveOutStr, formatScaled(totalIn), poolFee, platFee);
+  if (leg === null) return null;
+  if (leg.netAmountIn !== base.amountIn) return null;
+  var feeAmt = totalIn - netIn;
+  var outScaled = parseScaled(leg.out);
+  if (outScaled < aout) return null;
+  /* Both percentages are bounded ratios of scaled BigInts;
+     converting before dividing overflows once the amounts pass
+     ~1.8e299 tokens (tool 111's lesson), so there they are
+     evaluated from the exact BigInts at fixed scale instead. */
+  var extraPct = Number(feeAmt) / Number(netIn) * 100;
+  if (!Number.isFinite(Number(feeAmt)) || !Number.isFinite(Number(netIn))) {
+    extraPct = Number(feeAmt * (10n ** 18n) / netIn) / 1e16;
+  }
+  var feeSharePct = Number(feeAmt) / Number(totalIn) * 100;
+  if (!Number.isFinite(Number(feeAmt)) || !Number.isFinite(Number(totalIn))) {
+    feeSharePct = Number(feeAmt * (10n ** 18n) / totalIn) / 1e16;
+  }
+  var result = {
+    amountIn: formatScaled(totalIn),
+    targetOut: formatScaled(aout),
+    amountOut: leg.out,
+    excessOut: formatScaled(outScaled - aout),
+    platformFeeAmount: formatScaled(feeAmt),
+    netAmountIn: leg.netAmountIn,
+    noPlatformFeeIn: base.amountIn,
+    extraIn: formatScaled(feeAmt),
+    extraPct: extraPct,
+    feeSharePct: feeSharePct,
+    spotPrice: leg.spotPrice,
+    effectivePrice: leg.effectivePrice,
+    priceImpactPct: leg.priceImpactPct,
+    poolFeePct: poolFee / 100,
+    platformFeePct: platFee / 100
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -11542,6 +11646,44 @@ if (typeof document !== "undefined") {
         document.getElementById("pfee-net").value = res.netAmountIn;
         document.getElementById("pfee-out").value = res.out;
         document.getElementById("pfee-cost").value = res.costOut;
+      }
+    });
+
+    /* --- Platform-fee exact-out swap model --- */
+    document.getElementById("pfx-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = platformFeeSwapExactOut(
+        document.getElementById("pfx-rin").value,
+        document.getElementById("pfx-rout").value,
+        document.getElementById("pfx-aout").value,
+        document.getElementById("pfx-poolfee").value,
+        document.getElementById("pfx-platfee").value
+      );
+      var out = document.getElementById("pfx-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens and a positive target amount to receive (up to 9 decimal places), smaller than the pool's reserve of the token you receive — a constant-product pool can never pay out its whole reserve — plus a pool fee and a platform fee, each in whole basis points from 0 to 9999 (25 = 0.25%).";
+        document.getElementById("pfx-total").value = "";
+        document.getElementById("pfx-feeamt").value = "";
+        document.getElementById("pfx-net").value = "";
+        document.getElementById("pfx-out").value = "";
+        document.getElementById("pfx-excess").value = "";
+      } else {
+        /* The payout sentence branches on the exact excess: the
+           exact-out charge is rounded up to the smallest unit, so
+           the pool can pay a few of those units past the target —
+           prose must say whether it did, never round it away. */
+        var excessSentence;
+        if (res.excessOut === "0") {
+          excessSentence = "That is exactly your target at the smallest unit the model can state.";
+        } else {
+          excessSentence = "That is " + res.excessOut + " more than your target at the smallest unit the model can state: the amount the pool needs is rounded up to that unit, and the pool's own maths can pay a few units past a target — the excess is shown here, not rounded away.";
+        }
+        out.textContent = "Model output: to receive your target of " + res.targetOut + " you pay " + res.amountIn + " in total (spot " + fmt(res.spotPrice, 6) + " out per in, pool fee " + fmt(res.poolFeePct, 4) + "%). Of that total, " + res.platformFeeAmount + " is the platform fee — a disclosed " + fmt(res.platformFeePct, 4) + "% of everything you pay in, charged in the token you pay and routed to the interface's own fee wallet; on an interface I build, that wallet is my SOL address in the support section below, labelled before any trade, never added after — and " + res.netAmountIn + " reaches the pool, exactly what the exact-out swap model charges for this target with no platform fee at all. So the platform layer costs exactly its fee here: " + res.extraIn + " more than the " + res.noPlatformFeeIn + " you would pay without it, about " + fmt(res.extraPct, 4) + "% on top of that smaller baseline (the rate itself is a share of the total you pay, so measured against the baseline it reads a little higher). The pool pays " + res.amountOut + " at a modelled price impact of " + fmt(res.priceImpactPct, 4) + "% measured against everything you paid in, platform fee included. " + excessSentence + " The platform fee is the platform-fee swap model's own floored fee, grossed up exactly; a real interface rounding its fee up, or charging a minimum, would take more, and as a platform rate approaches 100% the grossed-up total grows without bound — a rate that large is a warning, not a price. Network and priority fees, and any fee an interface charges on the output side or as a flat amount, are not modelled. This page executes nothing: no wallet connects here and no fee is taken by using this model. A platform-fee exact-out swap model, not live pool data. Not financial advice.";
+        document.getElementById("pfx-total").value = res.amountIn;
+        document.getElementById("pfx-feeamt").value = res.platformFeeAmount;
+        document.getElementById("pfx-net").value = res.netAmountIn;
+        document.getElementById("pfx-out").value = res.amountOut;
+        document.getElementById("pfx-excess").value = res.excessOut;
       }
     });
 

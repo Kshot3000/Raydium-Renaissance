@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred eleven</label>
+      <label for="tool-q">Find a tool among the one hundred twelve</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred eleven tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred twelve tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred eleven.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred twelve.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2707,6 +2707,33 @@
         <button type="submit" class="btn primary">Price my swap with the platform fee shown</button>
         <p id="pfee-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="pfx-calc">
+        <h3>112 · Platform-fee exact-out swap model</h3>
+        <p>The platform-fee swap model's question, turned around. That model fixes what you pay in and lets what you receive float; this fixes what you must receive — an exact quantity of the token out — and prices what you pay in total, platform fee included, to get it. The amount that has to reach the pool is the exact-out swap model's own charge, and the total is that amount grossed up for the platform fee, exactly: the platform-fee model's net for any total is that total minus its floored fee, so the smallest total that delivers the pool's charge is a closed form, not a search, and the fee it takes is exactly the difference. On pools holding 1,000 / 1,000, receiving exactly 90 at a 0.25% pool fee with a 0.5% platform fee costs 99.647207367 in total: 0.498236036 goes to the interface and 99.148971331 reaches the pool — exactly what the exact-out model charges with no platform fee at all, so here the platform layer costs exactly its fee, about 0.5025% measured on top of the smaller no-fee total (the rate itself is 0.5% of everything you pay). On an interface I build, that cut is routed to my own fee wallet — the SOL address in the support section below — and the platform fee is grossed up and itemised before you sign, never added after. Two edges stay visible: the exact-out charge is rounded up to the smallest unit the model can state, so the pool can pay a few of those units more than your target — the model shows that excess rather than rounding it away; and the gross-up grows without bound as a platform rate approaches 100% (at 99.99%, a target the pool would charge 3 smallest units for needs 20,001 units in total, 19,998 of them fee), so a rate that large reads as the warning it is. What is not modelled: network and priority fees, and any fee an interface charges on the output side or as a flat amount. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your pool, target and fees, not live pool data, not a live quote, not financial advice.</p>
+        <label for="pfx-rin">Pool reserve of the token you pay in</label>
+        <input id="pfx-rin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="pfx-rout">Pool reserve of the token you receive</label>
+        <input id="pfx-rout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="pfx-aout">Exact amount you want to receive</label>
+        <input id="pfx-aout" inputmode="decimal" placeholder="e.g. 90" autocomplete="off">
+        <label for="pfx-poolfee">Pool fee (basis points, 25 = 0.25%)</label>
+        <input id="pfx-poolfee" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="pfx-platfee">Platform fee charged by the interface (basis points, 50 = 0.5%)</label>
+        <input id="pfx-platfee" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="pfx-total">Total you pay in, platform fee included (model)</label>
+        <input id="pfx-total" readonly placeholder="—" autocomplete="off">
+        <label for="pfx-feeamt">Platform fee taken, in the token you pay in (model)</label>
+        <input id="pfx-feeamt" readonly placeholder="—" autocomplete="off">
+        <label for="pfx-net">Amount that reaches the pool (model)</label>
+        <input id="pfx-net" readonly placeholder="—" autocomplete="off">
+        <label for="pfx-out">You receive (model)</label>
+        <input id="pfx-out" readonly placeholder="—" autocomplete="off">
+        <label for="pfx-excess">Amount above your target, at the smallest unit (model)</label>
+        <input id="pfx-excess" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Price my exact amount out, platform fee included</button>
+        <p id="pfx-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2734,6 +2761,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=149"></script>
+<script src="app.js?v=150"></script>
 </body>
 </html>
