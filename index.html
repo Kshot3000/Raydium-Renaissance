@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the ninety-four</label>
+      <label for="tool-q">Find a tool among the ninety-five</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all ninety-four tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all ninety-five tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all ninety-four.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all ninety-five.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2248,6 +2248,27 @@
         <button type="submit" class="btn primary">Model this JIT round trip</button>
         <p id="jit-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="farm-calc">
+        <h3>95 · Farm rewards estimator (liquidity mining)</h3>
+        <p>Every yield tool above prices trading fees. A farm pays a second, separate yield on top: stake your LP tokens and the farm emits a reward token at a set rate, split pro-rata by staked value. Enter your staked value and the farm's total staked value in the same currency, the farm's emission in reward tokens per day, and your price for one reward token — the estimator shows your share, your rewards per day and over your period, what they are worth at that price, and the naive APR that follows. The headline shape: stake 10,000 of a farm's 1,000,000 staked value (a 1% share) in a farm emitting 10,000 reward tokens a day at a price of 2, and you earn 100 tokens a day — 3,000 over 30 days, worth 6,000, a naive 730% APR. Naive is the honest word: the figure holds the emission rate, the reward price and your share fixed, and in a live farm all three move — emissions are set by the farm and can be cut or ended, the reward price moves, and every new staker dilutes your share (double the farm's total staked value and your rewards halve). A farm that emits nothing, or a reward token priced at zero, honestly pays zero. Trading fees are not included (tools 3 and 13 estimate those) and neither is impermanent loss (tools 2 and 12) — a staked position's total return is fees plus farm rewards minus impermanent loss. Educational model only — your staked values, emission and price, not live farm data, not a live quote, not financial advice.</p>
+        <label for="farm-your">Your staked value (in the farm's value currency, e.g. $)</label>
+        <input id="farm-your" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="farm-total">Total value staked in the farm (same currency)</label>
+        <input id="farm-total" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="farm-emission">Farm emission (reward tokens per day, farm-wide)</label>
+        <input id="farm-emission" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="farm-price">Reward token price (same currency per token)</label>
+        <input id="farm-price" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="farm-days">Period (days)</label>
+        <input id="farm-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="farm-rewards">Your reward tokens over the period (model)</label>
+        <input id="farm-rewards" readonly placeholder="—" autocomplete="off">
+        <label for="farm-apr">Naive APR from farm rewards, % (model)</label>
+        <input id="farm-apr" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Estimate my farm rewards</button>
+        <p id="farm-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2275,6 +2296,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=120"></script>
+<script src="app.js?v=121"></script>
 </body>
 </html>

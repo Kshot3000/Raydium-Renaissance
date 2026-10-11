@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus ninety-four fully
+/* Raydium Renaissance hub logic: project filtering plus ninety-five fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -65,7 +65,8 @@
    transfer-fee swap model, a sandwich
    (MEV) attack model, a Token-2022
    transfer-fee exact-out swap model,
-   and a just-in-time (JIT) liquidity model.
+   a just-in-time (JIT) liquidity model,
+   and a farm rewards estimator (liquidity mining).
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -125,8 +126,8 @@ function toolJumpOptions(items) {
   });
   return out;
 }
-/* Tool jump menu families: with ninety-four tools, one flat list of
-   ninety-four options is its own scrolling problem, so the menu groups
+/* Tool jump menu families: with ninety-five tools, one flat list of
+   ninety-five options is its own scrolling problem, so the menu groups
    the options by pool family. The family is read off the tool's own
    title — the same title the visitor sees on the tool — so a tool is
    grouped by what it says it is, and a future tool lands in a family
@@ -4423,6 +4424,68 @@ function jitLiquidity(reserveInStr, reserveOutStr, jitInStr, victimInStr, feeBps
   };
 }
 
+/* ---------- 95 · Farm rewards estimator (liquidity mining) ---------- */
+/* Every yield tool above prices TRADING fees (Tools 3/13) or compounds
+   them (Tool 52). A farm pays a second, separate yield: stake LP tokens
+   and the farm emits a reward token at a set rate, split pro-rata by
+   staked value — rewardsPerDay = emissionPerDay × (yourValue ÷
+   totalStaked), valued at the reward price the user supplies. The
+   chain is exact scaled-BigInt floored at 9 dp, and each step builds
+   on the previous floored figure, so the identities a reader checks
+   hold exactly: period rewards = daily rewards × days, and period
+   value = period rewards × price. The APR is naive in the same sense
+   as Tool 3's: it annualises one day's rewards (×365) as if the
+   emission rate, the reward price and your share never moved — in a
+   live farm all three do. Emissions are set by the farm and can be
+   cut or ended, the reward price moves, and every new staker dilutes
+   your share. Trading fees are NOT included (Tools 3/13 estimate
+   those) and neither is impermanent loss (Tools 2/12): a staked
+   position's total is fees + farm rewards − IL, and the net tools
+   (24/29) settle the fee half. A zero emission or a zero reward price
+   honestly returns zero rewards/value rather than an error — a farm
+   that emits nothing pays nothing. Model only — your staked values,
+   emission and price inputs, not live farm data, not a live quote,
+   not financial advice. */
+function farmRewards(yourStr, totalStr, emissionStr, priceStr, daysStr) {
+  var required = [yourStr, totalStr, emissionStr, priceStr, daysStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var your = parseScaled(yourStr), total = parseScaled(totalStr);
+  var emission = parseScaled(emissionStr), price = parseScaled(priceStr);
+  var days = parseScaled(daysStr);
+  if (your === null || total === null || emission === null || price === null || days === null) return null;
+  if (your <= 0n || total <= 0n || your > total) return null;
+  if (days <= 0n) return null;
+  var rewardsPerDay = emission * your / total;
+  var rewardsPeriod = rewardsPerDay * days / SCALE;
+  var valuePerDay = rewardsPerDay * price / SCALE;
+  var valuePeriod = rewardsPeriod * price / SCALE;
+  var result = {
+    yourValue: formatScaled(your),
+    totalStaked: formatScaled(total),
+    emissionPerDay: formatScaled(emission),
+    rewardPrice: formatScaled(price),
+    days: scaledToNumber(days),
+    sharePct: scaledToNumber(your) / scaledToNumber(total) * 100,
+    rewardsPerDay: formatScaled(rewardsPerDay),
+    rewardsPeriod: formatScaled(rewardsPeriod),
+    rewardValuePerDay: formatScaled(valuePerDay),
+    rewardValuePeriod: formatScaled(valuePeriod),
+    aprPct: scaledToNumber(valuePerDay) / scaledToNumber(your) * 365 * 100,
+    periodReturnPct: scaledToNumber(valuePeriod) / scaledToNumber(your) * 100
+  };
+  /* A huge emission × price can push the percentage fields to
+     Infinity behind perfectly finite token figures — every figure
+     the tool reports must be finite, or the input is rejected
+     (Tool 52's lesson). */
+  var fields = Object.keys(result);
+  for (var k = 0; k < fields.length; k++) {
+    if (typeof result[fields[k]] === "number" && !Number.isFinite(result[fields[k]])) return null;
+  }
+  return result;
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -7396,7 +7459,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -7431,7 +7494,7 @@ if (typeof document !== "undefined") {
     });
     applyFilter();
 
-    /* --- tool finder: with ninety-four tools stacked on one page, a
+    /* --- tool finder: with ninety-five tools stacked on one page, a
        visitor who knows the question ("impermanent loss", "sandwich")
        should not have to scroll past every other tool to find it.
        Matches against each tool form's own text; hiding a form never
@@ -9367,6 +9430,28 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: the JIT deposit of " + res.jitIn + " in also needs " + res.jitOut + " of the out token (the pool's own ratio) and is a " + fmt(res.sharePct, 4) + "% share of the enlarged pool. The victim's " + res.victimIn + " trade receives " + res.victimOut + " instead of the " + res.victimOutNoJit + " it returns without the JIT liquidity — " + res.victimGain + " more (≈ " + fmt(res.victimGainPct, 4) + "%), because the deeper pool moves less against it. The provider then withdraws the whole share and gets back " + res.jitReturnedIn + " in and " + res.jitReturnedOut + " out. Their share of the trade's " + res.poolFeeAmount + " pool fee is " + res.jitFeeShare + ", and valued against simply holding the deposit at the post-swap price, the round trip nets " + fmt(res.jitProfitIn, 9) + " in the input token (≈ " + fmt(res.jitProfitPct, 4) + "%) — the fee share minus the slice of impermanent loss, gross of priority fees, competition and failed bundles, none of which are modelled. A just-in-time liquidity model, not a live Raydium quote. Not financial advice.";
         document.getElementById("jit-vout").value = res.victimOut;
         document.getElementById("jit-profit").value = fmt(res.jitProfitIn, 9);
+      }
+    });
+
+    /* --- farm rewards estimator --- */
+    document.getElementById("farm-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = farmRewards(
+        document.getElementById("farm-your").value,
+        document.getElementById("farm-total").value,
+        document.getElementById("farm-emission").value,
+        document.getElementById("farm-price").value,
+        document.getElementById("farm-days").value
+      );
+      var out = document.getElementById("farm-result");
+      if (res === null) {
+        out.textContent = "Enter a positive staked value of yours, a total staked value at least as large, an emission of zero or more reward tokens per day, a reward price of zero or more, and a period above zero days.";
+        document.getElementById("farm-rewards").value = "";
+        document.getElementById("farm-apr").value = "";
+      } else {
+        out.textContent = "Model output: your " + res.yourValue + " staked is a " + fmt(res.sharePct, 4) + "% share of the " + res.totalStaked + " staked in this farm, so of the " + res.emissionPerDay + " reward tokens emitted per day you earn " + res.rewardsPerDay + " per day — " + res.rewardsPeriod + " over " + fmt(res.days, 4) + " day(s). At your reward price of " + res.rewardPrice + " per token that is " + res.rewardValuePerDay + " per day and " + res.rewardValuePeriod + " over the period, a naive " + fmt(res.aprPct, 4) + "% APR (≈ " + fmt(res.periodReturnPct, 4) + "% over the period) — naive because it holds the emission rate, the reward price and your share fixed, and in a live farm all three move: emissions can be cut or ended, prices move, and new stakers dilute your share. Trading fees (tools 3 and 13) and impermanent loss (tools 2 and 12) are not included. A farm rewards model, not live farm data. Not financial advice.";
+        document.getElementById("farm-rewards").value = res.rewardsPeriod;
+        document.getElementById("farm-apr").value = fmt(res.aprPct, 4);
       }
     });
 

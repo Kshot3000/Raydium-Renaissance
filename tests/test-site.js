@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=120"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=121"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1358,7 +1358,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists ninety-four tools", readme.includes("ninety-four pool tools") || readme.includes("all ninety-four"));
+check("README lists ninety-five tools", readme.includes("ninety-five pool tools") || readme.includes("all ninety-five"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2001,8 +2001,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts ninety-four tools and names the newest tools",
-  appSrc.includes("plus ninety-four fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, a Token-2022\n   transfer-fee swap model, a sandwich\n   (MEV) attack model, a Token-2022\n   transfer-fee exact-out swap model,\n   and a just-in-time (JIT) liquidity model.\n   These are educational MODELS"));
+check("app.js header counts ninety-five tools and names the newest tools",
+  appSrc.includes("plus ninety-five fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, a Token-2022\n   transfer-fee swap model, a sandwich\n   (MEV) attack model, a Token-2022\n   transfer-fee exact-out swap model,\n   a just-in-time (JIT) liquidity model,\n   and a farm rewards estimator (liquidity mining).\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v120", html.includes("app.js?v=120"));
+check("app.js cache key bumped to v121", html.includes("app.js?v=121"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6484,6 +6484,58 @@ check("jit honesty: gross profit, CLMM contrast and not-live labels", html.inclu
 check("guide covers just-in-time liquidity", guide.includes("in for exactly one trade"));
 check("README lists tool 94", readme.includes("94. **Just-in-time (JIT) liquidity model**"));
 
+/* ---------- 95 · Farm rewards estimator (liquidity mining) (FARM) ---------- */
+const farm1 = app.farmRewards("10000", "1000000", "10000", "2", "30");
+check("FARM headline is not null", farm1 !== null);
+check("FARM headline share is exactly 1%", farm1.sharePct === 1);
+check("FARM headline rewards: 100 tokens a day, 3000 over 30 days", farm1.rewardsPerDay === "100" && farm1.rewardsPeriod === "3000");
+check("FARM headline values: 200 a day, 6000 over the period", farm1.rewardValuePerDay === "200" && farm1.rewardValuePeriod === "6000");
+check("FARM headline naive APR is 730% and the period return 60%", farm1.aprPct === 730 && farm1.periodReturnPct === 60);
+check("FARM headline echoes its inputs", farm1.yourValue === "10000" && farm1.totalStaked === "1000000" && farm1.emissionPerDay === "10000" && farm1.rewardPrice === "2" && farm1.days === 30);
+const farm2 = app.farmRewards("250", "1000", "40", "0.5", "7");
+check("FARM second vector: 25% share, 10 tokens a day, 70 over 7 days", farm2 !== null && farm2.sharePct === 25 && farm2.rewardsPerDay === "10" && farm2.rewardsPeriod === "70");
+check("FARM second vector values: 5 a day, 35 over the period", farm2.rewardValuePerDay === "5" && farm2.rewardValuePeriod === "35");
+near("FARM second vector APR and period return", farm2.aprPct, 730, 1e-9);
+near("FARM second vector period return is 14%", farm2.periodReturnPct, 14, 1e-9);
+const farmSole = app.farmRewards("500", "500", "100", "3", "10");
+check("FARM a sole staker earns the whole emission", farmSole !== null && farmSole.sharePct === 100 && farmSole.rewardsPerDay === "100" && farmSole.rewardsPeriod === "1000" && farmSole.rewardValuePeriod === "3000" && farmSole.aprPct === 21900);
+check("FARM rewards floor at 9 dp (a third of a token a day)", app.farmRewards("1", "3", "1", "1", "1").rewardsPerDay === "0.333333333");
+const farmZeroEmission = app.farmRewards("10000", "1000000", "0", "2", "30");
+check("FARM a zero emission honestly pays zero, not an error", farmZeroEmission !== null && farmZeroEmission.rewardsPerDay === "0" && farmZeroEmission.rewardsPeriod === "0" && farmZeroEmission.rewardValuePeriod === "0" && farmZeroEmission.aprPct === 0);
+const farmZeroPrice = app.farmRewards("10000", "1000000", "10000", "0", "30");
+check("FARM a zero reward price still earns tokens, worth zero", farmZeroPrice !== null && farmZeroPrice.rewardsPeriod === "3000" && farmZeroPrice.rewardValuePerDay === "0" && farmZeroPrice.rewardValuePeriod === "0" && farmZeroPrice.aprPct === 0);
+const farmFrac = app.farmRewards("10000", "1000000", "10000", "2", "2.5");
+check("FARM fractional days: 250 tokens over 2.5 days, worth 500", farmFrac !== null && farmFrac.rewardsPeriod === "250" && farmFrac.rewardValuePeriod === "500" && farmFrac.periodReturnPct === 5 && farmFrac.aprPct === 730);
+check("FARM doubling the total staked halves your rewards (dilution)", app.farmRewards("10000", "2000000", "10000", "2", "30").rewardsPerDay === "50" && app.farmRewards("10000", "2000000", "10000", "2", "30").aprPct === 365);
+check("FARM doubling the emission doubles your rewards", app.farmRewards("10000", "1000000", "20000", "2", "30").rewardsPerDay === "200");
+check("FARM doubling your stake doubles your rewards and your share", (() => { const d = app.farmRewards("20000", "1000000", "10000", "2", "30"); return d.sharePct === 2 && d.rewardsPerDay === "200" && d.aprPct === 730; })());
+const farmSweep = [
+  ["10000", "1000000", "10000", "2", "30"],
+  ["250", "1000", "40", "0.5", "7"],
+  ["1", "3", "1", "1", "1"],
+  ["123.456", "7890", "55.5", "0.75", "11.25"],
+  ["999999", "1000000", "3", "123.456", "365"]
+];
+for (const c of farmSweep) {
+  const tag = "FARM sweep your " + c[0] + " of " + c[1] + " emis " + c[2];
+  const f = app.farmRewards(c[0], c[1], c[2], c[3], c[4]);
+  check(tag + ": period rewards are the floored daily rewards times days, exactly", f !== null && f.rewardsPeriod === app.formatScaled(app.parseScaled(f.rewardsPerDay) * app.parseScaled(c[4]) / app.SCALE));
+  check(tag + ": period value is the period rewards at the reward price, exactly", f.rewardValuePeriod === app.formatScaled(app.parseScaled(f.rewardsPeriod) * app.parseScaled(c[3]) / app.SCALE));
+  near(tag + ": APR is the period return annualised", f.aprPct, f.periodReturnPct * 365 / Number(c[4]), 1e-6);
+  check(tag + ": share is your value over the total", Math.abs(f.sharePct - Number(c[0]) / Number(c[1]) * 100) < 1e-9);
+}
+check("FARM rejects your stake above the total staked (a share over 100%)", app.farmRewards("1001", "1000", "10", "1", "5") === null);
+check("FARM rejects zero stakes and a zero period", app.farmRewards("0", "1000", "10", "1", "5") === null && app.farmRewards("100", "0", "10", "1", "5") === null && app.farmRewards("100", "1000", "10", "1", "0") === null);
+check("FARM rejects blank fields in every position", app.farmRewards("", "1000", "10", "1", "5") === null && app.farmRewards("100", "", "10", "1", "5") === null && app.farmRewards("100", "1000", "", "1", "5") === null && app.farmRewards("100", "1000", "10", "", "5") === null && app.farmRewards("100", "1000", "10", "1", "") === null && app.farmRewards(null, "1000", "10", "1", "5") === null);
+check("FARM rejects negative, unparseable and over-precise inputs", app.farmRewards("-100", "1000", "10", "1", "5") === null && app.farmRewards("100", "1000", "abc", "1", "5") === null && app.farmRewards("100", "1000", "10", "0.0000000001", "5") === null && app.farmRewards("100", "1000", "10", "1", "1.0000000001") === null);
+check("FARM source is the emission-times-share chain", appSrc.includes("function farmRewards") && appSrc.includes("rewardsPerDay = emission * your / total"));
+check("all farm controls labelled", ["farm-your", "farm-total", "farm-emission", "farm-price", "farm-days", "farm-rewards", "farm-apr"].every(id => html.includes(`for="${id}"`)));
+check("farm tool present in index.html", html.includes('id="farm-calc"') && html.includes('id="farm-result"'));
+check("farm handler wired to its own form", appSrc.includes('getElementById("farm-calc")') && appSrc.includes('getElementById("farm-result")'));
+check("farm honesty: emissions can end, dilution and not-live labels", html.includes("emissions are set by the farm and can be cut or ended") && html.includes("every new staker dilutes your share") && html.includes("not live farm data, not a live quote, not financial advice"));
+check("guide covers farm rewards", guide.includes("Price a farm's emissions separately"));
+check("README lists tool 95", readme.includes("95. **Farm rewards estimator (liquidity mining)**"));
+
 /* ---------- Accessibility guards (global — every tool, present and future) ---------- */
 /* The per-tool "all X controls labelled" checks above only cover the
    tools their author remembered to list. These guards parse the whole
@@ -6535,7 +6587,7 @@ check("A11Y text contrast meets WCAG AA (4.5:1) for every themed text/background
       && ratio("#ffffff", vars.accent) >= 4.5;
   })());
 
-/* ---------- Tool finder (not a tool: page navigation for the 94 tools) ---------- */
+/* ---------- Tool finder (not a tool: page navigation for the 95 tools) ---------- */
 check("FINDER empty query matches every tool", app.toolSearchMatch("anything at all", "") === true && app.toolSearchMatch("anything at all", "   ") === true && app.toolSearchMatch("anything at all", null) === true);
 check("FINDER single word matches case-insensitively", app.toolSearchMatch("2 · Impermanent-loss calculator", "impermanent") === true && app.toolSearchMatch("2 · Impermanent-loss calculator", "IMPERMANENT") === true);
 check("FINDER every word must appear (AND, any order)", app.toolSearchMatch("CLMM single-sided zap-in planner", "zap clmm") === true && app.toolSearchMatch("CLMM single-sided zap-in planner", "clmm zap") === true);
@@ -6548,7 +6600,7 @@ check("FINDER extra whitespace in the query is ignored", app.toolSearchMatch("sa
 check("FINDER non-string haystack never matches", app.toolSearchMatch(null, "swap") === false && app.toolSearchMatch(undefined, "") === false);
 check("FINDER finder controls present and labelled", html.includes('id="tool-q"') && html.includes('for="tool-q"') && html.includes('id="tool-filter-status"') && html.includes('id="tool-no-results"'));
 check("FINDER status is a polite live region", /id="tool-filter-status"[^>]*role="status"[^>]*aria-live="polite"/.test(html));
-check("FINDER finder sits above the tool grid and counts the tools honestly", html.indexOf('id="tool-q"') > html.indexOf('id="tools"') && html.indexOf('id="tool-q"') < html.indexOf('class="tool-grid"') && html.includes("Find a tool among the ninety-four"));
+check("FINDER finder sits above the tool grid and counts the tools honestly", html.indexOf('id="tool-q"') > html.indexOf('id="tools"') && html.indexOf('id="tool-q"') < html.indexOf('class="tool-grid"') && html.includes("Find a tool among the ninety-five"));
 check("FINDER wiring uses the shared matcher over every tool form", appSrc.includes('querySelectorAll(".tool-grid .tool")') && appSrc.includes('getElementById("tool-q")') && appSrc.includes("toolSearchMatch(form.textContent, toolQ.value)") && appSrc.includes('addEventListener("input", applyToolFilter)'));
 check("FINDER hiding never deletes: filter toggles hidden only", appSrc.includes("form.hidden = !show") && !/toolForms\.forEach[\s\S]{0,400}remove\(\)/.test(appSrc));
 check("FINDER hidden actually hides: stylesheet forces [hidden] to display:none (the .tool grid display would otherwise override the UA rule and leave filtered tools rendered)", /\[hidden\]\s*\{\s*display\s*:\s*none\s*!important/.test(css));
@@ -6561,7 +6613,7 @@ check("JUMP options keep valid entries in page order", JSON.stringify(app.toolJu
 check("JUMP options drop entries that cannot be jumped to", app.toolJumpOptions([{ id: "", title: "No id" }, { id: "x-calc", title: "  " }, { id: "y-calc" }, { title: "No id either" }, null, { id: 94, title: "Numeric id" }]).length === 0);
 check("JUMP options trim surrounding whitespace", JSON.stringify(app.toolJumpOptions([{ id: " jit-calc ", title: "  94 · Just-in-time (JIT) liquidity model " }])) === JSON.stringify([{ id: "jit-calc", title: "94 · Just-in-time (JIT) liquidity model" }]));
 check("JUMP non-array input yields no options", app.toolJumpOptions(null).length === 0 && app.toolJumpOptions("swap-calc").length === 0 && app.toolJumpOptions(undefined).length === 0);
-check("JUMP options built from the page itself cover every tool exactly once", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const opts = app.toolJumpOptions(items); return items.length === 94 && opts.length === 94 && new Set(opts.map(o => o.id)).size === 94 && opts[0].id === "swap-calc" && opts[93].id === "jit-calc"; })());
+check("JUMP options built from the page itself cover every tool exactly once", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const opts = app.toolJumpOptions(items); return items.length === 95 && opts.length === 95 && new Set(opts.map(o => o.id)).size === 95 && opts[0].id === "swap-calc" && opts[93].id === "jit-calc" && opts[94].id === "farm-calc"; })());
 check("JUMP jump controls present and labelled", html.includes('id="tool-jump"') && html.includes('for="tool-jump"') && html.includes("Jump straight to a tool"));
 check("JUMP menu sits above the tool grid, below the finder", html.indexOf('id="tool-jump"') > html.indexOf('id="tool-q"') && html.indexOf('id="tool-jump"') < html.indexOf('class="tool-grid"'));
 check("JUMP menu starts with an empty placeholder option", /<select id="tool-jump">\s*<option value="">/.test(html));
@@ -6570,17 +6622,18 @@ check("JUMP wiring builds options from the tool forms via the shared helper", ap
 check("JUMP picking a hidden tool clears the search first, then scrolls and focuses its first editable input", appSrc.includes('if (target.hidden) { toolQ.value = ""; applyToolFilter(); }') && appSrc.includes("target.scrollIntoView()") && appSrc.includes('target.querySelector("input:not([readonly])")') && appSrc.includes("first.focus({ preventScroll: true })"));
 check("JUMP menu resets after a jump so the same tool can be picked again", appSrc.includes('toolJump.value = "";'));
 
-/* --- jump menu families: ninety-four flat options are their own
+/* --- jump menu families: ninety-five flat options are their own
    scrolling problem, so the menu groups them by pool family, read off
    each tool's own title by toolJumpFamily. The grouping must cover
    every tool exactly once, keep page order (numbers ascending) inside
    each group, and order the groups by their first tool on the page. --- */
 check("GROUP family is read off the title: CLMM, stableswap, weighted markers", app.toolJumpFamily("8 · CLMM range deposit planner") === "CLMM — concentrated liquidity" && app.toolJumpFamily("58 · Stableswap swap model") === "Stableswap pools" && app.toolJumpFamily("56 · Weighted-pool swap model") === "Weighted pools");
 check("GROUP family: curve comparison and Token-2022/MEV/JIT are their own families", app.toolJumpFamily("67 · Curve comparison model") === "Comparing pool curves" && app.toolJumpFamily("91 · Token-2022 transfer-fee swap model") === "Token-2022, MEV & just-in-time" && app.toolJumpFamily("92 · Sandwich (MEV) attack model") === "Token-2022, MEV & just-in-time" && app.toolJumpFamily("94 · Just-in-time (JIT) liquidity model") === "Token-2022, MEV & just-in-time");
-check("GROUP family fallback is constant-product & general, including non-string titles", app.toolJumpFamily("1 · Constant-product swap model") === "Constant-product & general pools" && app.toolJumpFamily("10 · Slippage & minimum-received calculator") === "Constant-product & general pools" && app.toolJumpFamily(null) === "Constant-product & general pools" && app.toolJumpFamily(94) === "Constant-product & general pools");
+check("GROUP family fallback is constant-product & general, including non-string titles", app.toolJumpFamily("1 · Constant-product swap model") === "Constant-product & general pools" && app.toolJumpFamily("10 · Slippage & minimum-received calculator") === "Constant-product & general pools" && app.toolJumpFamily("95 · Farm rewards estimator (liquidity mining)") === "Constant-product & general pools" && app.toolJumpFamily(null) === "Constant-product & general pools" && app.toolJumpFamily(94) === "Constant-product & general pools");
 check("GROUP specific markers win over the fallback (a CLMM zap is CLMM, not general)", app.toolJumpFamily("33 · CLMM single-sided zap-in planner") === "CLMM — concentrated liquidity" && app.toolJumpFamily("19 · Single-sided zap-in planner") === "Constant-product & general pools");
-check("GROUP groups built from the page cover every tool exactly once", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); const flat = groups.flatMap(g => g.options); return flat.length === 94 && new Set(flat.map(o => o.id)).size === 94; })());
-check("GROUP page yields the six families in first-appearance order with their real sizes", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return JSON.stringify(groups.map(g => [g.label, g.options.length])) === JSON.stringify([["Constant-product & general pools", 29], ["CLMM — concentrated liquidity", 37], ["Weighted pools", 11], ["Stableswap pools", 11], ["Comparing pool curves", 2], ["Token-2022, MEV & just-in-time", 4]]); })());
+check("GROUP groups built from the page cover every tool exactly once", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); const flat = groups.flatMap(g => g.options); return flat.length === 95 && new Set(flat.map(o => o.id)).size === 95; })());
+check("GROUP page yields the six families in first-appearance order with their real sizes", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return JSON.stringify(groups.map(g => [g.label, g.options.length])) === JSON.stringify([["Constant-product & general pools", 30], ["CLMM — concentrated liquidity", 37], ["Weighted pools", 11], ["Stableswap pools", 11], ["Comparing pool curves", 2], ["Token-2022, MEV & just-in-time", 4]]); })());
+check("GROUP the general family ends at the farm tool (tool 95 joins the fallback family)", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return groups[0].options[groups[0].options.length - 1].id === "farm-calc"; })());
 check("GROUP numbers ascend inside every group", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); return app.toolJumpGroups(items).every(g => { const nums = g.options.map(o => Number(o.title.split(" ")[0])); return nums.every((n, i) => i === 0 || n > nums[i - 1]); }); })());
 check("GROUP last family ends at the JIT tool and the first group starts at the swap model", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return groups[0].options[0].id === "swap-calc" && groups[groups.length - 1].options[groups[groups.length - 1].options.length - 1].id === "jit-calc"; })());
 check("GROUP invalid entries are dropped by the shared sanitiser before grouping", app.toolJumpGroups([{ id: "", title: "CLMM x" }, { id: "ok-calc", title: "  " }, null, { id: "clmm-calc", title: "8 · CLMM range deposit planner" }]).length === 1 && app.toolJumpGroups(null).length === 0 && app.toolJumpGroups("x").length === 0);
@@ -6591,19 +6644,19 @@ check("GROUP menu copy on the page says the list is grouped by pool family", htm
    jump menu built from it) must read 1, 2, 3, … in order. Tool 74 sat
    between tools 67 and 68 until 2026-10-10 — scrolling visitors met it
    seven tools early and the menu read …, 67, 74, 68, … --- */
-check("ORDER tool numbers in page order are exactly 1 to 94, sequential", (() => { const nums = [...html.matchAll(/<form class="tool" id="[^"]+">\s*<h3>(\d+) ·/g)].map(m => Number(m[1])); return nums.length === 94 && nums.every((n, i) => n === i + 1); })());
+check("ORDER tool numbers in page order are exactly 1 to 95, sequential", (() => { const nums = [...html.matchAll(/<form class="tool" id="[^"]+">\s*<h3>(\d+) ·/g)].map(m => Number(m[1])); return nums.length === 95 && nums.every((n, i) => n === i + 1); })());
 check("ORDER tool 74 sits between tools 73 and 75", (() => { const ids = [...html.matchAll(/<form class="tool" id="([^"]+)">/g)].map(m => m[1]); const at = ids.indexOf("ccx-calc"); return at > 0 && ids[at - 1] === "sbed-calc" && ids[at + 1] === "wband-calc"; })());
-check("ORDER jump menu built from the page reads in numeric order", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const nums = app.toolJumpOptions(items).map(o => Number(o.title.split(" ")[0])); return nums.length === 94 && nums.every((n, i) => n === i + 1); })());
+check("ORDER jump menu built from the page reads in numeric order", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const nums = app.toolJumpOptions(items).map(o => Number(o.title.split(" ")[0])); return nums.length === 95 && nums.every((n, i) => n === i + 1); })());
 
 /* --- guide checklist order: the guide's section-3 checklist is
-   numbered 1..95 and readers follow it in order, so the items must
+   numbered 1..96 and readers follow it in order, so the items must
    read sequentially AND live inside section 3. Until 2026-10-10 the
-   file had items 29-95 stranded after the closing "Building" and
+   file had items 29-96 stranded after the closing "Building" and
    "Support" sections, with item 39 orphaned inside Support itself —
    every item's text was right, only its place was wrong. --- */
-check("GUIDE checklist numbers are exactly 1 to 95, sequential", (() => { const nums = [...guide.matchAll(/^(\d+)\. \*\*/gm)].map(m => Number(m[1])); return nums.length === 95 && nums.every((n, i) => n === i + 1); })());
+check("GUIDE checklist numbers are exactly 1 to 96, sequential", (() => { const nums = [...guide.matchAll(/^(\d+)\. \*\*/gm)].map(m => Number(m[1])); return nums.length === 96 && nums.every((n, i) => n === i + 1); })());
 check("GUIDE item 39 sits between items 38 and 40", (() => { const at = guide.indexOf("\n39. **Plan a constant-product deposit from your wallet"); return at > guide.indexOf("\n38. **Size a CLMM exit") && at < guide.indexOf("\n40. **Price a routed trade backwards"); })());
-check("GUIDE whole checklist lives in section 3, before Building and Support", (() => { const s3 = guide.indexOf("## 3 ·"); const first = guide.indexOf("\n1. **Fee tier**"); const last = guide.indexOf("\n95. **Liquidity that is in for exactly one trade"); const s4 = guide.indexOf("## 4 ·"); const sup = guide.indexOf("## Support"); return s3 !== -1 && s3 < first && first < last && last < s4 && s4 < sup; })());
+check("GUIDE whole checklist lives in section 3, before Building and Support", (() => { const s3 = guide.indexOf("## 3 ·"); const first = guide.indexOf("\n1. **Fee tier**"); const last = guide.indexOf("\n96. **Price a farm's emissions separately"); const s4 = guide.indexOf("## 4 ·"); const sup = guide.indexOf("## Support"); return s3 !== -1 && s3 < first && first < last && last < s4 && s4 < sup; })());
 check("GUIDE no checklist item appears after the Support heading", (() => { const sup = guide.indexOf("## Support"); return sup !== -1 && !/^\d+\. \*\*/m.test(guide.slice(sup)); })());
 check("GUIDE Support section still carries the SOL tips line", (() => { const sup = guide.indexOf("## Support"); return sup !== -1 && guide.slice(sup).includes("Tips in SOL: `9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8`"); })());
 
