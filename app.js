@@ -8593,8 +8593,15 @@ function routeCompare(directInStr, directOutStr, hop1InStr, hop1OutStr, hop2InSt
    sweep), so the comparison can never drift from the models it
    compares. The winner is decided on the exact scaled inputs, and
    the saving is measured against the WORSE route's cost, so it can
-   never exceed 100% — the exact-out mirror has no overflow corner
-   of the kind tool 106's advantage needed. Depth beats directness
+   never exceed 100%. That bound does not make the percentage
+   overflow-proof, though: it is a ratio of two scaled BigInts, and
+   converting either to a Number overflows once a charge passes
+   ~1.8e299 tokens — Infinity/Infinity came out NaN and rejected
+   valid comparisons outright, and a finite difference over an
+   infinite worse charge silently reported a 0% saving on a real
+   one. When either conversion would overflow, the percentage is
+   therefore evaluated from the exact BigInts at a fixed scale
+   instead. Depth beats directness
    until it doesn't, in this direction too: receiving exactly 90
    from a 1,000/1,000 direct pool at 25 bps costs 99.148971331 in,
    while routing the purchase through two 10,000/10,000 pools at
@@ -8639,6 +8646,10 @@ function routeCompareExactOut(directInStr, directOutStr, hop1InStr, hop1OutStr, 
   var best = dIn === rIn ? "tie" : (dIn < rIn ? "direct" : "routed");
   var diff = dIn >= rIn ? dIn - rIn : rIn - dIn;
   var worse = dIn >= rIn ? dIn : rIn;
+  var diffNum = Number(diff), worseNum = Number(worse);
+  var savingsPct = Number.isFinite(diffNum) && Number.isFinite(worseNum)
+    ? diffNum / worseNum * 100
+    : Number(diff * (10n ** 18n) / worse) / 1e16;
   var result = {
     amountOut: routed.out,
     directIn: direct.amountIn,
@@ -8654,7 +8665,7 @@ function routeCompareExactOut(directInStr, directOutStr, hop1InStr, hop1OutStr, 
     routedEffective: routed.effectivePrice,
     best: best,
     savingsIn: formatScaled(diff),
-    savingsPct: Number(diff) / Number(worse) * 100,
+    savingsPct: savingsPct,
     directFeePct: direct.feePct,
     fee1Pct: routed.fee1Pct,
     fee2Pct: routed.fee2Pct

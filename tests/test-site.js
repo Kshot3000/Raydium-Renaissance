@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=140"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=141"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v140", html.includes("app.js?v=140"));
+check("app.js cache key bumped to v141", html.includes("app.js?v=141"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -7150,6 +7150,13 @@ near("RXO shallow savings pct", rxoShallow.savingsPct, 10.140109890857723, 1e-9)
 const rxoTie = app.routeCompareExactOut("2000", "1000", "3000", "1000", "2000", "3000", "500", 0, 0, 0);
 check("RXO composed-equal routes tie to the last scaled unit", rxoTie !== null && rxoTie.best === "tie" && rxoTie.directIn === "2000" && rxoTie.routedIn === "2000" && rxoTie.midIn === "400" && rxoTie.savingsIn === "0" && rxoTie.savingsPct === 0);
 check("RXO routed charge falls monotonically with hop depth and the verdict flips", (() => { const ins = [1, 2, 5, 10, 100].map(k => { const r = app.routeCompareExactOut("1000", "1000", String(1000 * k), String(1000 * k), String(1000 * k), String(1000 * k), "90", 25, 25, 25); return r === null ? NaN : Number(r.routedIn); }); return ins.every((v, i) => i === 0 || v < ins[i - 1]) && app.routeCompareExactOut("1000", "1000", "2000", "2000", "2000", "2000", "90", 25, 25, 25).best === "direct" && app.routeCompareExactOut("1000", "1000", "5000", "5000", "5000", "5000", "90", 25, 25, 25).best === "routed"; })());
+const rxoBig = (c) => c + "0".repeat(297);
+const rxoOverflow = app.routeCompareExactOut(rxoBig("134"), rxoBig("166"), rxoBig("128"), rxoBig("126"), rxoBig("163"), rxoBig("157"), rxoBig("63"), 25, 25, 25);
+check("RXO charges past the double range still compare (no NaN savings rejection)", rxoOverflow !== null && rxoOverflow.best === "direct" && rxoOverflow.directIn.startsWith("821665815022994379") && rxoOverflow.routedIn.startsWith("852682051643581027"));
+near("RXO overflow savings pct from exact BigInts", rxoOverflow && rxoOverflow.savingsPct, 90.36374914378463, 1e-9);
+const rxoWrongZero = app.routeCompareExactOut(rxoBig("162"), rxoBig("100"), rxoBig("129"), rxoBig("177"), rxoBig("129"), rxoBig("143"), rxoBig("75"), 25, 25, 25);
+check("RXO finite difference over an overflowing worse charge is not a 0% saving", rxoWrongZero !== null && rxoWrongZero.best === "direct" && rxoWrongZero.savingsPct !== 0);
+near("RXO wrong-zero savings pct from exact BigInts", rxoWrongZero && rxoWrongZero.savingsPct, 9.234440237966469, 1e-9);
 const rxoFeeDrag = app.routeCompareExactOut("1000", "1000", "10000", "10000", "10000", "10000", "90", 25, 100, 100);
 check("RXO deep hops win even at 100 bps per hop", rxoFeeDrag !== null && rxoFeeDrag.best === "routed" && rxoFeeDrag.routedIn === "93.519212121" && rxoFeeDrag.savingsIn === "5.62975921");
 check("RXO buying back tool 106's floored headline output costs one smallest unit under the 100 that produced it", (() => { const r = app.routeCompareExactOut("1000", "1000", "10000", "10000", "10000", "10000", "90.70243237", 25, 25, 25); return r !== null && r.directIn === "99.999999999" && r.routedIn === "92.843996728"; })());
