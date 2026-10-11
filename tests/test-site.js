@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=132"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=133"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v132", html.includes("app.js?v=132"));
+check("app.js cache key bumped to v133", html.includes("app.js?v=133"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6923,6 +6923,8 @@ check("TWAP impact falls as slices multiply and stays above the fee", (() => { c
 check("TWAP spot-2 pool slices scale with the spot", app.slicedSwap("1000", "2000", "50", "5", 25).totalOut === "98.76482091" && app.slicedSwap("1000", "2000", "50", "5", 25).singleOut === "95.01131087");
 check("TWAP slices sum to the total exactly, remainder units included", (() => { const r = app.slicedSwap("1000", "1000", "0.000001003", "3", 0); return r !== null && Math.abs(r.sliceIn * 3 - 0.000001003) < 1e-15; })());
 check("TWAP dust slicing can honestly lose to per-slice rounding", (() => { const r = app.slicedSwap("1000", "1000", "0.000001003", "3", 0); return r !== null && r.totalOut === "0.000001" && r.singleOut === "0.000001002" && r.gainOut === "-0.000000002" && r.gainPct < 0; })());
+check("TWAP a multi-slice total can tie the single trade exactly", (() => { const r = app.slicedSwap("1000", "1000", "0.001003", "2", 25); return r !== null && r.slices === 2 && r.totalOut === "0.00100049" && r.singleOut === "0.00100049" && r.gainOut === "0" && r.gainPct === 0; })());
+check("TWAP handler words a zero gain by its cause, not by the float pct", appSrc.includes('res.gainOut.charAt(0) === "-"') && appSrc.includes("Slicing neither gains nor loses here") && appSrc.includes("One slice is the single trade itself, so the gain is exactly zero."));
 check("TWAP rejects a dust total cut so thin a slice pays nothing after the fee", app.slicedSwap("1000", "1000", "0.0000001", "100", 25) === null && app.slicedSwap("1000", "1000", "0.000000001", "10", 0) === null);
 check("TWAP rejects slice counts outside whole 1..10000", app.slicedSwap("1000", "1000", "100", "0", 25) === null && app.slicedSwap("1000", "1000", "100", "10001", 25) === null && app.slicedSwap("1000", "1000", "100", "2.5", 25) === null && app.slicedSwap("1000", "1000", "100", "-3", 25) === null && app.slicedSwap("1000", "1000", "100", "abc", 25) === null);
 check("TWAP rejects bad fees", app.slicedSwap("1000", "1000", "100", "10", -1) === null && app.slicedSwap("1000", "1000", "100", "10", 10000) === null && app.slicedSwap("1000", "1000", "100", "10", 25.5) === null && app.slicedSwap("1000", "1000", "100", "10", "abc") === null);

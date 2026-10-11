@@ -10294,11 +10294,13 @@ if (typeof document !== "undefined") {
         document.getElementById("twap-out").value = "";
         document.getElementById("twap-gain").value = "";
       } else {
-        var gainWord = res.gainPct > 0
-          ? " Slicing gains " + res.gainOut + " (" + fmt(res.gainPct, 4) + "% more) over the single trade — that gain is the reset assumption paying out, and it shrinks toward nothing if the pool is not actually restored between slices."
-          : (res.gainPct < 0
-            ? " Slicing LOSES " + res.gainOut.replace("-", "") + " (" + fmt(res.gainPct, 4) + "%) against the single trade here — at this size the per-slice rounding to the smallest unit costs more than the impact saved, and the model says so rather than rounding the loss away."
-            : " One slice is the single trade itself, so the gain is exactly zero.");
+        var gainWord = res.gainOut.charAt(0) === "-"
+          ? " Slicing LOSES " + res.gainOut.replace("-", "") + " (" + fmt(res.gainPct, 4) + "%) against the single trade here — at this size the per-slice rounding to the smallest unit costs more than the impact saved, and the model says so rather than rounding the loss away."
+          : (res.gainOut === "0"
+            ? (res.slices === 1
+              ? " One slice is the single trade itself, so the gain is exactly zero."
+              : " Slicing neither gains nor loses here — after each slice is rounded to the smallest unit, the sliced total and the single trade pay exactly the same.")
+            : " Slicing gains " + res.gainOut + " (" + fmt(res.gainPct, 4) + "% more) over the single trade — that gain is the reset assumption paying out, and it shrinks toward nothing if the pool is not actually restored between slices.");
         out.textContent = "Model output: paying " + fmt(res.amountIn, 4) + " into a pool holding " + fmt(res.reserveIn, 4) + " / " + fmt(res.reserveOut, 4) + " (spot " + fmt(res.spotPrice, 6) + " out per in, fee " + fmt(res.feePct, 4) + "%) as " + fmt(res.slices, 0) + " equal slice(s) of " + fmt(res.sliceIn, 6) + ", with the pool restored to its starting spot between slices, pays " + res.totalOut + " in total — about " + fmt(res.perSliceOut, 6) + " per slice — at a modelled price impact of " + fmt(res.priceImpactPct, 4) + "%. One trade of the whole amount pays " + res.singleOut + " at " + fmt(res.singlePriceImpactPct, 4) + "% impact." + gainWord + " Not modelled: the network and priority fee each real slice transaction pays, and any move in the external price while you wait — later slices would price at the new market, not this one. A sliced swap model, not live pool data. Not financial advice.";
         document.getElementById("twap-out").value = res.totalOut;
         document.getElementById("twap-gain").value = fmt(res.gainPct, 4);
