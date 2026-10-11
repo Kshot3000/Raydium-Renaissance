@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus one hundred fully
+/* Raydium Renaissance hub logic: project filtering plus one hundred one fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -70,8 +70,9 @@
    a farm net return calculator, a
    two-pool arbitrage model, an LP
    delta-hedge calculator, a CLMM
-   delta-hedge calculator, and a
-   weighted-pool delta-hedge calculator.
+   delta-hedge calculator, a
+   weighted-pool delta-hedge calculator,
+   and a leveraged LP position model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -4952,6 +4953,111 @@ function weightedDeltaHedge(reserveAStr, reserveBStr, weightAPctStr, sharePctStr
   return result;
 }
 
+/* ---------- 101 · Leveraged LP position model ---------- */
+/* Every return tool on this hub prices an UNLEVERED position: your
+   own money, in the pool, riding tool 27's sqrt(r) value curve.
+   Leveraged LP positions (the borrow-and-deposit loops offered by
+   Solana lending markets) put borrowed token B beside your equity:
+   at leverage L your equity E controls a position worth L x E,
+   balanced across the pool like any other deposit, and you owe
+   (L - 1) x E of B, growing at the borrow APR. The position's value
+   still scales by exactly sqrt(r) — leverage does not change the
+   curve, only who owns the outcome — so the equity after the move
+   is E' = L x E x sqrt(r) - (L - 1) x E x (1 + i), with i the
+   period's simple interest rate (APR x days / 365): leverage
+   multiplies the position's move AND owes interest on the borrowed
+   share, which is why a flat price still loses (L - 1) x i of the
+   equity. Three price multiples fall out of the same line: the
+   break-even, where sqrt(r) = (E + debt) / (L x E), is the rise
+   that just repays the debt with nothing gained; the wipeout,
+   (debt / position value)^2, is where the position is worth
+   exactly the debt; and the maintenance liquidation sits above
+   the wipeout, where equity falls to the maintenance margin
+   fraction of the position's value, sqrt(r) = debt /
+   ((1 - margin) x position value). Headline, verified against the
+   reserve path (position A / sqrt(r) repriced, position B x
+   sqrt(r)) before these tests were written: 1,000/1,000 pool,
+   100 B of equity at 3x for a year at 10% borrow APR against a
+   10% maintenance margin — a 300 B position (a 15% share, 150 A /
+   150 B), 200 B borrowed growing to 220 B; at a 4x price the
+   position is worth 600 B and the equity settles at 380 B
+   (+280%, against +100% unlevered), the break-even sits at
+   1.1378x, liquidation at 0.6639x and wipeout at 0.5378x; at a
+   halving of the multiple to 0.25 the equity is -70 B (-170%) —
+   underwater on paper, because a real protocol liquidates at the
+   maintenance line long before. Trading fees are deliberately
+   excluded (tools 3 and 24 price the fee leg; fees earned would
+   soften every figure here). Honest edges, stated in the UI too:
+   simple interest at a constant APR, one borrow in token B, no
+   liquidation penalty or fee, no margin calls inside the period,
+   and real protocols set their own margin rules, liquidation
+   discounts and borrow caps — the multiples here are this model's,
+   not any protocol's. Model only — your reserves, equity,
+   leverage, borrow cost and price move, not live pool data, not
+   a live quote, not financial advice. */
+function leveragedLp(reserveAStr, reserveBStr, equityStr, leverageStr, borrowAprPctStr, daysStr, marginPctStr, priceRatio) {
+  var required = [reserveAStr, reserveBStr, equityStr, leverageStr, borrowAprPctStr, daysStr, marginPctStr, priceRatio];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var reserveA = Number(reserveAStr), reserveB = Number(reserveBStr);
+  var equity = Number(equityStr), leverage = Number(leverageStr);
+  var borrowAprPct = Number(borrowAprPctStr), days = Number(daysStr);
+  var marginPct = Number(marginPctStr), ratio = Number(priceRatio);
+  if (![reserveA, reserveB, equity, leverage, borrowAprPct, days, marginPct, ratio].every(Number.isFinite)) return null;
+  if (reserveA <= 0 || reserveB <= 0 || equity <= 0) return null;
+  if (leverage < 1 || leverage > 100) return null;
+  if (borrowAprPct < 0 || borrowAprPct > 10000) return null;
+  if (days <= 0 || days > 36500) return null;
+  if (marginPct < 0 || marginPct >= 100) return null;
+  if (ratio <= 0) return null;
+  var spot = reserveB / reserveA;
+  if (!Number.isFinite(spot) || spot <= 0) return null;
+  var positionValue = equity * leverage;
+  /* The share divides by the reserve in two steps, never forming
+     2 x reserveB: at reserves near 1e308 that product overflows to
+     Infinity and the share collapses to 0, rejecting a pool whose
+     spot and every reported figure are perfectly finite. */
+  var share = positionValue / 2 / reserveB;
+  if (!(share > 0) || share > 1) return null;
+  var yourA = share * reserveA, yourB = share * reserveB;
+  var debtStart = positionValue - equity;
+  var periodRate = borrowAprPct / 100 * days / 365;
+  var interest = debtStart * periodRate;
+  var debtEnd = debtStart + interest;
+  var sq = Math.sqrt(ratio);
+  var newPrice = spot * ratio;
+  var yourAAfter = yourA / sq, yourBAfter = yourB * sq;
+  var valueAfter = positionValue * sq;
+  var equityAfter = valueAfter - debtEnd;
+  var unleveredAfter = equity * sq;
+  var result = {
+    reserveA: reserveA, reserveB: reserveB,
+    spotPrice: spot, newPrice: newPrice, priceRatio: ratio,
+    equity: equity, leverage: leverage,
+    positionValue: positionValue, sharePct: share * 100,
+    yourA: yourA, yourB: yourB,
+    debtStart: debtStart, borrowAprPct: borrowAprPct, days: days,
+    periodRatePct: periodRate * 100, interest: interest, debtEnd: debtEnd,
+    yourAAfter: yourAAfter, yourBAfter: yourBAfter,
+    valueAfter: valueAfter, equityAfter: equityAfter,
+    equityChangePct: (equityAfter / equity - 1) * 100,
+    unleveredAfter: unleveredAfter,
+    unleveredChangePct: (sq - 1) * 100,
+    breakEvenRatio: Math.pow((equity + debtEnd) / positionValue, 2),
+    wipeoutRatio: Math.pow(debtEnd / positionValue, 2),
+    liquidationRatio: Math.pow(debtEnd / ((1 - marginPct / 100) * positionValue), 2),
+    marginPct: marginPct,
+    equityRatioPct: (positionValue - debtEnd) / positionValue * 100
+  };
+  result.breachedAtEntry = result.equityRatioPct <= marginPct;
+  var fields = Object.keys(result);
+  for (var k = 0; k < fields.length; k++) {
+    if (typeof result[fields[k]] === "number" && !Number.isFinite(result[fields[k]])) return null;
+  }
+  return result;
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -7925,7 +8031,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, leveragedLp, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -10055,6 +10161,37 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: your " + fmt(res.sharePct, 4) + "% share of an " + fmt(res.weightAPct, 4) + "/" + fmt(res.weightBPct, 4) + " weighted pool holding " + fmt(res.reserveA, 4) + " A / " + fmt(res.reserveB, 4) + " B (spot " + fmt(res.spotPrice, 6) + " B per A — the weight is part of the price) is " + fmt(res.yourANow, 4) + " A and " + fmt(res.yourBNow, 4) + " B, worth " + fmt(res.valueNow, 4) + " B. Shorting " + fmt(res.hedgeA, 4) + " A (worth " + fmt(res.hedgeValueB, 4) + " B — " + fmt(res.hedgeValuePct, 4) + "% of your position's value, exactly its token-A weight, not automatically half) zeroes its price delta at this price. If the price moves " + fmt(res.priceRatio, 4) + "x to " + fmt(res.newPrice, 6) + " B per A, the position alone is worth " + fmt(res.lpValueAfter, 4) + " B (" + fmt(res.unhedgedChangePct, 4) + "% unhedged, against " + fmt(res.holdValueAfter, 4) + " B for holding); the hedge pays " + fmt(res.hedgePnl, 4) + " B, settling the hedged position at " + fmt(res.hedgedValueAfter, 4) + " B (" + fmt(res.hedgedChangePct, 4) + "%). Hedging removed the direction, not the convexity cost — and the hedge has drifted: at the new price a fresh hedge is " + fmt(res.newHedgeA, 4) + " A, so re-hedging means you " + adjWord + ". The hedge is modelled as a frictionless short held outside the pool: no borrow or funding cost, no margin or liquidation, and no rebalancing inside the scenario. A weighted-pool delta-hedge model, not live pool data. Not financial advice.";
         document.getElementById("whedge-size").value = fmt(res.hedgeA, 4);
         document.getElementById("whedge-net").value = fmt(res.hedgedChangePct, 4);
+      }
+    });
+
+    /* --- Leveraged LP position model --- */
+    document.getElementById("lev-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = leveragedLp(
+        document.getElementById("lev-ra").value,
+        document.getElementById("lev-rb").value,
+        document.getElementById("lev-eq").value,
+        document.getElementById("lev-lev").value,
+        document.getElementById("lev-apr").value,
+        document.getElementById("lev-days").value,
+        document.getElementById("lev-margin").value,
+        document.getElementById("lev-ratio").value
+      );
+      var out = document.getElementById("lev-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens, positive equity in token B, leverage from 1 to 100x, a borrow APR of zero or more, a period above 0 and at most 36500 days, a maintenance margin of zero or more and below 100%, and a positive price multiple (2 = doubled, 0.5 = halved). Your position also has to fit inside the pool — at that leverage it would be worth more than the whole pool's token-B side doubled.";
+        document.getElementById("lev-change").value = "";
+        document.getElementById("lev-liq").value = "";
+      } else {
+        var settleWord = res.equityAfter < 0
+          ? " That settles UNDERWATER at " + fmt(res.equityAfter, 4) + " B of equity (" + fmt(res.equityChangePct, 4) + "%) — on paper only: a real protocol liquidates the position at the maintenance line below, long before the debt outgrows it."
+          : " That settles at " + fmt(res.equityAfter, 4) + " B of equity (" + fmt(res.equityChangePct, 4) + "%), against " + fmt(res.unleveredAfter, 4) + " B (" + fmt(res.unleveredChangePct, 4) + "%) for the same equity unlevered.";
+        var marginWord = res.breachedAtEntry
+          ? " With the period's interest accrued, your equity is already only " + fmt(res.equityRatioPct, 4) + "% of the position's value at entry — at or below the " + fmt(res.marginPct, 4) + "% maintenance margin, so a real protocol would not open this position, or would liquidate it immediately."
+          : " With the period's interest accrued, your equity is " + fmt(res.equityRatioPct, 4) + "% of the position's value at entry, above the " + fmt(res.marginPct, 4) + "% maintenance margin; the price falling to " + fmt(res.liquidationRatio, 4) + "x its current level breaches that margin, and at " + fmt(res.wipeoutRatio, 4) + "x the position is worth exactly the debt.";
+        out.textContent = "Model output: your " + fmt(res.equity, 4) + " B of equity at " + fmt(res.leverage, 4) + "x leverage controls a " + fmt(res.positionValue, 4) + " B position — a " + fmt(res.sharePct, 4) + "% share of the " + fmt(res.reserveA, 4) + " A / " + fmt(res.reserveB, 4) + " B pool (spot " + fmt(res.spotPrice, 6) + " B per A), deposited as " + fmt(res.yourA, 4) + " A and " + fmt(res.yourB, 4) + " B, with " + fmt(res.debtStart, 4) + " B borrowed. Over " + fmt(res.days, 4) + " day(s) at " + fmt(res.borrowAprPct, 4) + "% borrow APR the debt grows by " + fmt(res.interest, 4) + " B to " + fmt(res.debtEnd, 4) + " B. If the price moves " + fmt(res.priceRatio, 4) + "x to " + fmt(res.newPrice, 6) + " B per A, the position is worth " + fmt(res.valueAfter, 4) + " B — leverage does not change the pool's sqrt-of-price curve, only who owns the outcome." + settleWord + " The price must reach " + fmt(res.breakEvenRatio, 4) + "x just to repay the debt with your equity intact." + marginWord + " Simple interest at a constant APR, one borrow in token B, no trading fees (the fee tools price that leg), no liquidation penalty, and real protocols set their own margin rules and borrow caps — this model's multiples are not any protocol's. A leveraged LP model, not live pool data. Not financial advice.";
+        document.getElementById("lev-change").value = fmt(res.equityChangePct, 4);
+        document.getElementById("lev-liq").value = fmt(res.liquidationRatio, 4);
       }
     });
 

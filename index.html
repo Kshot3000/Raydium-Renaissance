@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred</label>
+      <label for="tool-q">Find a tool among the one hundred one</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred one tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred one.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2376,6 +2376,33 @@
         <button type="submit" class="btn primary">Size my weighted hedge</button>
         <p id="whedge-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="lev-calc">
+        <h3>101 · Leveraged LP position model</h3>
+        <p>Every other return tool on this page prices a position your own money fully owns. A leveraged position — the borrow-and-deposit loops offered by Solana lending markets — puts borrowed token B beside your equity: at 3x leverage, 100 B of equity controls a 300 B position (in a 1,000/1,000 pool, a 15% share deposited as 150 A and 150 B) and owes 200 B, which a year at a 10% borrow APR grows to 220 B. Leverage does not change the pool's maths — the position's value still scales by exactly the square root of the price multiple — it changes who owns the outcome: at a 4x price the position is worth 600 B and the equity settles at 380 B, +280% against +100% for the same equity unlevered, while at a flat price the equity still loses 20% to interest alone, and at 0.25x it settles at −70 B on paper. Three multiples mark the downside: the price must reach ≈1.1378x just to repay the debt with the equity intact; at ≈0.6639x the equity falls to a 10% maintenance margin of the position's value and a real protocol liquidates; at ≈0.5378x the position is worth exactly the debt. Trading fees are deliberately excluded — the fee tools price that leg, and fees earned would soften every figure here. The model uses simple interest at a constant APR and one borrow in token B: no liquidation penalty or fee, no margin calls inside the period, and real protocols set their own margin rules, liquidation discounts and borrow caps, so these multiples are this model's, not any protocol's. Educational model only — your reserves, equity, leverage, borrow cost and price move, not live pool data, not a live quote, not financial advice.</p>
+        <label for="lev-ra">Pool reserve of token A</label>
+        <input id="lev-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="lev-rb">Pool reserve of token B</label>
+        <input id="lev-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="lev-eq">Your equity, in token B</label>
+        <input id="lev-eq" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="lev-lev">Leverage, × (1 = no borrowing)</label>
+        <input id="lev-lev" inputmode="decimal" placeholder="e.g. 3" autocomplete="off">
+        <label for="lev-apr">Borrow APR on the borrowed token B, % per year</label>
+        <input id="lev-apr" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="lev-days">Period, days</label>
+        <input id="lev-days" inputmode="decimal" placeholder="e.g. 365" autocomplete="off">
+        <label for="lev-margin">Maintenance margin, % of position value (liquidation line)</label>
+        <input id="lev-margin" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="lev-ratio">Price multiple to check (2 = doubled, 0.5 = halved)</label>
+        <input id="lev-ratio" inputmode="decimal" placeholder="e.g. 4" autocomplete="off">
+        <label for="lev-change">Equity change at the check price, % (model)</label>
+        <input id="lev-change" readonly placeholder="—" autocomplete="off">
+        <label for="lev-liq">Liquidation price multiple: price falling to this × breaches the margin (model)</label>
+        <input id="lev-liq" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model my leveraged position</button>
+        <p id="lev-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2403,6 +2430,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=129"></script>
+<script src="app.js?v=130"></script>
 </body>
 </html>
