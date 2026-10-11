@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the ninety-eight</label>
+      <label for="tool-q">Find a tool among the ninety-nine</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all ninety-eight tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all ninety-nine tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all ninety-eight.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all ninety-nine.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2334,6 +2334,27 @@
         <button type="submit" class="btn primary">Size my hedge</button>
         <p id="hedge-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="chedge-calc">
+        <h3>99 · CLMM delta-hedge calculator</h3>
+        <p>Tool 98 sizes a delta hedge for a constant-product position; a CLMM position obeys the same identity — its value moves with token A's price at exactly the rate of its own token-A holding, so shorting that many A zeroes its delta — but the holding is range-shaped, and the edges change the answer. Enter your position's liquidity L (e.g. the one tool 8 reports), its range, the current price, and a price multiple to check. The headline shape: the 0.8–1.25 position at price 1 holds 100 A and 100 B (tool 9's own amounts), so the hedge is a short of 100 A, exactly half its 200 B value — but up at 1.2 the same position holds only ≈17.4702 A, under 10% of its value, so its hedge is far smaller than tool 98's always-half rule would suggest. Below the range the position is entirely token A and the hedge is its whole value — and while the price stays below the range the hedged change is exactly zero, because a static pile of A and an equal short really do cancel; above the range the position is entirely B and needs no hedge at all. The dangerous case is a hedge set inside the range and left alone while the price leaves: the position stops moving at the edge (it is worth ≈211.8034 B at 1.25 and still ≈211.8034 B at 2), but the short keeps losing, so the hedged result falls from ≈−6.5983% at the upper edge to ≈−44.0983% at a doubling — past the edge, hedging removed the position's remaining upside and kept all of the short's downside. The hedge is modelled as a frictionless short held outside the pool — no borrow or funding cost, no margin or liquidation, no fees on establishing or adjusting it, and no rebalancing inside the scenario. Educational model only — your liquidity, range, price and price move, not live pool data, not a live quote, not financial advice.</p>
+        <label for="chedge-l">Position liquidity L (model, e.g. from tool 8)</label>
+        <input id="chedge-l" inputmode="decimal" placeholder="e.g. 947.2135955" autocomplete="off">
+        <label for="chedge-lo">Range lower price (B per A)</label>
+        <input id="chedge-lo" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="chedge-hi">Range upper price (B per A)</label>
+        <input id="chedge-hi" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="chedge-p">Current price (B per A)</label>
+        <input id="chedge-p" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="chedge-ratio">Price multiple to check (2 = doubled, 0.5 = halved)</label>
+        <input id="chedge-ratio" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="chedge-size">Hedge size: token A to short at the current price (model)</label>
+        <input id="chedge-size" readonly placeholder="—" autocomplete="off">
+        <label for="chedge-net">Hedged change at the check price, % of starting value (model)</label>
+        <input id="chedge-net" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Size my CLMM hedge</button>
+        <p id="chedge-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2361,6 +2382,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=126"></script>
+<script src="app.js?v=127"></script>
 </body>
 </html>
