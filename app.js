@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus ninety-five fully
+/* Raydium Renaissance hub logic: project filtering plus ninety-six fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -66,7 +66,8 @@
    (MEV) attack model, a Token-2022
    transfer-fee exact-out swap model,
    a just-in-time (JIT) liquidity model,
-   and a farm rewards estimator (liquidity mining).
+   a farm rewards estimator (liquidity mining),
+   and a farm net return calculator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -138,8 +139,8 @@ function toolJumpOptions(items) {
   });
   return out;
 }
-/* Tool jump menu families: with ninety-five tools, one flat list of
-   ninety-five options is its own scrolling problem, so the menu groups
+/* Tool jump menu families: with ninety-six tools, one flat list of
+   ninety-six options is its own scrolling problem, so the menu groups
    the options by pool family. The family is read off the tool's own
    title — the same title the visitor sees on the tool — so a tool is
    grouped by what it says it is, and a future tool lands in a family
@@ -4498,6 +4499,72 @@ function farmRewards(yourStr, totalStr, emissionStr, priceStr, daysStr) {
   return result;
 }
 
+/* ---------- 96 · Farm net return calculator ---------- */
+/* Tool 95 prices a farm's rewards on their own and Tool 24 settles a
+   position's trading fees against its impermanent loss — but a staked
+   position's real question is the two settled together: did the farm
+   rewards cover the IL the underlying pool position carried? This tool
+   is exactly that settlement, and it is a pure composition: the IL leg
+   is Tool 2's own maths on your staked value (a staked position is
+   still a 50/50 constant-product position underneath — staking the LP
+   tokens does not change what the pool does to them), and the rewards
+   leg is Tool 95's own floored chain, so this tool's rewards figures
+   are Tool 95's verbatim and, with the rewards value in place of fees,
+   its net figures are Tool 24's verbatim. The rewards the position
+   still needs to break even against holding are the IL gap itself
+   (holdValue − lpValue), the coverage is what the period's rewards
+   actually pay of that gap, and the days to break even divide the gap
+   by Tool 95's daily reward value — Infinity when the farm pays
+   nothing of value, 0 when there is no gap to cover. Conventions are
+   the legs' own: rewards are counted in value terms and held outside
+   the pool (no compounding, and the reward price is the one price you
+   supply — what the rewards are worth when claimed), and trading fees
+   are NOT included (Tools 3/24 settle those — a position's full total
+   is fees + farm rewards − IL, and this tool settles the last two).
+   Model only — your staked values, emission, price and price move,
+   not live farm data, not a live quote, not financial advice. */
+function farmNetReturn(priceRatio, yourStr, totalStr, emissionStr, priceStr, daysStr) {
+  var il = impermanentLoss(priceRatio, yourStr);
+  if (il === null || il.deposit == null || !(il.deposit > 0)) return null;
+  var farm = farmRewards(yourStr, totalStr, emissionStr, priceStr, daysStr);
+  if (farm === null) return null;
+  var rewardsValue = scaledToNumber(parseScaled(farm.rewardValuePeriod));
+  var rewardsValuePerDay = scaledToNumber(parseScaled(farm.rewardValuePerDay));
+  var rewardsNeeded = il.holdValue - il.lpValue;
+  var netValue = il.lpValue + rewardsValue;
+  var netVsHold = netValue - il.holdValue;
+  var tol = 1e-9 * Math.max(1, il.holdValue);
+  var result = {
+    priceRatio: il.priceRatio,
+    deposit: il.deposit,
+    ilPct: il.ilPct,
+    holdValue: il.holdValue,
+    lpValue: il.lpValue,
+    sharePct: farm.sharePct,
+    days: farm.days,
+    rewardsPeriod: farm.rewardsPeriod,
+    rewardsValue: rewardsValue,
+    rewardsNeeded: rewardsNeeded,
+    rewardsCoveragePct: rewardsNeeded > 1e-9 ? rewardsValue / rewardsNeeded * 100 : null,
+    daysToBreakEven: rewardsNeeded <= tol ? 0 : (rewardsValuePerDay > 0 ? rewardsNeeded / rewardsValuePerDay : Infinity),
+    netValue: netValue,
+    netVsHold: netVsHold,
+    netVsHoldPct: il.holdValue > 0 ? netVsHold / il.holdValue * 100 : 0,
+    netReturnPct: (netValue - il.deposit) / il.deposit * 100,
+    verdict: Math.abs(netVsHold) <= tol ? "even" : (netVsHold > 0 ? "ahead" : "behind")
+  };
+  /* Every figure the tool reports must be finite, or the input is
+     rejected (Tool 52's lesson) — except daysToBreakEven, whose
+     Infinity is the honest "the rewards never cover this gap" (the
+     break-even tools' convention, e.g. Tool 15). */
+  var fields = Object.keys(result);
+  for (var k = 0; k < fields.length; k++) {
+    if (fields[k] === "daysToBreakEven") continue;
+    if (typeof result[fields[k]] === "number" && !Number.isFinite(result[fields[k]])) return null;
+  }
+  return result;
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -7471,7 +7538,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -7506,7 +7573,7 @@ if (typeof document !== "undefined") {
     });
     applyFilter();
 
-    /* --- tool finder: with ninety-five tools stacked on one page, a
+    /* --- tool finder: with ninety-six tools stacked on one page, a
        visitor who knows the question ("impermanent loss", "sandwich")
        should not have to scroll past every other tool to find it.
        Matches against each tool form's own text; hiding a form never
@@ -9464,6 +9531,38 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: your " + res.yourValue + " staked is a " + fmt(res.sharePct, 4) + "% share of the " + res.totalStaked + " staked in this farm, so of the " + res.emissionPerDay + " reward tokens emitted per day you earn " + res.rewardsPerDay + " per day — " + res.rewardsPeriod + " over " + fmt(res.days, 4) + " day(s). At your reward price of " + res.rewardPrice + " per token that is " + res.rewardValuePerDay + " per day and " + res.rewardValuePeriod + " over the period, a naive " + fmt(res.aprPct, 4) + "% APR (≈ " + fmt(res.periodReturnPct, 4) + "% over the period) — naive because it holds the emission rate, the reward price and your share fixed, and in a live farm all three move: emissions can be cut or ended, prices move, and new stakers dilute your share. Trading fees (tools 3 and 13) and impermanent loss (tools 2 and 12) are not included. A farm rewards model, not live farm data. Not financial advice.";
         document.getElementById("farm-rewards").value = res.rewardsPeriod;
         document.getElementById("farm-apr").value = fmt(res.aprPct, 4);
+      }
+    });
+
+    /* --- farm net return calculator --- */
+    document.getElementById("fnet-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = farmNetReturn(
+        document.getElementById("fnet-ratio").value,
+        document.getElementById("fnet-your").value,
+        document.getElementById("fnet-total").value,
+        document.getElementById("fnet-emission").value,
+        document.getElementById("fnet-price").value,
+        document.getElementById("fnet-days").value
+      );
+      var out = document.getElementById("fnet-result");
+      if (res === null) {
+        out.textContent = "Enter a price multiple above zero, a positive staked value of yours, a total staked value at least as large, an emission of zero or more reward tokens per day, a reward price of zero or more, and a period above zero days.";
+        document.getElementById("fnet-net").value = "";
+        document.getElementById("fnet-verdict").value = "";
+      } else {
+        var cover = res.rewardsCoveragePct === null
+          ? "there is no impermanent-loss gap to cover at this price move, so the rewards are pure gain on top of the position"
+          : "the rewards cover " + fmt(res.rewardsCoveragePct, 4) + "% of the " + fmt(res.rewardsNeeded, 4) + " of rewards the position needed to match holding";
+        var days = res.daysToBreakEven === 0
+          ? "the position needs no rewards to match holding at this move"
+          : (res.daysToBreakEven === Infinity
+            ? "at this daily reward value the gap is never covered"
+            : "at this daily reward value the gap is covered after " + fmt(res.daysToBreakEven, 4) + " day(s)");
+        var verdictWord = res.verdict === "ahead" ? "ahead of" : (res.verdict === "behind" ? "behind" : "exactly even with");
+        out.textContent = "Model output: your staked position of " + fmt(res.deposit, 4) + " (a " + fmt(res.sharePct, 4) + "% share of the farm) is worth " + fmt(res.lpValue, 4) + " in the pool after a " + fmt(res.priceRatio, 4) + "x price move against " + fmt(res.holdValue, 4) + " for simply holding (" + fmt(res.ilPct, 4) + "% impermanent loss). Over " + fmt(res.days, 4) + " day(s) the farm pays you " + res.rewardsPeriod + " reward tokens worth " + fmt(res.rewardsValue, 4) + " at your price — " + cover + ", and " + days + ". Settled together the position is worth " + fmt(res.netValue, 4) + ": " + fmt(Math.abs(res.netVsHold), 4) + " " + verdictWord + " holding (" + fmt(res.netVsHoldPct, 4) + "% vs holding, " + fmt(res.netReturnPct, 4) + "% on the staked value). Trading fees are not included (tools 3 and 24 settle those) — a staked position's full total is fees plus farm rewards minus impermanent loss. A farm net return model, not live farm data. Not financial advice.";
+        document.getElementById("fnet-net").value = fmt(res.netVsHold, 4);
+        document.getElementById("fnet-verdict").value = res.verdict;
       }
     });
 

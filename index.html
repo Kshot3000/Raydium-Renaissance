@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the ninety-five</label>
+      <label for="tool-q">Find a tool among the ninety-six</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all ninety-five tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all ninety-six tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all ninety-five.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all ninety-six.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2269,6 +2269,29 @@
         <button type="submit" class="btn primary">Estimate my farm rewards</button>
         <p id="farm-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="fnet-calc">
+        <h3>96 · Farm net return calculator</h3>
+        <p>The farm rewards estimator above prices the rewards on their own, and the net LP return calculator settles trading fees against impermanent loss — but a staked position's real question is the rewards settled against the loss directly: did the farm pay you enough to cover what the pool's price move cost you? Staking LP tokens does not change the position underneath — it is still a 50/50 constant-product position carrying impermanent loss — so enter the pair's price multiple over your period, your staked value and the farm's total staked value in the same currency, the farm's emission in reward tokens per day, your price for one reward token and the period in days. The headline shape: stake 10,000 of a farm's 1,000,000 total in a farm emitting 10,000 tokens a day at a price of 2, and over 30 days the rewards are 3,000 tokens worth 6,000 — against a 2x price move, whose impermanent-loss gap on that stake is 857.86, the rewards cover the gap almost seven times over and the settled position finishes 5,142.14 ahead of simply holding (+34.28% vs holding, +101.42% on the stake), with the gap itself covered after about 4.29 days of rewards. The honest limits are the legs' own: the emission rate, the reward price and your share are all held fixed (in a live farm all three move), the rewards are valued at the one price you supply and held outside the pool with no compounding, and trading fees are not included (the fee estimators and the net LP return calculator settle those) — a staked position's full total is fees plus farm rewards minus impermanent loss, and this tool settles the last two. Educational model only — your staked values, emission, price and price move, not live farm data, not a live quote, not financial advice.</p>
+        <label for="fnet-ratio">Price multiple over the period (2 = doubled, 0.5 = halved)</label>
+        <input id="fnet-ratio" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="fnet-your">Your staked value (in the farm's value currency, e.g. $)</label>
+        <input id="fnet-your" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="fnet-total">Total value staked in the farm (same currency)</label>
+        <input id="fnet-total" inputmode="decimal" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="fnet-emission">Farm emission (reward tokens per day, farm-wide)</label>
+        <input id="fnet-emission" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="fnet-price">Reward token price (same currency per token)</label>
+        <input id="fnet-price" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="fnet-days">Period (days)</label>
+        <input id="fnet-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="fnet-net">Net vs holding, in the value currency (model, negative = behind)</label>
+        <input id="fnet-net" readonly placeholder="—" autocomplete="off">
+        <label for="fnet-verdict">Verdict vs holding (model: ahead / even / behind)</label>
+        <input id="fnet-verdict" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Settle my farm return</button>
+        <p id="fnet-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2296,6 +2319,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=122"></script>
+<script src="app.js?v=123"></script>
 </body>
 </html>
