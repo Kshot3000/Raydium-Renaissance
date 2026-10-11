@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=125"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=126"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1358,7 +1358,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists ninety-seven tools", readme.includes("ninety-seven pool tools") || readme.includes("all ninety-seven"));
+check("README lists ninety-eight tools", readme.includes("ninety-eight pool tools") || readme.includes("all ninety-eight"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2001,8 +2001,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts ninety-seven tools and names the newest tools",
-  appSrc.includes("plus ninety-seven fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, a Token-2022\n   transfer-fee swap model, a sandwich\n   (MEV) attack model, a Token-2022\n   transfer-fee exact-out swap model,\n   a just-in-time (JIT) liquidity model,\n   a farm rewards estimator (liquidity mining),\n   a farm net return calculator, and a\n   two-pool arbitrage model.\n   These are educational MODELS"));
+check("app.js header counts ninety-eight tools and names the newest tools",
+  appSrc.includes("plus ninety-eight fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, a Token-2022\n   transfer-fee swap model, a sandwich\n   (MEV) attack model, a Token-2022\n   transfer-fee exact-out swap model,\n   a just-in-time (JIT) liquidity model,\n   a farm rewards estimator (liquidity mining),\n   a farm net return calculator, a\n   two-pool arbitrage model, and an\n   LP delta-hedge calculator.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v124", html.includes("app.js?v=125"));
+check("app.js cache key bumped to v126", html.includes("app.js?v=126"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6609,6 +6609,41 @@ check("parb honesty: gross profit, not-modelled costs and not-live labels", html
 check("guide covers two-pool arbitrage", guide.includes("Arbitrage two pools against each other"));
 check("README lists tool 97", readme.includes("97. **Two-pool arbitrage model**"));
 
+/* ---------- 98 · LP delta-hedge calculator (HEDGE) ---------- */
+const hedge1 = app.cpDeltaHedge("1000", "1000", "10", 2);
+check("HEDGE headline is not null", hedge1 !== null);
+check("HEDGE headline prices", hedge1.spotPrice === 1 && hedge1.newPrice === 2 && hedge1.priceRatio === 2);
+near("HEDGE headline holdings now", hedge1.yourANow, 100, 1e-12);
+near("HEDGE headline B holding now", hedge1.yourBNow, 100, 1e-12);
+near("HEDGE headline value now is 200 B", hedge1.valueNow, 200, 1e-9);
+check("HEDGE headline hedge is the whole A holding, worth exactly half the position", hedge1.hedgeA === hedge1.yourANow && Math.abs(hedge1.hedgeValueB - hedge1.valueNow / 2) < 1e-9);
+near("HEDGE headline LP value after a 2x move", hedge1.lpValueAfter, 282.842712474619, 1e-9);
+near("HEDGE headline hold value after", hedge1.holdValueAfter, 300, 1e-9);
+near("HEDGE headline hedge P&L is -100 B", hedge1.hedgePnl, -100, 1e-9);
+near("HEDGE headline hedged value", hedge1.hedgedValueAfter, 182.842712474619, 1e-9);
+near("HEDGE headline unhedged change is +41.4214%", hedge1.unhedgedChangePct, 41.4213562373095, 1e-9);
+near("HEDGE headline hedged change is -8.5786% (the convexity cost)", hedge1.hedgedChangePct, -8.57864376269049, 1e-9);
+near("HEDGE headline hedged change equals -share x reserveB x (sqrt(r)-1)^2 exactly", hedge1.hedgedChange, -0.1 * 1000 * Math.pow(Math.sqrt(2) - 1, 2), 1e-9);
+near("HEDGE headline new hedge after the move", hedge1.newHedgeA, 70.7106781186548, 1e-9);
+near("HEDGE headline adjustment covers part of the short", hedge1.hedgeAdjustment, -29.2893218813452, 1e-9);
+near("HEDGE headline IL is Tool 27's own", hedge1.ilPct, -5.71909584128429, 1e-9);
+check("HEDGE no move: hedge set, nothing changes, no adjustment", (() => { const z = app.cpDeltaHedge("1000", "1000", "10", 1); return z.hedgeA === 100 && z.unhedgedChange === 0 && z.hedgedChange === 0 && z.hedgePnl === 0 && z.hedgeAdjustment === 0 && z.hedgedValueAfter === z.valueNow; })());
+check("HEDGE halving: -29.2893% unhedged against -4.2893% hedged, hedge grows", (() => { const h = app.cpDeltaHedge("1000", "1000", "10", 0.5); return Math.abs(h.unhedgedChangePct - -29.2893218813452) < 1e-9 && Math.abs(h.hedgedChangePct - -4.28932188134524) < 1e-9 && Math.abs(h.hedgePnl - 50) < 1e-9 && h.hedgeAdjustment > 0 && Math.abs(h.newHedgeA - 141.4213562373095) < 1e-9; })());
+check("HEDGE position legs are Tool 27 verbatim across a sweep", (() => { const cases = [["1000", "1000", "10", 2], ["2000", "500", "25", 4], ["500", "4000", "5", 0.25], ["1234", "5678", "33.3", 1.7], ["1000", "1000", "100", 0.9]]; return cases.every(([ra, rb, s, r]) => { const h = app.cpDeltaHedge(ra, rb, s, r); const mv = app.cpReservesAfterMove(ra, rb, r); const share = Number(s) / 100; return h !== null && h.yourAAfter === share * mv.newReserveA && h.yourBAfter === share * mv.newReserveB && h.lpValueAfter === share * mv.lpValueInB && h.holdValueAfter === share * mv.holdValueInB && h.ilPct === mv.ilPct && h.spotPrice === mv.startPrice && h.newPrice === mv.newPrice; }); })());
+check("HEDGE hedged change is the convexity cost at every sweep combo, and never positive", (() => { const cases = [["1000", "1000", "10", 2], ["2000", "500", "25", 4], ["500", "4000", "5", 0.25], ["1234", "5678", "33.3", 1.7], ["1000", "1000", "100", 0.9], ["777", "333", "42", 3]]; return cases.every(([ra, rb, s, r]) => { const h = app.cpDeltaHedge(ra, rb, s, r); const expect = -(Number(s) / 100) * Number(rb) * Math.pow(Math.sqrt(r) - 1, 2); return h !== null && Math.abs(h.hedgedChange - expect) < 1e-9 * Math.max(1, Math.abs(expect)) && h.hedgedChange <= 0 && Math.abs(h.hedgeValueB - h.valueNow / 2) < 1e-9 * Math.max(1, h.valueNow); }); })());
+check("HEDGE reciprocal moves share one IL but not one hedged cost (symmetric in sqrt-price, not in r)", (() => { const up = app.cpDeltaHedge("1000", "1000", "10", 4); const dn = app.cpDeltaHedge("1000", "1000", "10", 0.25); return Math.abs(up.ilPct - dn.ilPct) < 1e-12 && Math.abs(up.hedgedChange - -100) < 1e-9 && Math.abs(dn.hedgedChange - -25) < 1e-9; })());
+check("HEDGE doubling the share doubles the hedge and both changes, percentages unmoved", (() => { const a = app.cpDeltaHedge("1000", "1000", "10", 2); const b = app.cpDeltaHedge("1000", "1000", "20", 2); return b.hedgeA === 2 * a.hedgeA && Math.abs(b.hedgedChange - 2 * a.hedgedChange) < 1e-9 && Math.abs(b.unhedgedChangePct - a.unhedgedChangePct) < 1e-12 && Math.abs(b.hedgedChangePct - a.hedgedChangePct) < 1e-12; })());
+check("HEDGE a sole LP (100% share) hedges the pool's whole A reserve", (() => { const f = app.cpDeltaHedge("2000", "500", "100", 4); return f.hedgeA === 2000 && Math.abs(f.hedgedChange - -500) < 1e-9 && Math.abs(f.hedgeAdjustment - -1000) < 1e-9; })());
+check("HEDGE rejects blanks and non-numbers", app.cpDeltaHedge("", "1000", "10", 2) === null && app.cpDeltaHedge("1000", "1000", "", 2) === null && app.cpDeltaHedge("1000", "1000", "10", "") === null && app.cpDeltaHedge("1000", "1000", "abc", 2) === null && app.cpDeltaHedge(null, "1000", "10", 2) === null);
+check("HEDGE rejects out-of-range shares and non-positive reserves or moves", app.cpDeltaHedge("1000", "1000", "0", 2) === null && app.cpDeltaHedge("1000", "1000", "-5", 2) === null && app.cpDeltaHedge("1000", "1000", "100.1", 2) === null && app.cpDeltaHedge("0", "1000", "10", 2) === null && app.cpDeltaHedge("1000", "-5", "10", 2) === null && app.cpDeltaHedge("1000", "1000", "10", 0) === null && app.cpDeltaHedge("1000", "1000", "10", -2) === null);
+check("HEDGE source composes Tool 27", appSrc.includes("function cpDeltaHedge") && appSrc.includes("cpReservesAfterMove(reserveAStr, reserveBStr, priceRatio)"));
+check("all hedge controls labelled", ["hedge-ra", "hedge-rb", "hedge-share", "hedge-ratio", "hedge-size", "hedge-net"].every(id => html.includes(`for="${id}"`)));
+check("hedge tool present in index.html", html.includes('id="hedge-calc"') && html.includes('id="hedge-result"'));
+check("hedge handler wired to its own form", appSrc.includes('getElementById("hedge-calc")') && appSrc.includes('getElementById("hedge-result")'));
+check("hedge honesty: frictionless short, drift and not-live labels", html.includes("no borrow or funding cost, no margin or liquidation") && html.includes("hedging removed the direction, not the convexity cost") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers delta hedging", guide.includes("Hedge an LP position's delta"));
+check("README lists tool 98", readme.includes("98. **LP delta-hedge calculator**"));
+
 /* ---------- Accessibility guards (global — every tool, present and future) ---------- */
 /* The per-tool "all X controls labelled" checks above only cover the
    tools their author remembered to list. These guards parse the whole
@@ -6660,7 +6695,7 @@ check("A11Y text contrast meets WCAG AA (4.5:1) for every themed text/background
       && ratio("#ffffff", vars.accent) >= 4.5;
   })());
 
-/* ---------- Tool finder (not a tool: page navigation for the 97 tools) ---------- */
+/* ---------- Tool finder (not a tool: page navigation for the 98 tools) ---------- */
 check("FINDER empty query matches every tool", app.toolSearchMatch("anything at all", "") === true && app.toolSearchMatch("anything at all", "   ") === true && app.toolSearchMatch("anything at all", null) === true);
 check("FINDER single word matches case-insensitively", app.toolSearchMatch("2 · Impermanent-loss calculator", "impermanent") === true && app.toolSearchMatch("2 · Impermanent-loss calculator", "IMPERMANENT") === true);
 check("FINDER every word must appear (AND, any order)", app.toolSearchMatch("CLMM single-sided zap-in planner", "zap clmm") === true && app.toolSearchMatch("CLMM single-sided zap-in planner", "clmm zap") === true);
@@ -6679,7 +6714,7 @@ check("FINDER extra whitespace in the query is ignored", app.toolSearchMatch("sa
 check("FINDER non-string haystack never matches", app.toolSearchMatch(null, "swap") === false && app.toolSearchMatch(undefined, "") === false);
 check("FINDER finder controls present and labelled", html.includes('id="tool-q"') && html.includes('for="tool-q"') && html.includes('id="tool-filter-status"') && html.includes('id="tool-no-results"'));
 check("FINDER status is a polite live region", /id="tool-filter-status"[^>]*role="status"[^>]*aria-live="polite"/.test(html));
-check("FINDER finder sits above the tool grid and counts the tools honestly", html.indexOf('id="tool-q"') > html.indexOf('id="tools"') && html.indexOf('id="tool-q"') < html.indexOf('class="tool-grid"') && html.includes("Find a tool among the ninety-seven"));
+check("FINDER finder sits above the tool grid and counts the tools honestly", html.indexOf('id="tool-q"') > html.indexOf('id="tools"') && html.indexOf('id="tool-q"') < html.indexOf('class="tool-grid"') && html.includes("Find a tool among the ninety-eight"));
 check("FINDER wiring uses the shared matcher over every tool form", appSrc.includes('querySelectorAll(".tool-grid .tool")') && appSrc.includes('getElementById("tool-q")') && appSrc.includes("toolSearchMatch(form.textContent, toolQ.value)") && appSrc.includes('addEventListener("input", applyToolFilter)'));
 check("FINDER hiding never deletes: filter toggles hidden only", appSrc.includes("form.hidden = !show") && !/toolForms\.forEach[\s\S]{0,400}remove\(\)/.test(appSrc));
 check("FINDER hidden actually hides: stylesheet forces [hidden] to display:none (the .tool grid display would otherwise override the UA rule and leave filtered tools rendered)", /\[hidden\]\s*\{\s*display\s*:\s*none\s*!important/.test(css));
@@ -6692,7 +6727,7 @@ check("JUMP options keep valid entries in page order", JSON.stringify(app.toolJu
 check("JUMP options drop entries that cannot be jumped to", app.toolJumpOptions([{ id: "", title: "No id" }, { id: "x-calc", title: "  " }, { id: "y-calc" }, { title: "No id either" }, null, { id: 94, title: "Numeric id" }]).length === 0);
 check("JUMP options trim surrounding whitespace", JSON.stringify(app.toolJumpOptions([{ id: " jit-calc ", title: "  94 · Just-in-time (JIT) liquidity model " }])) === JSON.stringify([{ id: "jit-calc", title: "94 · Just-in-time (JIT) liquidity model" }]));
 check("JUMP non-array input yields no options", app.toolJumpOptions(null).length === 0 && app.toolJumpOptions("swap-calc").length === 0 && app.toolJumpOptions(undefined).length === 0);
-check("JUMP options built from the page itself cover every tool exactly once", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const opts = app.toolJumpOptions(items); return items.length === 97 && opts.length === 97 && new Set(opts.map(o => o.id)).size === 97 && opts[0].id === "swap-calc" && opts[93].id === "jit-calc" && opts[94].id === "farm-calc" && opts[95].id === "fnet-calc" && opts[96].id === "parb-calc"; })());
+check("JUMP options built from the page itself cover every tool exactly once", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const opts = app.toolJumpOptions(items); return items.length === 98 && opts.length === 98 && new Set(opts.map(o => o.id)).size === 98 && opts[0].id === "swap-calc" && opts[93].id === "jit-calc" && opts[94].id === "farm-calc" && opts[95].id === "fnet-calc" && opts[96].id === "parb-calc" && opts[97].id === "hedge-calc"; })());
 check("JUMP jump controls present and labelled", html.includes('id="tool-jump"') && html.includes('for="tool-jump"') && html.includes("Jump straight to a tool"));
 check("JUMP menu sits above the tool grid, below the finder", html.indexOf('id="tool-jump"') > html.indexOf('id="tool-q"') && html.indexOf('id="tool-jump"') < html.indexOf('class="tool-grid"'));
 check("JUMP menu starts with an empty placeholder option", /<select id="tool-jump">\s*<option value="">/.test(html));
@@ -6701,18 +6736,18 @@ check("JUMP wiring builds options from the tool forms via the shared helper", ap
 check("JUMP picking a hidden tool clears the search first, then scrolls and focuses its first editable input", appSrc.includes('if (target.hidden) { toolQ.value = ""; applyToolFilter(); }') && appSrc.includes("target.scrollIntoView()") && appSrc.includes('target.querySelector("input:not([readonly])")') && appSrc.includes("first.focus({ preventScroll: true })"));
 check("JUMP menu resets after a jump so the same tool can be picked again", appSrc.includes('toolJump.value = "";'));
 
-/* --- jump menu families: ninety-seven flat options are their own
+/* --- jump menu families: ninety-eight flat options are their own
    scrolling problem, so the menu groups them by pool family, read off
    each tool's own title by toolJumpFamily. The grouping must cover
    every tool exactly once, keep page order (numbers ascending) inside
    each group, and order the groups by their first tool on the page. --- */
 check("GROUP family is read off the title: CLMM, stableswap, weighted markers", app.toolJumpFamily("8 · CLMM range deposit planner") === "CLMM — concentrated liquidity" && app.toolJumpFamily("58 · Stableswap swap model") === "Stableswap pools" && app.toolJumpFamily("56 · Weighted-pool swap model") === "Weighted pools");
 check("GROUP family: curve comparison and Token-2022/MEV/JIT are their own families", app.toolJumpFamily("67 · Curve comparison model") === "Comparing pool curves" && app.toolJumpFamily("91 · Token-2022 transfer-fee swap model") === "Token-2022, MEV & just-in-time" && app.toolJumpFamily("92 · Sandwich (MEV) attack model") === "Token-2022, MEV & just-in-time" && app.toolJumpFamily("94 · Just-in-time (JIT) liquidity model") === "Token-2022, MEV & just-in-time");
-check("GROUP family fallback is constant-product & general, including non-string titles", app.toolJumpFamily("1 · Constant-product swap model") === "Constant-product & general pools" && app.toolJumpFamily("10 · Slippage & minimum-received calculator") === "Constant-product & general pools" && app.toolJumpFamily("95 · Farm rewards estimator (liquidity mining)") === "Constant-product & general pools" && app.toolJumpFamily("96 · Farm net return calculator") === "Constant-product & general pools" && app.toolJumpFamily("97 · Two-pool arbitrage model") === "Constant-product & general pools" && app.toolJumpFamily(null) === "Constant-product & general pools" && app.toolJumpFamily(94) === "Constant-product & general pools");
+check("GROUP family fallback is constant-product & general, including non-string titles", app.toolJumpFamily("1 · Constant-product swap model") === "Constant-product & general pools" && app.toolJumpFamily("10 · Slippage & minimum-received calculator") === "Constant-product & general pools" && app.toolJumpFamily("95 · Farm rewards estimator (liquidity mining)") === "Constant-product & general pools" && app.toolJumpFamily("96 · Farm net return calculator") === "Constant-product & general pools" && app.toolJumpFamily("97 · Two-pool arbitrage model") === "Constant-product & general pools" && app.toolJumpFamily("98 · LP delta-hedge calculator") === "Constant-product & general pools" && app.toolJumpFamily(null) === "Constant-product & general pools" && app.toolJumpFamily(94) === "Constant-product & general pools");
 check("GROUP specific markers win over the fallback (a CLMM zap is CLMM, not general)", app.toolJumpFamily("33 · CLMM single-sided zap-in planner") === "CLMM — concentrated liquidity" && app.toolJumpFamily("19 · Single-sided zap-in planner") === "Constant-product & general pools");
-check("GROUP groups built from the page cover every tool exactly once", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); const flat = groups.flatMap(g => g.options); return flat.length === 97 && new Set(flat.map(o => o.id)).size === 97; })());
-check("GROUP page yields the six families in first-appearance order with their real sizes", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return JSON.stringify(groups.map(g => [g.label, g.options.length])) === JSON.stringify([["Constant-product & general pools", 32], ["CLMM — concentrated liquidity", 37], ["Weighted pools", 11], ["Stableswap pools", 11], ["Comparing pool curves", 2], ["Token-2022, MEV & just-in-time", 4]]); })());
-check("GROUP the general family ends at the two-pool arbitrage tool (tool 97 joins the fallback family)", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return groups[0].options[groups[0].options.length - 1].id === "parb-calc"; })());
+check("GROUP groups built from the page cover every tool exactly once", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); const flat = groups.flatMap(g => g.options); return flat.length === 98 && new Set(flat.map(o => o.id)).size === 98; })());
+check("GROUP page yields the six families in first-appearance order with their real sizes", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return JSON.stringify(groups.map(g => [g.label, g.options.length])) === JSON.stringify([["Constant-product & general pools", 33], ["CLMM — concentrated liquidity", 37], ["Weighted pools", 11], ["Stableswap pools", 11], ["Comparing pool curves", 2], ["Token-2022, MEV & just-in-time", 4]]); })());
+check("GROUP the general family ends at the delta-hedge tool (tool 98 joins the fallback family)", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return groups[0].options[groups[0].options.length - 1].id === "hedge-calc"; })());
 check("GROUP numbers ascend inside every group", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); return app.toolJumpGroups(items).every(g => { const nums = g.options.map(o => Number(o.title.split(" ")[0])); return nums.every((n, i) => i === 0 || n > nums[i - 1]); }); })());
 check("GROUP last family ends at the JIT tool and the first group starts at the swap model", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return groups[0].options[0].id === "swap-calc" && groups[groups.length - 1].options[groups[groups.length - 1].options.length - 1].id === "jit-calc"; })());
 check("GROUP invalid entries are dropped by the shared sanitiser before grouping", app.toolJumpGroups([{ id: "", title: "CLMM x" }, { id: "ok-calc", title: "  " }, null, { id: "clmm-calc", title: "8 · CLMM range deposit planner" }]).length === 1 && app.toolJumpGroups(null).length === 0 && app.toolJumpGroups("x").length === 0);
@@ -6723,9 +6758,9 @@ check("GROUP menu copy on the page says the list is grouped by pool family", htm
    jump menu built from it) must read 1, 2, 3, … in order. Tool 74 sat
    between tools 67 and 68 until 2026-10-10 — scrolling visitors met it
    seven tools early and the menu read …, 67, 74, 68, … --- */
-check("ORDER tool numbers in page order are exactly 1 to 97, sequential", (() => { const nums = [...html.matchAll(/<form class="tool" id="[^"]+">\s*<h3>(\d+) ·/g)].map(m => Number(m[1])); return nums.length === 97 && nums.every((n, i) => n === i + 1); })());
+check("ORDER tool numbers in page order are exactly 1 to 98, sequential", (() => { const nums = [...html.matchAll(/<form class="tool" id="[^"]+">\s*<h3>(\d+) ·/g)].map(m => Number(m[1])); return nums.length === 98 && nums.every((n, i) => n === i + 1); })());
 check("ORDER tool 74 sits between tools 73 and 75", (() => { const ids = [...html.matchAll(/<form class="tool" id="([^"]+)">/g)].map(m => m[1]); const at = ids.indexOf("ccx-calc"); return at > 0 && ids[at - 1] === "sbed-calc" && ids[at + 1] === "wband-calc"; })());
-check("ORDER jump menu built from the page reads in numeric order", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const nums = app.toolJumpOptions(items).map(o => Number(o.title.split(" ")[0])); return nums.length === 97 && nums.every((n, i) => n === i + 1); })());
+check("ORDER jump menu built from the page reads in numeric order", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const nums = app.toolJumpOptions(items).map(o => Number(o.title.split(" ")[0])); return nums.length === 98 && nums.every((n, i) => n === i + 1); })());
 
 /* --- guide checklist order: the guide's section-3 checklist is
    numbered 1..98 and readers follow it in order, so the items must
@@ -6733,9 +6768,9 @@ check("ORDER jump menu built from the page reads in numeric order", (() => { con
    file had items 29-96 stranded after the closing "Building" and
    "Support" sections, with item 39 orphaned inside Support itself —
    every item's text was right, only its place was wrong. --- */
-check("GUIDE checklist numbers are exactly 1 to 98, sequential", (() => { const nums = [...guide.matchAll(/^(\d+)\. \*\*/gm)].map(m => Number(m[1])); return nums.length === 98 && nums.every((n, i) => n === i + 1); })());
+check("GUIDE checklist numbers are exactly 1 to 99, sequential", (() => { const nums = [...guide.matchAll(/^(\d+)\. \*\*/gm)].map(m => Number(m[1])); return nums.length === 99 && nums.every((n, i) => n === i + 1); })());
 check("GUIDE item 39 sits between items 38 and 40", (() => { const at = guide.indexOf("\n39. **Plan a constant-product deposit from your wallet"); return at > guide.indexOf("\n38. **Size a CLMM exit") && at < guide.indexOf("\n40. **Price a routed trade backwards"); })());
-check("GUIDE whole checklist lives in section 3, before Building and Support", (() => { const s3 = guide.indexOf("## 3 ·"); const first = guide.indexOf("\n1. **Fee tier**"); const last = guide.indexOf("\n98. **Arbitrage two pools against each other"); const s4 = guide.indexOf("## 4 ·"); const sup = guide.indexOf("## Support"); return s3 !== -1 && s3 < first && first < last && last < s4 && s4 < sup; })());
+check("GUIDE whole checklist lives in section 3, before Building and Support", (() => { const s3 = guide.indexOf("## 3 ·"); const first = guide.indexOf("\n1. **Fee tier**"); const last = guide.indexOf("\n99. **Hedge an LP position's delta"); const s4 = guide.indexOf("## 4 ·"); const sup = guide.indexOf("## Support"); return s3 !== -1 && s3 < first && first < last && last < s4 && s4 < sup; })());
 check("GUIDE no checklist item appears after the Support heading", (() => { const sup = guide.indexOf("## Support"); return sup !== -1 && !/^\d+\. \*\*/m.test(guide.slice(sup)); })());
 check("GUIDE Support section still carries the SOL tips line", (() => { const sup = guide.indexOf("## Support"); return sup !== -1 && guide.slice(sup).includes("Tips in SOL: `9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8`"); })());
 

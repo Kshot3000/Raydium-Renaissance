@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the ninety-seven</label>
+      <label for="tool-q">Find a tool among the ninety-eight</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all ninety-seven tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all ninety-eight tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all ninety-seven.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all ninety-eight.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2315,6 +2315,25 @@
         <button type="submit" class="btn primary">Find the cycle</button>
         <p id="parb-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="hedge-calc">
+        <h3>98 · LP delta-hedge calculator</h3>
+        <p>Every tool above prices what a position earns or loses against holding — none prices what it does to your price exposure. A constant-product position's value moves with the price of token A at exactly the rate of its own token-A holding, so shorting that many A at the current price makes the combined position instantaneously price-neutral: its delta is zero. Enter the pool's reserves, your share of the pool, and a price multiple to check. The headline shape: a 10% share of a 1,000/1,000 pool is 100 A and 100 B, worth 200 B at the spot price of 1 — the hedge is a short of 100 A, worth 100 B, exactly half the position's value, because a constant-product position is always half in A by value. If the price then doubles, the position alone is worth ≈282.8427 B (+41.4214% unhedged), the hedge pays −100 B, and the hedged position settles at ≈182.8427 B (−8.5786%): hedging removed the direction, not the convexity cost — what remains is exactly the position's √price curvature, and a halving instead produces −29.2893% unhedged against −4.2893% hedged. The hedge also drifts as the price moves: at the doubled price the position holds only ≈70.7107 A, so re-hedging means covering ≈29.2893 A of the short (after a fall you would short more). The hedge is modelled as a frictionless short held outside the pool — no borrow or funding cost, no margin or liquidation, no fees on establishing or adjusting it, and no rebalancing inside the scenario. Educational model only — your reserves, share and price move, not live pool data, not a live quote, not financial advice.</p>
+        <label for="hedge-ra">Pool token A reserve</label>
+        <input id="hedge-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hedge-rb">Pool token B reserve</label>
+        <input id="hedge-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="hedge-share">Your share of the pool (%)</label>
+        <input id="hedge-share" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="hedge-ratio">Price multiple to check (2 = doubled, 0.5 = halved)</label>
+        <input id="hedge-ratio" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="hedge-size">Hedge size: token A to short at the current price (model)</label>
+        <input id="hedge-size" readonly placeholder="—" autocomplete="off">
+        <label for="hedge-net">Hedged change at the check price, % of starting value (model, negative = the convexity cost)</label>
+        <input id="hedge-net" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Size my hedge</button>
+        <p id="hedge-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2342,6 +2361,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=125"></script>
+<script src="app.js?v=126"></script>
 </body>
 </html>
