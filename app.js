@@ -88,13 +88,27 @@ function formatScaled(nano) {
    word of the query appears in its text (title, description, labels),
    case-insensitively. An empty query matches every tool. Word order
    does not matter, so "loss impermanent" finds the impermanent-loss
-   tools and "clmm zap" finds only the CLMM zap tools. */
+   tools and "clmm zap" finds only the CLMM zap tools. One refinement:
+   a purely numeric word must appear as a whole number, not as digits
+   inside a longer number — tool numbers are the advertised use ("94"
+   finds tool 94), and plain substring matching also hit the "94" in
+   778.2794, 194.7223 and 9,583.1094, returning six wrong tools. */
 function toolSearchMatch(haystack, query) {
   if (typeof haystack !== "string") return false;
   var tokens = String(query == null ? "" : query).toLowerCase().split(/\s+/).filter(function (t) { return t.length > 0; });
   if (!tokens.length) return true;
   var text = haystack.toLowerCase();
-  return tokens.every(function (t) { return text.indexOf(t) !== -1; });
+  return tokens.every(function (t) {
+    if (!/^\d+$/.test(t)) return text.indexOf(t) !== -1;
+    var at = text.indexOf(t);
+    while (at !== -1) {
+      var before = at === 0 ? "" : text.charAt(at - 1);
+      var after = at + t.length >= text.length ? "" : text.charAt(at + t.length);
+      if (!/\d/.test(before) && !/\d/.test(after)) return true;
+      at = text.indexOf(t, at + 1);
+    }
+    return false;
+  });
 }
 function scaledToNumber(nano) { return Number(nano) / 1e9; }
 

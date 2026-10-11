@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=117"));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=118"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v117", html.includes("app.js?v=117"));
+check("app.js cache key bumped to v118", html.includes("app.js?v=118"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6541,6 +6541,9 @@ check("FINDER single word matches case-insensitively", app.toolSearchMatch("2 ·
 check("FINDER every word must appear (AND, any order)", app.toolSearchMatch("CLMM single-sided zap-in planner", "zap clmm") === true && app.toolSearchMatch("CLMM single-sided zap-in planner", "clmm zap") === true);
 check("FINDER a missing word rejects the tool", app.toolSearchMatch("CLMM single-sided zap-in planner", "clmm sandwich") === false && app.toolSearchMatch("Constant-product swap model", "stableswap") === false);
 check("FINDER tool numbers are searchable", app.toolSearchMatch("94 · Just-in-time (JIT) liquidity model", "94") === true && app.toolSearchMatch("94 · Just-in-time (JIT) liquidity model", "jit 94") === true);
+check("FINDER a number inside a longer number is not a match (94 must not hit 778.2794, 194.7223 or 9,583.1094)", app.toolSearchMatch("needs ≈778.2794 net in", "94") === false && app.toolSearchMatch("worth ≈194.7223 at spot", "94") === false && app.toolSearchMatch("you receive ≈9,583.1094", "94") === false && app.toolSearchMatch("range 1,094 total", "94") === false);
+check("FINDER whole numbers still match at edges, after punctuation and in cross-references", app.toolSearchMatch("see tool 94 for the model", "94") === true && app.toolSearchMatch("priced by tool 94.", "94") === true && app.toolSearchMatch("91 · Token-2022 transfer-fee swap model", "2022") === true && app.toolSearchMatch("94 · model paying ≈778.2794", "94") === true);
+check("FINDER numeric refinement leaves word matching alone (substrings of words still match)", app.toolSearchMatch("58 · Stableswap swap model", "swap") === true && app.toolSearchMatch("58 · Stableswap swap model", "stable") === true && app.toolSearchMatch("a 0.25% fee tier", "0.25") === true);
 check("FINDER extra whitespace in the query is ignored", app.toolSearchMatch("sandwich (MEV) attack model", "  sandwich   mev ") === true);
 check("FINDER non-string haystack never matches", app.toolSearchMatch(null, "swap") === false && app.toolSearchMatch(undefined, "") === false);
 check("FINDER finder controls present and labelled", html.includes('id="tool-q"') && html.includes('for="tool-q"') && html.includes('id="tool-filter-status"') && html.includes('id="tool-no-results"'));
