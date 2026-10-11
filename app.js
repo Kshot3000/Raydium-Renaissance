@@ -110,6 +110,21 @@ function toolSearchMatch(haystack, query) {
     return false;
   });
 }
+/* Tool jump menu options: the menu is built from the tool forms
+   themselves ({id, title} read off each form and its heading), so it
+   can never list a tool that is not on the page or miss one that is.
+   Entries without an id or a title cannot be jumped to and are
+   dropped; page order is preserved, so the menu reads 1, 2, 3, … */
+function toolJumpOptions(items) {
+  if (!Array.isArray(items)) return [];
+  var out = [];
+  items.forEach(function (it) {
+    if (!it || typeof it.id !== "string" || typeof it.title !== "string") return;
+    var id = it.id.trim(), title = it.title.trim();
+    if (id && title) out.push({ id: id, title: title });
+  });
+  return out;
+}
 function scaledToNumber(nano) { return Number(nano) / 1e9; }
 
 /* ---------- 1 · Constant-product swap model (x * y = k) ---------- */
@@ -7348,7 +7363,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, toolSearchMatch, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, toolSearchMatch, toolJumpOptions, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -7404,6 +7419,35 @@ if (typeof document !== "undefined") {
     }
     toolQ.addEventListener("input", applyToolFilter);
     applyToolFilter();
+
+    /* --- tool jump menu: the finder answers "which tool was it?",
+       this answers "take me there". Options are built from the tool
+       forms themselves (toolJumpOptions), so the menu can never point
+       at a tool that is not on the page. Picking a tool that a search
+       is currently hiding clears the search first, so the tool is
+       there when the page lands; focus moves to its first editable
+       input so keyboard visitors land inside the tool, not above it.
+       Scrolling uses the page's own scroll-behavior, so reduced-motion
+       visitors still get instant, unsmoothed scrolling. --- */
+    var toolJump = document.getElementById("tool-jump");
+    toolJumpOptions(toolForms.map(function (form) {
+      var h = form.querySelector("h3");
+      return { id: form.id, title: h ? h.textContent : "" };
+    })).forEach(function (opt) {
+      var el = document.createElement("option");
+      el.value = opt.id;
+      el.textContent = opt.title;
+      toolJump.appendChild(el);
+    });
+    toolJump.addEventListener("change", function () {
+      var target = document.getElementById(toolJump.value);
+      if (!target) return;
+      if (target.hidden) { toolQ.value = ""; applyToolFilter(); }
+      target.scrollIntoView();
+      var first = target.querySelector("input:not([readonly])") || target.querySelector("button");
+      if (first) first.focus({ preventScroll: true });
+      toolJump.value = "";
+    });
 
     function fmt(n, dp) { return n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp }); }
 
