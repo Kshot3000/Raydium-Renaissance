@@ -5044,7 +5044,11 @@ function leveragedLp(reserveAStr, reserveBStr, equityStr, leverageStr, borrowApr
     equityChangePct: (equityAfter / equity - 1) * 100,
     unleveredAfter: unleveredAfter,
     unleveredChangePct: (sq - 1) * 100,
-    breakEvenRatio: Math.pow((equity + debtEnd) / positionValue, 2),
+    /* The break-even numerator is summed at price scale, never as
+       equity + debtEnd: at reserves near 1e308 both legs are ~1e308
+       and their reserve-scale sum overflows to Infinity, rejecting
+       a position whose break-even multiple is a modest 2.25. */
+    breakEvenRatio: Math.pow(equity / positionValue + debtEnd / positionValue, 2),
     wipeoutRatio: Math.pow(debtEnd / positionValue, 2),
     liquidationRatio: Math.pow(debtEnd / ((1 - marginPct / 100) * positionValue), 2),
     marginPct: marginPct,

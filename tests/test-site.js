@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=130"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=131"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v130", html.includes("app.js?v=130"));
+check("app.js cache key bumped to v131", html.includes("app.js?v=131"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6762,7 +6762,9 @@ check("LEV rejects blanks and non-numbers", app.leveragedLp("", "1000", "100", "
 check("LEV rejects leverage outside [1, 100], negative APR, dead periods, margins at or outside [0, 100), non-positive reserves, equity and moves", app.leveragedLp("1000", "1000", "100", "0.5", "10", "365", "10", 4) === null && app.leveragedLp("1000", "1000", "100", "101", "10", "365", "10", 4) === null && app.leveragedLp("1000", "1000", "100", "3", "-1", "365", "10", 4) === null && app.leveragedLp("1000", "1000", "100", "3", "10", "0", "10", 4) === null && app.leveragedLp("1000", "1000", "100", "3", "10", "365", "100", 4) === null && app.leveragedLp("1000", "1000", "100", "3", "10", "365", "-1", 4) === null && app.leveragedLp("0", "1000", "100", "3", "10", "365", "10", 4) === null && app.leveragedLp("1000", "1000", "0", "3", "10", "365", "10", 4) === null && app.leveragedLp("1000", "1000", "100", "3", "10", "365", "10", 0) === null && app.leveragedLp("1000", "1000", "100", "3", "10", "365", "10", -2) === null);
 check("LEV rejects a position that does not fit inside the pool", app.leveragedLp("1000", "1000", "100", "30", "10", "365", "10", 2) === null && app.leveragedLp("1000", "1000", "1000.0001", "2", "10", "365", "10", 2) === null);
 check("LEV huge reserves with a modest spot still price, and a genuine overflow rejects", app.leveragedLp("1e308", "1e308", "100", "3", "10", "365", "10", 4) !== null && Math.abs(app.leveragedLp("1e308", "1e308", "100", "3", "10", "365", "10", 4).equityAfter - 380) < 1e-9 && app.leveragedLp("1000", "1000", "1e308", "100", "10", "365", "10", 4) === null);
-check("LEV source carries the equity identity and the three multiples", appSrc.includes("function leveragedLp") && appSrc.includes("(equity + debtEnd) / positionValue") && appSrc.includes("debtEnd / ((1 - marginPct / 100) * positionValue)"));
+check("LEV source carries the equity identity and the three multiples", appSrc.includes("function leveragedLp") && appSrc.includes("equity / positionValue + debtEnd / positionValue") && appSrc.includes("debtEnd / ((1 - marginPct / 100) * positionValue)"));
+check("LEV break-even at price scale: equity and debt near 1e308 price instead of overflowing their sum", (() => { const d = app.leveragedLp("9e307", "9e307", "8.9e307", "2", "100", "365", "10", 1); return d !== null && Math.abs(d.breakEvenRatio - 2.25) < 1e-9 && Math.abs(d.equityAfter) <= 1e-12 * d.positionValue && Math.abs(d.debtEnd - 1.78e308) <= 1e-12 * d.positionValue; })());
+check("LEV break-even at price scale: second shape prices, and its wipeout multiple settles the equity at zero", (() => { const d = app.leveragedLp("9e307", "9e307", "5.9e307", "3", "10", "365", "10", 1); if (d === null) return false; const w = app.leveragedLp("9e307", "9e307", "5.9e307", "3", "10", "365", "10", d.wipeoutRatio); return Math.abs(d.breakEvenRatio - 1.1377777777777778) < 1e-9 && w !== null && Math.abs(w.equityAfter) <= 1e-9 * w.positionValue; })());
 check("all lev controls labelled", ["lev-ra", "lev-rb", "lev-eq", "lev-lev", "lev-apr", "lev-days", "lev-margin", "lev-ratio", "lev-change", "lev-liq"].every(id => html.includes(`for="${id}"`)));
 check("lev tool present in index.html", html.includes('id="lev-calc"') && html.includes('id="lev-result"'));
 check("lev handler wired to its own form", appSrc.includes('getElementById("lev-calc")') && appSrc.includes('getElementById("lev-result")'));
