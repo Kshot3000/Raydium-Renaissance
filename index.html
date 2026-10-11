@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred one</label>
+      <label for="tool-q">Find a tool among the one hundred two</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred one tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred two tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred one.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred two.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2403,6 +2403,27 @@
         <button type="submit" class="btn primary">Model my leveraged position</button>
         <p id="lev-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="twap-calc">
+        <h3>102 · Sliced (TWAP-style) swap planner</h3>
+        <p>Every swap model above prices one trade against one pool state. A large trade can instead be cut into equal slices spread over time: if the pool is restored to its starting spot between slices, each slice walks the same short stretch of curve instead of the whole trade walking it once. Paying 100 into a pool holding 1,000 / 1,000 at a 0.25% fee returns ≈90.70243237 as one trade; ten slices of 10 return ≈98.76482091 in total (+8.8888%), and the modelled impact falls from ≈9.2976% to ≈1.2352% — toward the fee itself as the slices multiply, never below it. That gain is the restore assumption paying out: it exists only if the external price still equals the starting spot when each slice lands and other traders actually trade the pool back to it between slices, and each real slice is its own transaction paying its own network and priority fees, which are not modelled — so more slices is not free, and waiting carries the risk the price moves first. At dust sizes the per-slice rounding to the smallest unit can cost more than the impact saved, and this model shows that as a negative gain rather than hiding it. Educational model only — your reserves, amount, slice count and fee, not live pool data, not a live quote, not financial advice.</p>
+        <label for="twap-rin">Pool reserve of the token you pay in</label>
+        <input id="twap-rin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="twap-rout">Pool reserve of the token you receive</label>
+        <input id="twap-rout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="twap-ain">Total amount you pay in</label>
+        <input id="twap-ain" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="twap-n">Number of equal slices to spread it over</label>
+        <input id="twap-n" inputmode="numeric" placeholder="e.g. 10" autocomplete="off">
+        <label for="twap-fee">Pool fee (basis points, 25 = 0.25%)</label>
+        <input id="twap-fee" inputmode="numeric" value="25" autocomplete="off">
+        <label for="twap-out">Total amount out across all slices (model)</label>
+        <input id="twap-out" readonly placeholder="—" autocomplete="off">
+        <label for="twap-gain">Gain vs one trade of the whole amount, % (model)</label>
+        <input id="twap-gain" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model my sliced swap</button>
+        <p id="twap-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2430,6 +2451,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=131"></script>
+<script src="app.js?v=132"></script>
 </body>
 </html>

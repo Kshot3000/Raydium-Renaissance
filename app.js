@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus one hundred one fully
+/* Raydium Renaissance hub logic: project filtering plus one hundred two fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -72,7 +72,8 @@
    delta-hedge calculator, a CLMM
    delta-hedge calculator, a
    weighted-pool delta-hedge calculator,
-   and a leveraged LP position model.
+   a leveraged LP position model,
+   and a sliced (TWAP-style) swap planner.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -5062,6 +5063,84 @@ function leveragedLp(reserveAStr, reserveBStr, equityStr, leverageStr, borrowApr
   return result;
 }
 
+/* ---------- 102 · Sliced (TWAP-style) swap planner ---------- */
+/* Every swap tool on this hub prices ONE trade against ONE pool state.
+   A large trade can instead be cut into equal slices spread over
+   time (a TWAP-style execution): if, between slices, trading against
+   the external price restores the pool to its starting spot, each
+   slice walks the same short stretch of curve instead of the whole
+   trade walking it once. Each slice here is priced by Tool 1's own
+   curve maths in exact scaled BigInt — the total input is split into
+   equal smallest-unit slices (the first slices take the one-unit
+   remainder, so the slices sum to the total exactly), the fee comes
+   off each slice the way Tool 1 takes it, and every slice is priced
+   against the ORIGINAL reserves, which is the reset assumption made
+   concrete. The benchmark is Tool 1 itself on the whole amount, called
+   directly, so the gain is measured against the hub's own single-trade
+   answer. Headline: 100 in against 1,000/1,000 at 25 bps pays
+   90.70243237 in one trade; ten slices of 10 pay 98.76482091
+   (+8.8888%), and the modelled impact falls from 9.2976% to 1.2352%,
+   toward the fee itself (0.25%) as the slices multiply — never below
+   it. The honest limits are the assumption and the costs left out:
+   the pool only resets if the external price still equals the
+   starting spot and other traders actually restore it between slices
+   (if the price moves while you wait, later slices price at the new
+   market, not this one); each slice is a separate transaction in
+   reality, paying its own network and priority fees, which are NOT
+   modelled, so more slices is not free; and at dust sizes the
+   per-slice rounding to the smallest unit can cost more than the
+   impact saved — the model shows that as a negative gain rather than
+   hiding it. Model only — your reserves, amount, slice count and
+   fee, not a live quote, not live pool data, not financial advice. */
+function slicedSwap(reserveInStr, reserveOutStr, amountInStr, slicesStr, feeBps) {
+  var required = [reserveInStr, reserveOutStr, amountInStr, slicesStr];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var rin = parseScaled(reserveInStr), rout = parseScaled(reserveOutStr), ain = parseScaled(amountInStr);
+  if (rin === null || rout === null || ain === null) return null;
+  if (rin <= 0n || rout <= 0n || ain <= 0n) return null;
+  var slices = Number(slicesStr), fee = Number(feeBps);
+  if (!Number.isInteger(slices) || slices < 1 || slices > 10000) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  var n = BigInt(slices);
+  var base = ain / n, remainder = ain % n;
+  var totalOut = 0n;
+  for (var s = 0; s < slices; s++) {
+    var slice = base + (BigInt(s) < remainder ? 1n : 0n);
+    var inAfterFee = slice * BigInt(10000 - fee) / 10000n;
+    if (inAfterFee <= 0n) return null;
+    var out = rout * inAfterFee / (rin + inAfterFee);
+    if (out <= 0n) return null;
+    totalOut += out;
+  }
+  var single = cpSwap(reserveInStr, reserveOutStr, amountInStr, fee);
+  if (single === null) return null;
+  var singleOut = parseScaled(single.out);
+  var gain = totalOut - singleOut;
+  var spot = scaledToNumber(rout) / scaledToNumber(rin);
+  var effective = scaledToNumber(totalOut) / scaledToNumber(ain);
+  var result = {
+    reserveIn: scaledToNumber(rin), reserveOut: scaledToNumber(rout),
+    amountIn: scaledToNumber(ain), slices: slices,
+    feeBps: fee, feePct: fee / 100,
+    sliceIn: scaledToNumber(ain) / slices,
+    perSliceOut: scaledToNumber(totalOut) / slices,
+    totalOut: formatScaled(totalOut),
+    singleOut: single.out,
+    gainOut: gain < 0n ? "-" + formatScaled(-gain) : formatScaled(gain),
+    gainPct: scaledToNumber(gain) / scaledToNumber(singleOut) * 100,
+    spotPrice: spot, effectivePrice: effective,
+    priceImpactPct: (1 - effective / spot) * 100,
+    singlePriceImpactPct: single.priceImpactPct
+  };
+  var fields = Object.keys(result);
+  for (var k = 0; k < fields.length; k++) {
+    if (typeof result[fields[k]] === "number" && !Number.isFinite(result[fields[k]])) return null;
+  }
+  return result;
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -8035,7 +8114,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, leveragedLp, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, leveragedLp, slicedSwap, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -10196,6 +10275,33 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: your " + fmt(res.equity, 4) + " B of equity at " + fmt(res.leverage, 4) + "x leverage controls a " + fmt(res.positionValue, 4) + " B position — a " + fmt(res.sharePct, 4) + "% share of the " + fmt(res.reserveA, 4) + " A / " + fmt(res.reserveB, 4) + " B pool (spot " + fmt(res.spotPrice, 6) + " B per A), deposited as " + fmt(res.yourA, 4) + " A and " + fmt(res.yourB, 4) + " B, with " + fmt(res.debtStart, 4) + " B borrowed. Over " + fmt(res.days, 4) + " day(s) at " + fmt(res.borrowAprPct, 4) + "% borrow APR the debt grows by " + fmt(res.interest, 4) + " B to " + fmt(res.debtEnd, 4) + " B. If the price moves " + fmt(res.priceRatio, 4) + "x to " + fmt(res.newPrice, 6) + " B per A, the position is worth " + fmt(res.valueAfter, 4) + " B — leverage does not change the pool's sqrt-of-price curve, only who owns the outcome." + settleWord + " The price must reach " + fmt(res.breakEvenRatio, 4) + "x just to repay the debt with your equity intact." + marginWord + " Simple interest at a constant APR, one borrow in token B, no trading fees (the fee tools price that leg), no liquidation penalty, and real protocols set their own margin rules and borrow caps — this model's multiples are not any protocol's. A leveraged LP model, not live pool data. Not financial advice.";
         document.getElementById("lev-change").value = fmt(res.equityChangePct, 4);
         document.getElementById("lev-liq").value = fmt(res.liquidationRatio, 4);
+      }
+    });
+
+    /* --- Sliced (TWAP-style) swap planner --- */
+    document.getElementById("twap-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = slicedSwap(
+        document.getElementById("twap-rin").value,
+        document.getElementById("twap-rout").value,
+        document.getElementById("twap-ain").value,
+        document.getElementById("twap-n").value,
+        document.getElementById("twap-fee").value
+      );
+      var out = document.getElementById("twap-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens and a positive total amount to pay in (up to 9 decimal places), a whole number of slices between 1 and 10000, and a pool fee in whole basis points from 0 to 9999 (25 = 0.25%). Each slice must still be worth pricing after the fee — a dust total cut too thin is rejected rather than rounded into a fill.";
+        document.getElementById("twap-out").value = "";
+        document.getElementById("twap-gain").value = "";
+      } else {
+        var gainWord = res.gainPct > 0
+          ? " Slicing gains " + res.gainOut + " (" + fmt(res.gainPct, 4) + "% more) over the single trade — that gain is the reset assumption paying out, and it shrinks toward nothing if the pool is not actually restored between slices."
+          : (res.gainPct < 0
+            ? " Slicing LOSES " + res.gainOut.replace("-", "") + " (" + fmt(res.gainPct, 4) + "%) against the single trade here — at this size the per-slice rounding to the smallest unit costs more than the impact saved, and the model says so rather than rounding the loss away."
+            : " One slice is the single trade itself, so the gain is exactly zero.");
+        out.textContent = "Model output: paying " + fmt(res.amountIn, 4) + " into a pool holding " + fmt(res.reserveIn, 4) + " / " + fmt(res.reserveOut, 4) + " (spot " + fmt(res.spotPrice, 6) + " out per in, fee " + fmt(res.feePct, 4) + "%) as " + fmt(res.slices, 0) + " equal slice(s) of " + fmt(res.sliceIn, 6) + ", with the pool restored to its starting spot between slices, pays " + res.totalOut + " in total — about " + fmt(res.perSliceOut, 6) + " per slice — at a modelled price impact of " + fmt(res.priceImpactPct, 4) + "%. One trade of the whole amount pays " + res.singleOut + " at " + fmt(res.singlePriceImpactPct, 4) + "% impact." + gainWord + " Not modelled: the network and priority fee each real slice transaction pays, and any move in the external price while you wait — later slices would price at the new market, not this one. A sliced swap model, not live pool data. Not financial advice.";
+        document.getElementById("twap-out").value = res.totalOut;
+        document.getElementById("twap-gain").value = fmt(res.gainPct, 4);
       }
     });
 
