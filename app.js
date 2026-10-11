@@ -93,7 +93,14 @@ function formatScaled(nano) {
    a purely numeric word must appear as a whole number, not as digits
    inside a longer number — tool numbers are the advertised use ("94"
    finds tool 94), and plain substring matching also hit the "94" in
-   778.2794, 194.7223 and 9,583.1094, returning six wrong tools. */
+   778.2794, 194.7223 and 9,583.1094, returning six wrong tools. Inside
+   a longer number includes inside a DECIMAL: "95" is part of 95.24
+   (its integer part) and of 4.95 (its fraction part), so a digit on
+   either side rejects the match, and so does a decimal point whose
+   other side is a digit. A full stop that ends a sentence ("priced by
+   tool 94.") is not a decimal point — its other side is no digit —
+   so cross-references at a sentence end still match, as do percents
+   ("a 95% exit"). */
 function toolSearchMatch(haystack, query) {
   if (typeof haystack !== "string") return false;
   var tokens = String(query == null ? "" : query).toLowerCase().split(/\s+/).filter(function (t) { return t.length > 0; });
@@ -105,7 +112,12 @@ function toolSearchMatch(haystack, query) {
     while (at !== -1) {
       var before = at === 0 ? "" : text.charAt(at - 1);
       var after = at + t.length >= text.length ? "" : text.charAt(at + t.length);
-      if (!/\d/.test(before) && !/\d/.test(after)) return true;
+      var before2 = at < 2 ? "" : text.charAt(at - 2);
+      var after2 = at + t.length + 1 >= text.length ? "" : text.charAt(at + t.length + 1);
+      var insideNumber = /\d/.test(before) || /\d/.test(after) ||
+        (before === "." && /\d/.test(before2)) ||
+        (after === "." && /\d/.test(after2));
+      if (!insideNumber) return true;
       at = text.indexOf(t, at + 1);
     }
     return false;

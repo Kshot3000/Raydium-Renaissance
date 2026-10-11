@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=121"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=122"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v121", html.includes("app.js?v=121"));
+check("app.js cache key bumped to v122", html.includes("app.js?v=122"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6595,6 +6595,10 @@ check("FINDER a missing word rejects the tool", app.toolSearchMatch("CLMM single
 check("FINDER tool numbers are searchable", app.toolSearchMatch("94 · Just-in-time (JIT) liquidity model", "94") === true && app.toolSearchMatch("94 · Just-in-time (JIT) liquidity model", "jit 94") === true);
 check("FINDER a number inside a longer number is not a match (94 must not hit 778.2794, 194.7223 or 9,583.1094)", app.toolSearchMatch("needs ≈778.2794 net in", "94") === false && app.toolSearchMatch("worth ≈194.7223 at spot", "94") === false && app.toolSearchMatch("you receive ≈9,583.1094", "94") === false && app.toolSearchMatch("range 1,094 total", "94") === false);
 check("FINDER whole numbers still match at edges, after punctuation and in cross-references", app.toolSearchMatch("see tool 94 for the model", "94") === true && app.toolSearchMatch("priced by tool 94.", "94") === true && app.toolSearchMatch("91 · Token-2022 transfer-fee swap model", "2022") === true && app.toolSearchMatch("94 · model paying ≈778.2794", "94") === true);
+check("FINDER a number inside a decimal is not a match (95 must not hit the integer part 95.24 or the fraction part 4.95 / 0.95)", app.toolSearchMatch("return ≈95.24 against", "95") === false && app.toolSearchMatch("≈4.95% at A = 5,000", "95") === false && app.toolSearchMatch("pays 0.95 of it back", "95") === false);
+check("FINDER decimal refinement keeps genuine whole numbers (a 95% exit, a sentence-end cross-reference)", app.toolSearchMatch("a 95% exit of the balanced pool", "95") === true && app.toolSearchMatch("priced by tool 95.", "95") === true && app.toolSearchMatch("95 · Farm rewards estimator", "95") === true);
+check("FINDER on the real page, 95 finds only the 95% exit tool and tool 95 itself", (() => { const forms = [...html.matchAll(/<form class="tool" id="([^"]+)">([\s\S]*?)<\/form>/g)].map(m => ({ id: m[1], text: m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ") })); return JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "95")).map(f => f.id)) === JSON.stringify(["wwd-calc", "farm-calc"]); })());
+check("FINDER on the real page, 94 still finds only tool 94 and farm finds only the farm tool", (() => { const forms = [...html.matchAll(/<form class="tool" id="([^"]+)">([\s\S]*?)<\/form>/g)].map(m => ({ id: m[1], text: m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ") })); return JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "94")).map(f => f.id)) === JSON.stringify(["jit-calc"]) && JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "farm")).map(f => f.id)) === JSON.stringify(["farm-calc"]); })());
 check("FINDER numeric refinement leaves word matching alone (substrings of words still match)", app.toolSearchMatch("58 · Stableswap swap model", "swap") === true && app.toolSearchMatch("58 · Stableswap swap model", "stable") === true && app.toolSearchMatch("a 0.25% fee tier", "0.25") === true);
 check("FINDER extra whitespace in the query is ignored", app.toolSearchMatch("sandwich (MEV) attack model", "  sandwich   mev ") === true);
 check("FINDER non-string haystack never matches", app.toolSearchMatch(null, "swap") === false && app.toolSearchMatch(undefined, "") === false);
