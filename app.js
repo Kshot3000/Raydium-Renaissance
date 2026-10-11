@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus one hundred two fully
+/* Raydium Renaissance hub logic: project filtering plus one hundred three fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -72,8 +72,9 @@
    delta-hedge calculator, a CLMM
    delta-hedge calculator, a
    weighted-pool delta-hedge calculator,
-   a leveraged LP position model,
-   and a sliced (TWAP-style) swap planner.
+   a leveraged LP position model, a
+   sliced (TWAP-style) swap planner, and a
+   Solana transaction cost estimator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -5141,6 +5142,79 @@ function slicedSwap(reserveInStr, reserveOutStr, amountInStr, slicesStr, feeBps)
   return result;
 }
 
+/* ---------- 103 · Solana transaction cost estimator ---------- */
+/* Every execution tool on this hub stops at the pool's edge: the
+   split-route planner (28), the two-pool arbitrage model (97) and
+   the sliced swap planner (102) all say, in so many words, that
+   each real transaction also pays network and priority fees they do
+   not model. This prices that leg, in lamports, with the protocol's
+   own arithmetic — all of it exact BigInt, no floats near the money:
+   a transaction's base fee is 5,000 lamports per signature, and its
+   prioritisation fee is ceil(CU price x CU limit / 1,000,000),
+   where the CU price is in micro-lamports per compute unit and the
+   fee is charged on the LIMIT requested, not the compute actually
+   consumed — so an over-generous limit pays for compute never used.
+   Creating a token account is not a fee at all: the standard
+   165-byte account carries a 2,039,280-lamport rent-exempt deposit
+   ((128 + 165) bytes x 6,960 lamports per byte), refunded in full
+   when the account is closed, so the model reports it separately
+   from the fees and lets the reader change the per-account figure —
+   a rent-reduction schedule (SIMD-0437) is stepping that deposit
+   down, and Token-2022 accounts with extensions are larger. The
+   honest limits: the CU price that actually lands a transaction
+   moves with congestion and is the reader's input, not a live
+   quote; failed transactions still pay the base and priority fees,
+   which this model does not multiply out; and Jito tips, wallet or
+   aggregator fees are not Solana protocol fees and are not here.
+   Headline: ten transactions (Tool 102's ten slices) at one
+   signature, a 300,000 CU limit and 10,000 micro-lamports per CU
+   pay 5,000 base + 3,000 priority = 8,000 lamports each, 80,000 in
+   fees overall, and 2,119,280 lamports upfront once one new token
+   account's deposit is counted. Model only — your transaction
+   count, signatures, compute limit, CU price and account count,
+   not a live fee quote, not live network data, not financial
+   advice. */
+function txCostEstimate(txsStr, sigsStr, cuLimitStr, cuPriceStr, newAccountsStr, rentStr) {
+  var raw = [txsStr, sigsStr, cuLimitStr, cuPriceStr, newAccountsStr, rentStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || !/^\d+$/.test(String(raw[i]).trim())) return null;
+  }
+  var txs = BigInt(String(txsStr).trim()), sigs = BigInt(String(sigsStr).trim());
+  var cuLimit = BigInt(String(cuLimitStr).trim()), cuPrice = BigInt(String(cuPriceStr).trim());
+  var newAccounts = BigInt(String(newAccountsStr).trim()), rent = BigInt(String(rentStr).trim());
+  if (txs < 1n || txs > 100000n) return null;
+  if (sigs < 1n || sigs > 256n) return null;
+  if (cuLimit < 1n || cuLimit > 1400000n) return null;
+  if (cuPrice > 1000000000000n) return null;
+  if (newAccounts > 10000n) return null;
+  if (rent > 100000000000n) return null;
+  var basePerTx = 5000n * sigs;
+  var priorityPerTx = (cuPrice * cuLimit + 999999n) / 1000000n;
+  var feePerTx = basePerTx + priorityPerTx;
+  var totalBase = basePerTx * txs, totalPriority = priorityPerTx * txs;
+  var totalFees = feePerTx * txs;
+  var rentTotal = newAccounts * rent;
+  var totalUpfront = totalFees + rentTotal;
+  function toSol(lamports) {
+    var whole = lamports / 1000000000n, frac = lamports % 1000000000n;
+    return whole.toString() + "." + frac.toString().padStart(9, "0");
+  }
+  var result = {
+    txs: Number(txs), sigs: Number(sigs), cuLimit: Number(cuLimit),
+    cuPriceMicro: Number(cuPrice), newAccounts: Number(newAccounts),
+    rentPerAccount: rent.toString(),
+    basePerTx: basePerTx.toString(), priorityPerTx: priorityPerTx.toString(),
+    feePerTx: feePerTx.toString(), feePerTxSol: toSol(feePerTx),
+    totalBase: totalBase.toString(), totalPriority: totalPriority.toString(),
+    totalFees: totalFees.toString(), totalFeesSol: toSol(totalFees),
+    rentTotal: rentTotal.toString(), rentTotalSol: toSol(rentTotal),
+    totalUpfront: totalUpfront.toString(), totalUpfrontSol: toSol(totalUpfront),
+    prioritySharePct: Number(totalPriority) / Number(totalFees) * 100
+  };
+  if (!Number.isFinite(result.prioritySharePct)) return null;
+  return result;
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -8114,7 +8188,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, leveragedLp, slicedSwap, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, leveragedLp, slicedSwap, txCostEstimate, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -10304,6 +10378,32 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: paying " + fmt(res.amountIn, 4) + " into a pool holding " + fmt(res.reserveIn, 4) + " / " + fmt(res.reserveOut, 4) + " (spot " + fmt(res.spotPrice, 6) + " out per in, fee " + fmt(res.feePct, 4) + "%) as " + fmt(res.slices, 0) + " equal slice(s) of " + fmt(res.sliceIn, 6) + ", with the pool restored to its starting spot between slices, pays " + res.totalOut + " in total — about " + fmt(res.perSliceOut, 6) + " per slice — at a modelled price impact of " + fmt(res.priceImpactPct, 4) + "%. One trade of the whole amount pays " + res.singleOut + " at " + fmt(res.singlePriceImpactPct, 4) + "% impact." + gainWord + " Not modelled: the network and priority fee each real slice transaction pays, and any move in the external price while you wait — later slices would price at the new market, not this one. A sliced swap model, not live pool data. Not financial advice.";
         document.getElementById("twap-out").value = res.totalOut;
         document.getElementById("twap-gain").value = fmt(res.gainPct, 4);
+      }
+    });
+
+    /* --- Solana transaction cost estimator --- */
+    document.getElementById("txcost-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = txCostEstimate(
+        document.getElementById("txcost-txs").value,
+        document.getElementById("txcost-sigs").value,
+        document.getElementById("txcost-cu").value,
+        document.getElementById("txcost-price").value,
+        document.getElementById("txcost-accts").value,
+        document.getElementById("txcost-rent").value
+      );
+      var out = document.getElementById("txcost-result");
+      if (res === null) {
+        out.textContent = "Enter a whole number of transactions between 1 and 100000, signatures per transaction between 1 and 256, a compute-unit limit between 1 and 1400000 (the per-transaction protocol maximum), a CU price of 0 or more micro-lamports per CU (whole numbers, at most 1000000000000), a whole number of new token accounts between 0 and 10000, and a rent deposit per account of 0 or more lamports (2039280 is the standard 165-byte token account).";
+        document.getElementById("txcost-fees").value = "";
+        document.getElementById("txcost-upfront").value = "";
+      } else {
+        var rentWord = res.newAccounts === 0
+          ? " No new token accounts are created, so no rent deposit is due."
+          : " On top of the fees, " + fmt(res.newAccounts, 0) + " new token account(s) lock up " + res.rentTotal + " lamports (" + res.rentTotalSol + " SOL) of rent-exempt deposit at " + res.rentPerAccount + " lamports each — a refundable deposit returned when an account is closed, not a fee, so the total upfront is " + res.totalUpfront + " lamports (" + res.totalUpfrontSol + " SOL) while the fees alone are " + res.totalFees + ".";
+        out.textContent = "Model output: " + fmt(res.txs, 0) + " transaction(s) at " + fmt(res.sigs, 0) + " signature(s) each pay a base fee of " + res.basePerTx + " lamports per transaction (" + res.totalBase + " in total). At a compute-unit limit of " + fmt(res.cuLimit, 0) + " and a CU price of " + fmt(res.cuPriceMicro, 0) + " micro-lamports, the prioritisation fee is " + res.priorityPerTx + " lamports per transaction (" + res.totalPriority + " in total, " + fmt(res.prioritySharePct, 4) + "% of the fees) — charged on the limit requested, not the compute actually consumed, so a looser limit pays more at the same price. Total network fees: " + res.totalFees + " lamports (" + res.totalFeesSol + " SOL), " + res.feePerTx + " lamports per transaction." + rentWord + " The CU price that actually lands a transaction moves with congestion and is your input here, not a live quote; failed transactions still pay these fees, and Jito tips or wallet and aggregator fees are not protocol fees and are not modelled. A Solana transaction cost model, not live network data. Not financial advice.";
+        document.getElementById("txcost-fees").value = res.totalFees;
+        document.getElementById("txcost-upfront").value = res.totalUpfront;
       }
     });
 

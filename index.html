@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred two</label>
+      <label for="tool-q">Find a tool among the one hundred three</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred two tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred three tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred two.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred three.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2424,6 +2424,29 @@
         <button type="submit" class="btn primary">Model my sliced swap</button>
         <p id="twap-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="txcost-calc">
+        <h3>103 · Solana transaction cost estimator</h3>
+        <p>Every execution tool above stops at the pool's edge — tools 28, 97 and 102 all note that each real transaction also pays network and priority fees they do not model. This prices that leg in lamports, with the protocol's own arithmetic. A transaction's base fee is 5,000 lamports per signature. Its prioritisation fee is the compute-unit price (in micro-lamports per CU) times the compute-unit limit, divided by 1,000,000 and rounded up — and it is charged on the limit you request, not the compute you actually consume, so an over-generous limit pays for compute never used. Ten transactions (tool 102's ten slices) at one signature, a 300,000 CU limit and 10,000 micro-lamports per CU pay 5,000 + 3,000 = 8,000 lamports each, 80,000 lamports of fees in total. Creating a token account is not a fee: a standard 165-byte account carries a 2,039,280-lamport rent-exempt deposit, refunded in full when the account is closed, so this model reports it separately from the fees and lets you change the per-account figure — a rent-reduction schedule (SIMD-0437) is stepping that deposit down, and Token-2022 accounts with extensions are larger. The CU price that actually lands a transaction moves with congestion and is your input here, not a live quote; failed transactions still pay the base and priority fees; Jito tips and wallet or aggregator fees are not Solana protocol fees and are not modelled. Educational model only — your transaction count, signatures, compute limit, CU price and account count, not live network data, not a live quote, not financial advice.</p>
+        <label for="txcost-txs">Number of transactions</label>
+        <input id="txcost-txs" inputmode="numeric" placeholder="e.g. 10" autocomplete="off">
+        <label for="txcost-sigs">Signatures per transaction</label>
+        <input id="txcost-sigs" inputmode="numeric" value="1" autocomplete="off">
+        <label for="txcost-cu">Compute-unit limit per transaction (max 1400000)</label>
+        <input id="txcost-cu" inputmode="numeric" placeholder="e.g. 300000" autocomplete="off">
+        <label for="txcost-price">Compute-unit price, micro-lamports per CU (0 = no priority fee)</label>
+        <input id="txcost-price" inputmode="numeric" placeholder="e.g. 10000" autocomplete="off">
+        <label for="txcost-accts">New token accounts created across all transactions</label>
+        <input id="txcost-accts" inputmode="numeric" value="0" autocomplete="off">
+        <label for="txcost-rent">Rent-exempt deposit per new account, lamports (standard token account)</label>
+        <input id="txcost-rent" inputmode="numeric" value="2039280" autocomplete="off">
+        <label for="txcost-fees">Total network fees, lamports (model)</label>
+        <input id="txcost-fees" readonly placeholder="—" autocomplete="off">
+        <label for="txcost-upfront">Total upfront including rent deposits, lamports (model)</label>
+        <input id="txcost-upfront" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Estimate my transaction costs</button>
+        <p id="txcost-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2451,6 +2474,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=133"></script>
+<script src="app.js?v=134"></script>
 </body>
 </html>
