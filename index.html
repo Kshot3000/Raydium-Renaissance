@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred nine</label>
+      <label for="tool-q">Find a tool among the one hundred ten</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred nine tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred ten tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred nine.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred ten.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2631,6 +2631,58 @@
         <button type="submit" class="btn primary">Price my three-hop purchase</button>
         <p id="hop3xo-result" role="status" aria-live="polite"></p>
       </form>
+      <form class="tool" id="rlen-calc">
+        <h3>110 · Route-length comparison model</h3>
+        <p>The route comparison model above weighs a direct swap against a route through one intermediate token, and the three-hop models price a route through two — this weighs all three route lengths at once and says which length pays the most for the same amount in, and by how much over the runner-up. Every leg is the hub's own maths: the direct leg is the constant-product swap model, the two-hop leg is the two-hop swap model and the three-hop leg is the three-hop swap model, so the comparison cannot drift from the models it compares. Longer is not better and shorter is not better — depth is better: paying 100 into a direct pool holding 1,000 / 1,000 at a 0.25% fee pays ≈90.7024; routing it through two pools holding 10,000 / 10,000 each pays ≈97.5568 and the two-hop route wins; adding a third deep pool pays ≈96.3751 — still ahead of the direct pool, but the extra hop's fee and price impact hand the win back to the shorter route. Make every pool the same 1,000 / 1,000 size instead and the order flips completely: direct ≈90.7024, two-hop ≈82.9690, three-hop ≈76.4356, because each added hop charges its fee and its impact again and shallow pools never earn it back. The three routes are priced independently against the same starting state — if they share a pool, as routes from the same wallet usually do, executing one route would move the others, and this comparison double-counts that pool's depth. A real router can also split one trade across several routes at once, and each route pays its own network and priority fees, which grow with the route's length; neither is modelled here. Educational model only — your pools, amount and fees, not live pool data, not a live quote, not financial advice.</p>
+        <label for="rlen-drin">Direct pool reserve of the token you pay in</label>
+        <input id="rlen-drin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="rlen-drout">Direct pool reserve of the token you receive</label>
+        <input id="rlen-drout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="rlen-dfee">Direct pool fee (basis points, 25 = 0.25%)</label>
+        <input id="rlen-dfee" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="rlen-t1in">Two-hop route, first pool reserve of the token you pay in</label>
+        <input id="rlen-t1in" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rlen-t1out">Two-hop route, first pool reserve of the intermediate token</label>
+        <input id="rlen-t1out" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rlen-t2in">Two-hop route, second pool reserve of the intermediate token</label>
+        <input id="rlen-t2in" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rlen-t2out">Two-hop route, second pool reserve of the token you receive</label>
+        <input id="rlen-t2out" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rlen-tfee1">Two-hop route, first pool fee (basis points, 25 = 0.25%)</label>
+        <input id="rlen-tfee1" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="rlen-tfee2">Two-hop route, second pool fee (basis points, 25 = 0.25%)</label>
+        <input id="rlen-tfee2" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="rlen-h1in">Three-hop route, first pool reserve of the token you pay in</label>
+        <input id="rlen-h1in" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rlen-h1out">Three-hop route, first pool reserve of the first intermediate token</label>
+        <input id="rlen-h1out" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rlen-h2in">Three-hop route, second pool reserve of the first intermediate token</label>
+        <input id="rlen-h2in" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rlen-h2out">Three-hop route, second pool reserve of the second intermediate token</label>
+        <input id="rlen-h2out" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rlen-h3in">Three-hop route, third pool reserve of the second intermediate token</label>
+        <input id="rlen-h3in" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rlen-h3out">Three-hop route, third pool reserve of the token you receive</label>
+        <input id="rlen-h3out" inputmode="decimal" placeholder="e.g. 10000" autocomplete="off">
+        <label for="rlen-hfee1">Three-hop route, first pool fee (basis points, 25 = 0.25%)</label>
+        <input id="rlen-hfee1" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="rlen-hfee2">Three-hop route, second pool fee (basis points, 25 = 0.25%)</label>
+        <input id="rlen-hfee2" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="rlen-hfee3">Three-hop route, third pool fee (basis points, 25 = 0.25%)</label>
+        <input id="rlen-hfee3" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="rlen-ain">Amount you pay in</label>
+        <input id="rlen-ain" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="rlen-outd">Direct route pays out (model)</label>
+        <input id="rlen-outd" readonly placeholder="—" autocomplete="off">
+        <label for="rlen-out2">Two-hop route pays out (model)</label>
+        <input id="rlen-out2" readonly placeholder="—" autocomplete="off">
+        <label for="rlen-out3">Three-hop route pays out (model)</label>
+        <input id="rlen-out3" readonly placeholder="—" autocomplete="off">
+        <label for="rlen-adv">Winning route's advantage over the runner-up, % (model)</label>
+        <input id="rlen-adv" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Compare my route lengths</button>
+        <p id="rlen-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2658,6 +2710,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=145"></script>
+<script src="app.js?v=146"></script>
 </body>
 </html>

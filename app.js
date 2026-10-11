@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus one hundred nine fully
+/* Raydium Renaissance hub logic: project filtering plus one hundred ten fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -79,8 +79,9 @@
    leveraged CLMM position model, a swap
    route comparison model, an exact-out
    swap route comparison model, a three-hop
-   swap model, and a three-hop exact-out
-   swap model.
+   swap model, a three-hop exact-out
+   swap model, and a route-length
+   comparison model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -8876,8 +8877,134 @@ function threeHopExactOut(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2
   return result;
 }
 
+/* ---------- 110 · Route-length comparison model ---------- */
+/* Tool 106 compares a direct swap with a two-hop route; tools 108
+   and 109 price a three-hop route without ever asking whether the
+   extra hop earns its crossing. This puts the same amount into all
+   three route lengths at once — direct, through one intermediate
+   token, and through two — and says which length pays the most.
+   Every leg is the hub's own model called verbatim: the direct
+   leg is tool 1's cpSwap, the two-hop leg is tool 23's twoHopSwap
+   and the three-hop leg is tool 108's threeHopSwap (the tests
+   assert every reported leg equals those tools across a sweep),
+   so the comparison can never drift from the models it compares —
+   and when the two-hop and three-hop routes share their first
+   pools, the three-hop route's first two legs ARE the two-hop
+   route's, mid and output alike. The winner is decided on the
+   exact scaled outputs, and the advantage is measured over the
+   RUNNER-UP route, the best of the lengths not chosen — that is
+   the margin the decision actually turns on. Longer is not
+   better and shorter is not better; depth is better: 100 into a
+   direct pool holding 1,000/1,000 at 25 bps pays 90.70243237,
+   through two deep 10,000/10,000 pools it pays 97.556799668 and
+   the two-hop route wins, and through three deep pools it pays
+   96.375053994 — still ahead of the direct pool, but the third
+   hop's fee and impact hand 1.181745674 back, so the middle route
+   keeps the win by 1.2262% over the runner-up. Make every pool
+   1,000/1,000 instead and the order flips completely — direct
+   90.70243237, two-hop 82.968999911, three-hop 76.435643023 —
+   because each added hop charges its fee and its impact again.
+   Ties are exact and honest: zero-fee routes built to compose
+   into the direct pool tie it to the last scaled unit (direct
+   1,000/2,000 against hops 2,000/1,000 and 1,000/4,000 both pay
+   181.818181818), but composing a THREE-hop route to the same
+   curve lands two smallest units under it (181.818181816) — the
+   extra hop's extra 9 dp flooring is a real, if tiny, cost of
+   length, and the model reports it rather than rounding it away.
+   Two honest edges, both stated on the tool. First, the routes
+   are priced independently against the SAME starting state: if
+   they share a pool — routes from the same wallet usually do —
+   executing one route would move the others, and this comparison
+   double-counts that pool's depth. Second, a real router can
+   split one trade across several routes at once and each route
+   pays its own network and priority fees, which grow with the
+   route's length; neither is modelled here. Two scale corners
+   follow the family conventions: the three-hop leg's combined
+   spot can overflow a double while every leg stays finite (tool
+   108's own corner), so that spot is reported as Infinity and
+   exempted from the finiteness guard by name; and when the
+   runner-up pays a single smallest unit beside the winner's
+   astronomical output, the advantage percentage itself overflows
+   and is reported as Infinity (tool 106's convention) — the
+   outputs and the gap stay exact. Model only: your pools,
+   amount and fees, not live pool data, not a live quote, not
+   financial advice. */
+function routeLengthCompare(directInStr, directOutStr, two1InStr, two1OutStr, two2InStr, two2OutStr, three1InStr, three1OutStr, three2InStr, three2OutStr, three3InStr, three3OutStr, amountInStr, directFeeBps, twoFee1Bps, twoFee2Bps, threeFee1Bps, threeFee2Bps, threeFee3Bps) {
+  var raw = [directInStr, directOutStr, two1InStr, two1OutStr, two2InStr, two2OutStr, three1InStr, three1OutStr, three2InStr, three2OutStr, three3InStr, three3OutStr, amountInStr, directFeeBps, twoFee1Bps, twoFee2Bps, threeFee1Bps, threeFee2Bps, threeFee3Bps];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var direct = cpSwap(directInStr, directOutStr, amountInStr, directFeeBps);
+  if (direct === null) return null;
+  var two = twoHopSwap(two1InStr, two1OutStr, two2InStr, two2OutStr, amountInStr, twoFee1Bps, twoFee2Bps);
+  if (two === null) return null;
+  var three = threeHopSwap(three1InStr, three1OutStr, three2InStr, three2OutStr, three3InStr, three3OutStr, amountInStr, threeFee1Bps, threeFee2Bps, threeFee3Bps);
+  if (three === null) return null;
+  var dOut = parseScaled(direct.out), tOut = parseScaled(two.out), hOut = parseScaled(three.out);
+  var max = dOut;
+  if (tOut > max) max = tOut;
+  if (hOut > max) max = hOut;
+  var tiedRoutes = [];
+  if (dOut === max) tiedRoutes.push("direct");
+  if (tOut === max) tiedRoutes.push("two");
+  if (hOut === max) tiedRoutes.push("three");
+  var best, diff, runner;
+  if (tiedRoutes.length > 1) {
+    best = "tie";
+    diff = 0n;
+    runner = max;
+  } else {
+    best = tiedRoutes[0];
+    runner = 0n;
+    if (dOut !== max && dOut > runner) runner = dOut;
+    if (tOut !== max && tOut > runner) runner = tOut;
+    if (hOut !== max && hOut > runner) runner = hOut;
+    diff = max - runner;
+  }
+  var result = {
+    amountIn: three.amountIn,
+    directOut: direct.out,
+    twoOut: two.out,
+    threeOut: three.out,
+    twoMidOut: two.midOut,
+    threeMid1Out: three.mid1Out,
+    threeMid2Out: three.mid2Out,
+    directImpactPct: direct.priceImpactPct,
+    twoImpactPct: two.priceImpactPct,
+    threeImpactPct: three.priceImpactPct,
+    directSpot: direct.spotPrice,
+    twoSpot: two.spotPrice,
+    threeSpot: three.spotPrice,
+    best: best,
+    tiedRoutes: tiedRoutes,
+    diffOut: formatScaled(diff),
+    advantagePct: Number(diff) / Number(runner) * 100,
+    directFeePct: direct.feePct,
+    twoFee1Pct: two.fee1Pct,
+    twoFee2Pct: two.fee2Pct,
+    threeFee1Pct: three.fee1Pct,
+    threeFee2Pct: three.fee2Pct,
+    threeFee3Pct: three.fee3Pct
+  };
+  /* Every figure the tool reports must be finite, or the input is
+     rejected — except advantagePct (tool 106's convention: its
+     Infinity is the honest answer when the runner-up pays dust
+     beside the winner's output) and the routed routes' combined
+     spots when they are exactly Infinity (tools 108/109's
+     convention: a product of spot prices can overflow a double
+     while every leg stays finite and the payout exact). A NaN
+     spot is indeterminate and still rejects. */
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (fields[j] === "advantagePct") continue;
+    if ((fields[j] === "twoSpot" || fields[j] === "threeSpot") && result[fields[j]] === Infinity) continue;
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -11201,6 +11328,56 @@ if (typeof document !== "undefined") {
         document.getElementById("hop3xo-mid1").value = res.mid1In;
         document.getElementById("hop3xo-mid2").value = res.mid2In;
         document.getElementById("hop3xo-impact").value = fmt(res.priceImpactPct, 4);
+      }
+    });
+
+    /* --- Route-length comparison model --- */
+    document.getElementById("rlen-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = routeLengthCompare(
+        document.getElementById("rlen-drin").value,
+        document.getElementById("rlen-drout").value,
+        document.getElementById("rlen-t1in").value,
+        document.getElementById("rlen-t1out").value,
+        document.getElementById("rlen-t2in").value,
+        document.getElementById("rlen-t2out").value,
+        document.getElementById("rlen-h1in").value,
+        document.getElementById("rlen-h1out").value,
+        document.getElementById("rlen-h2in").value,
+        document.getElementById("rlen-h2out").value,
+        document.getElementById("rlen-h3in").value,
+        document.getElementById("rlen-h3out").value,
+        document.getElementById("rlen-ain").value,
+        document.getElementById("rlen-dfee").value,
+        document.getElementById("rlen-tfee1").value,
+        document.getElementById("rlen-tfee2").value,
+        document.getElementById("rlen-hfee1").value,
+        document.getElementById("rlen-hfee2").value,
+        document.getElementById("rlen-hfee3").value
+      );
+      var out = document.getElementById("rlen-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for the direct pool, both two-hop pools and all three three-hop pools, a positive amount to pay in (up to 9 decimal places), and a fee in whole basis points from 0 to 9999 for each of the six pools (25 = 0.25%). Every leg of every route must still pay something after its fee — a dust amount that any pool on a route would round down to nothing is rejected rather than compared.";
+        document.getElementById("rlen-outd").value = "";
+        document.getElementById("rlen-out2").value = "";
+        document.getElementById("rlen-out3").value = "";
+        document.getElementById("rlen-adv").value = "";
+      } else {
+        var names = { direct: "DIRECT", two: "TWO-HOP", three: "THREE-HOP" };
+        var advPhrase = res.advantagePct === Infinity
+          ? "an advantage too large to express as a percentage — the runner-up route pays next to nothing beside the winner's output"
+          : fmt(res.advantagePct, 4) + "% over the runner-up route's output";
+        var verdict = res.best === "tie"
+          ? " The routes TIE for the win — " + res.tiedRoutes.map(function (r) { return names[r]; }).join(" and ") + " both pay " + (res.tiedRoutes[0] === "direct" ? res.directOut : (res.tiedRoutes[0] === "two" ? res.twoOut : res.threeOut)) + ", so at these reserves and fees those routes' curves compose into the same payout to the last smallest unit, and neither gains a single smallest unit over the other."
+          : " The " + names[res.best] + " route wins: it pays " + res.diffOut + " more than the runner-up (" + advPhrase + ").";
+        var threeSpotWord = res.threeSpot === Infinity
+          ? "a combined spot too large to express as a number (the three pools' spot prices multiply past the largest representable value)"
+          : "a combined spot of " + fmt(res.threeSpot, 6) + " out per in";
+        out.textContent = "Model output: paying " + fmt(res.amountIn, 4) + " in. Direct (pool spot " + fmt(res.directSpot, 6) + " out per in, fee " + fmt(res.directFeePct, 4) + "%) pays " + res.directOut + " at a modelled price impact of " + fmt(res.directImpactPct, 4) + "%. Two-hop — first hop pays " + res.twoMidOut + " of the intermediate token, second hop pays " + res.twoOut + " — for a combined impact of " + fmt(res.twoImpactPct, 4) + "% against a combined spot of " + fmt(res.twoSpot, 6) + " out per in (fees " + fmt(res.twoFee1Pct, 4) + "% and " + fmt(res.twoFee2Pct, 4) + "%). Three-hop — the hops pay " + res.threeMid1Out + " of the first intermediate token, then " + res.threeMid2Out + " of the second, then " + res.threeOut + " — for a combined impact of " + fmt(res.threeImpactPct, 4) + "% against " + threeSpotWord + " (fees " + fmt(res.threeFee1Pct, 4) + "%, " + fmt(res.threeFee2Pct, 4) + "% and " + fmt(res.threeFee3Pct, 4) + "%)." + verdict + " All three routes are priced independently against the same starting state: if they share a pool — routes from the same wallet usually do — executing one route would move the others, and this comparison double-counts that pool's depth. A real router can also split one trade across several routes at once, and each route pays its own network and priority fees, which grow with the route's length; neither is modelled here. A route-length comparison model, not live pool data. Not financial advice.";
+        document.getElementById("rlen-outd").value = res.directOut;
+        document.getElementById("rlen-out2").value = res.twoOut;
+        document.getElementById("rlen-out3").value = res.threeOut;
+        document.getElementById("rlen-adv").value = res.advantagePct === Infinity ? "∞" : fmt(res.advantagePct, 4);
       }
     });
 
