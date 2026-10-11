@@ -8777,6 +8777,13 @@ function threeHopSwap(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2OutS
    route that would have to drain any pool on it is rejected, not
    priced. The combined spot price is the product of the hops' spots
    and the combined impact follows Tool 6's definition against it.
+   One scale corner: three large spot prices can multiply past the
+   largest representable number while every leg stays finite and
+   the amount to pay is exact — there the combined spot is reported
+   as Infinity and the combined impact is evaluated from the legs'
+   own effective/spot ratios (their product is the same ratio in
+   exact maths, at price scale), rather than rejecting a feasible
+   route as invalid input.
    Each hop is priced against the reserves you entered: between hops
    a real route is exposed to other trades moving the later pools,
    and each hop pays its own network and priority fees on top of
@@ -8800,6 +8807,23 @@ function threeHopExactOut(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2
   if (!Number.isFinite(amountOut) || amountOut <= 0) return null;
   var spotPrice = hop1.spotPrice * hop2.spotPrice * hop3.spotPrice;
   var effectivePrice = amountOut / Number(hop1.amountIn);
+  var priceImpactPct;
+  if (spotPrice === Infinity) {
+    /* The combined spot is a product of three spot prices and can
+       overflow a double (three spots of ~1e103) while every leg stays
+       finite and accurate and the amount to pay is exact — the route
+       is feasible, so it is priced, not rejected: the spot is
+       reported as Infinity (exempted from the finiteness guard by
+       name, the Tool 106 convention) and the combined impact is
+       evaluated from the legs' own effective/spot ratios, whose
+       product telescopes to effectivePrice / spotPrice in exact
+       maths and never leaves price scale. A NaN combined spot (a
+       leg's own spot collapsed to 0 beside another's Infinity) is
+       indeterminate and still rejects through the guard below. */
+    priceImpactPct = (1 - (hop1.effectivePrice / hop1.spotPrice) * (hop2.effectivePrice / hop2.spotPrice) * (hop3.effectivePrice / hop3.spotPrice)) * 100;
+  } else {
+    priceImpactPct = (1 - effectivePrice / spotPrice) * 100;
+  }
   var result = {
     amountIn: hop1.amountIn,
     mid1In: hop2.amountIn,
@@ -8810,14 +8834,17 @@ function threeHopExactOut(reserve1InStr, reserve1OutStr, reserve2InStr, reserve2
     hop3ImpactPct: hop3.priceImpactPct,
     spotPrice: spotPrice,
     effectivePrice: effectivePrice,
-    priceImpactPct: (1 - effectivePrice / spotPrice) * 100,
+    priceImpactPct: priceImpactPct,
     fee1Pct: hop1.feePct,
     fee2Pct: hop2.feePct,
     fee3Pct: hop3.feePct
   };
   var fields = Object.keys(result);
   for (var j = 0; j < fields.length; j++) {
-    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) {
+      if (fields[j] === "spotPrice" && result.spotPrice === Infinity) continue;
+      return null;
+    }
   }
   return result;
 }
@@ -11142,7 +11169,7 @@ if (typeof document !== "undefined") {
         document.getElementById("hop3xo-mid2").value = "";
         document.getElementById("hop3xo-impact").value = "";
       } else {
-        out.textContent = "Model output: to receive exactly " + res.out + " of the token you want, the third hop must receive " + res.mid2In + " of the second intermediate token (impact " + fmt(res.hop3ImpactPct, 4) + "%, fee " + fmt(res.fee3Pct, 4) + "%), the second hop must receive " + res.mid1In + " of the first intermediate token (impact " + fmt(res.hop2ImpactPct, 4) + "%, fee " + fmt(res.fee2Pct, 4) + "%), and you must pay " + res.amountIn + " in at the first hop (impact " + fmt(res.hop1ImpactPct, 4) + "%, fee " + fmt(res.fee1Pct, 4) + "%) — a combined price impact of " + fmt(res.priceImpactPct, 4) + "% against a combined spot of " + fmt(res.spotPrice, 6) + " out per in, the product of the three pools' spot prices. Each hop rounds the input it requires up, so the amount you pay is the smallest the model can state at 9 decimal places that still buys the target through all three hops. Each hop is priced against the reserves you entered; between hops a real route is exposed to other trades moving the later pools, and each hop pays its own network and priority fees on top of the pool fees modelled here — neither is modelled. Every pool is constant-product here; a real route may cross CLMM pools or other venues, and no routing search is done. A three-hop exact-out swap model, not live pool data. Not financial advice.";
+        out.textContent = "Model output: to receive exactly " + res.out + " of the token you want, the third hop must receive " + res.mid2In + " of the second intermediate token (impact " + fmt(res.hop3ImpactPct, 4) + "%, fee " + fmt(res.fee3Pct, 4) + "%), the second hop must receive " + res.mid1In + " of the first intermediate token (impact " + fmt(res.hop2ImpactPct, 4) + "%, fee " + fmt(res.fee2Pct, 4) + "%), and you must pay " + res.amountIn + " in at the first hop (impact " + fmt(res.hop1ImpactPct, 4) + "%, fee " + fmt(res.fee1Pct, 4) + "%) — a combined price impact of " + fmt(res.priceImpactPct, 4) + "% against " + (res.spotPrice === Infinity ? "a combined spot too large to express as a number (the three pools' spot prices multiply past the largest representable value)" : "a combined spot of " + fmt(res.spotPrice, 6) + " out per in, the product of the three pools' spot prices") + ". Each hop rounds the input it requires up, so the amount you pay is the smallest the model can state at 9 decimal places that still buys the target through all three hops. Each hop is priced against the reserves you entered; between hops a real route is exposed to other trades moving the later pools, and each hop pays its own network and priority fees on top of the pool fees modelled here — neither is modelled. Every pool is constant-product here; a real route may cross CLMM pools or other venues, and no routing search is done. A three-hop exact-out swap model, not live pool data. Not financial advice.";
         document.getElementById("hop3xo-in").value = res.amountIn;
         document.getElementById("hop3xo-mid1").value = res.mid1In;
         document.getElementById("hop3xo-mid2").value = res.mid2In;
