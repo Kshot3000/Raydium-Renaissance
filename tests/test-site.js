@@ -6570,5 +6570,13 @@ check("JUMP wiring builds options from the tool forms via the shared helper", ap
 check("JUMP picking a hidden tool clears the search first, then scrolls and focuses its first editable input", appSrc.includes('if (target.hidden) { toolQ.value = ""; applyToolFilter(); }') && appSrc.includes("target.scrollIntoView()") && appSrc.includes('target.querySelector("input:not([readonly])")') && appSrc.includes("first.focus({ preventScroll: true })"));
 check("JUMP menu resets after a jump so the same tool can be picked again", appSrc.includes('toolJump.value = "";'));
 
+/* --- tool page order: the tools are numbered, so the page (and the
+   jump menu built from it) must read 1, 2, 3, … in order. Tool 74 sat
+   between tools 67 and 68 until 2026-10-10 — scrolling visitors met it
+   seven tools early and the menu read …, 67, 74, 68, … --- */
+check("ORDER tool numbers in page order are exactly 1 to 94, sequential", (() => { const nums = [...html.matchAll(/<form class="tool" id="[^"]+">\s*<h3>(\d+) ·/g)].map(m => Number(m[1])); return nums.length === 94 && nums.every((n, i) => n === i + 1); })());
+check("ORDER tool 74 sits between tools 73 and 75", (() => { const ids = [...html.matchAll(/<form class="tool" id="([^"]+)">/g)].map(m => m[1]); const at = ids.indexOf("ccx-calc"); return at > 0 && ids[at - 1] === "sbed-calc" && ids[at + 1] === "wband-calc"; })());
+check("ORDER jump menu built from the page reads in numeric order", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const nums = app.toolJumpOptions(items).map(o => Number(o.title.split(" ")[0])); return nums.length === 94 && nums.every((n, i) => n === i + 1); })());
+
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
