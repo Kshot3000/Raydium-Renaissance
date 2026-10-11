@@ -8405,25 +8405,32 @@ function clmmLeveragedLp(lowerStr, upperStr, entryPriceStr, equityStr, leverageS
   var ceilingPos = valueAt(Math.max(entry, upper));
   if (ceilingPos === null) return null;
   var valueCeiling = ceilingPos.valueInB;
-  function solveDown(target) {
-    var lo = entry * 1e-12, hi = entry;
+  /* Both threshold solves bisect in LOG price, never linear price:
+     the up interval spans (upper - entry), and a root can sit right
+     next to entry while upper/entry is 1e150 — 200 linear halvings
+     of a 1e150-wide interval still leave ~1e89 of slack, so the
+     reported multiple came back orders of magnitude high (a wide
+     symmetric range's true 1.1378 break-even reported as 3.1e89).
+     Halving the log interval converges at the same relative rate
+     at every scale. */
+  function solveLog(target, lo, hi) {
+    if (!(lo > 0) || !(hi > lo)) return null;
+    var llo = Math.log(lo), lhi = Math.log(hi);
     for (var k = 0; k < 200; k++) {
-      var mid = (lo + hi) / 2;
+      var lmid = (llo + lhi) / 2;
+      var mid = Math.exp(lmid);
+      if (!(mid > lo && mid < hi)) break;
       var pos = valueAt(mid);
       if (pos === null) return null;
-      if (pos.valueInB < target) lo = mid; else hi = mid;
+      if (pos.valueInB < target) llo = lmid; else lhi = lmid;
     }
-    return ((lo + hi) / 2) / entry;
+    return Math.exp((llo + lhi) / 2) / entry;
+  }
+  function solveDown(target) {
+    return solveLog(target, entry * 1e-12, entry);
   }
   function solveUp(target) {
-    var lo = entry, hi = upper;
-    for (var k = 0; k < 200; k++) {
-      var mid = (lo + hi) / 2;
-      var pos = valueAt(mid);
-      if (pos === null) return null;
-      if (pos.valueInB < target) lo = mid; else hi = mid;
-    }
-    return ((lo + hi) / 2) / entry;
+    return solveLog(target, entry, upper);
   }
   var breakEvenTarget = equity + debtEnd;
   var breakEvenRatio, breakEvenUnreachable = false;

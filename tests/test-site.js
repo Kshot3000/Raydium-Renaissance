@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=136"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=137"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v136", html.includes("app.js?v=136"));
+check("app.js cache key bumped to v136", html.includes("app.js?v=137"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -7037,6 +7037,14 @@ check("CLEV 2x break-even is reachable", clev2.breakEvenUnreachable === false);
 near("CLEV 2x break-even prices back to its target through Tool 9", app.clmmPositionAtPrice(String(clev2.liquidity), "0.8", "1.25", String(clev2.breakEvenRatio)).valueInB, 210, 1e-6);
 near("CLEV 2x wipeout prices back to the debt through Tool 9", app.clmmPositionAtPrice(String(clev2.liquidity), "0.8", "1.25", String(clev2.wipeoutRatio)).valueInB, 110, 1e-6);
 near("CLEV 2x liquidation prices back to its target through Tool 9", app.clmmPositionAtPrice(String(clev2.liquidity), "0.8", "1.25", String(clev2.liquidationRatio)).valueInB, 110 / 0.9, 1e-6);
+/* wide ranges: the threshold solves bisect in log price, so a root next
+   to entry stays exact however wide (upper - entry) is — linear price
+   bisection reported this break-even as 3.1e89 before the fix */
+const clevWide = app.clmmLeveragedLp("1e-150", "1e150", "1", "100", "3", "10", "365", "10", "1");
+near("CLEV wide-range break-even multiple", clevWide.breakEvenRatio, 1.1377777777777778, 1e-9);
+near("CLEV wide-range wipeout multiple", clevWide.wipeoutRatio, 0.5377777777777778, 1e-9);
+near("CLEV wide-range break-even prices back to its target through Tool 9", app.clmmPositionAtPrice(String(clevWide.liquidity), "1e-150", "1e150", String(clevWide.breakEvenRatio)).valueInB, 320, 1e-6);
+near("CLEV wide-range break-even at upper 1e60", app.clmmLeveragedLp("1e-60", "1e60", "1", "100", "3", "10", "365", "10", "1").breakEvenRatio, 1.1377777777777778, 1e-9);
 /* entry and check holdings are tool 9's own, verbatim, at a sweep */
 check("CLEV holdings are Tool 9 verbatim across a sweep", [["3", "1.25"], ["2", "0.8"], ["5", "1.1"], ["1.5", "0.5"]].every(([lev, r]) => { const c = app.clmmLeveragedLp("0.8", "1.25", "1", "100", lev, "10", "365", "10", r); const e = app.clmmPositionAtPrice(String(c.liquidity), "0.8", "1.25", "1"); const k = app.clmmPositionAtPrice(String(c.liquidity), "0.8", "1.25", String(Number(r))); return c.entryAmountA === e.amountA && c.entryAmountB === e.amountB && c.checkAmountA === k.amountA && c.checkAmountB === k.amountB && c.valueAfter === k.valueInB && c.unleveredAfter === k.valueInB / Number(lev); }));
 /* 1x degenerates to the unlevered position exactly */
