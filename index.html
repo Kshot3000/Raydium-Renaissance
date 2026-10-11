@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the ninety-six</label>
+      <label for="tool-q">Find a tool among the ninety-seven</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all ninety-six tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all ninety-seven tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all ninety-six.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all ninety-seven.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2292,6 +2292,29 @@
         <button type="submit" class="btn primary">Settle my farm return</button>
         <p id="fnet-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="parb-calc">
+        <h3>97 · Two-pool arbitrage model</h3>
+        <p>The arbitrage calculators above price one pool against an outside price, as if the other side of the trade were infinitely deep and free. Two real pools of the same pair are the trade that actually exists: buy the token where it is cheap, sell it where it is dear, and both legs walk their own curve and pay their own fee. Enter both pools' reserves and fee tiers. The headline shape: pools of 1,000/1,000 and 1,000/1,210, both at a 25 bps fee, price token A at 1 and 1.21 B — and the best cycle sends ≈48.8079 B into the first pool for ≈46.4256 A, sells that into the second pool and comes back with ≈53.5544 B, a gross profit of ≈4.7466 B (≈9.725% on the amount cycled). That size is an optimum, not a floor: the cycle's return curve saturates as the two pools' fee-adjusted prices are traded into line, so cycling more hands profit back to the curves, and a gap smaller than the two fees combined pays nothing at all — a 0.4% gap between two 25 bps pools has no profitable cycle, whatever size you try. The profit shown is gross, honestly: priority fees, compute, failed or contested transactions and other searchers racing the same gap all come out of it in the real world, and none of them are modelled. Educational model only — your reserves and fee tiers, not live pool data, not a live quote, not financial advice.</p>
+        <label for="parb-a1">Pool 1 token A reserve</label>
+        <input id="parb-a1" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="parb-b1">Pool 1 token B reserve</label>
+        <input id="parb-b1" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="parb-fee1">Pool 1 fee (bps, 25 = 0.25%)</label>
+        <input id="parb-fee1" inputmode="numeric" value="25" autocomplete="off">
+        <label for="parb-a2">Pool 2 token A reserve</label>
+        <input id="parb-a2" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="parb-b2">Pool 2 token B reserve</label>
+        <input id="parb-b2" inputmode="decimal" placeholder="e.g. 1210" autocomplete="off">
+        <label for="parb-fee2">Pool 2 fee (bps, 25 = 0.25%)</label>
+        <input id="parb-fee2" inputmode="numeric" value="25" autocomplete="off">
+        <label for="parb-in">Best cycle input, in the starting token (model)</label>
+        <input id="parb-in" readonly placeholder="—" autocomplete="off">
+        <label for="parb-profit">Gross profit, in the starting token (model, 0 = no cycle pays)</label>
+        <input id="parb-profit" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Find the cycle</button>
+        <p id="parb-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2319,6 +2342,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=123"></script>
+<script src="app.js?v=124"></script>
 </body>
 </html>

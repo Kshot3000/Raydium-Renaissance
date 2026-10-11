@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus ninety-six fully
+/* Raydium Renaissance hub logic: project filtering plus ninety-seven fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -67,7 +67,8 @@
    transfer-fee exact-out swap model,
    a just-in-time (JIT) liquidity model,
    a farm rewards estimator (liquidity mining),
-   and a farm net return calculator.
+   a farm net return calculator, and a
+   two-pool arbitrage model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -139,8 +140,8 @@ function toolJumpOptions(items) {
   });
   return out;
 }
-/* Tool jump menu families: with ninety-six tools, one flat list of
-   ninety-six options is its own scrolling problem, so the menu groups
+/* Tool jump menu families: with ninety-seven tools, one flat list of
+   ninety-seven options is its own scrolling problem, so the menu groups
    the options by pool family. The family is read off the tool's own
    title — the same title the visitor sees on the tool — so a tool is
    grouped by what it says it is, and a future tool lands in a family
@@ -4565,6 +4566,131 @@ function farmNetReturn(priceRatio, yourStr, totalStr, emissionStr, priceStr, day
   return result;
 }
 
+/* ---------- 97 · Two-pool arbitrage model ---------- */
+/* Every arbitrage tool before this one prices ONE pool against a
+   frictionless outside price (Tools 16, 62, 65, 77) — as if the other
+   side of the trade were an infinitely deep market that never moves
+   and never charges. Two real pools of the same pair are the trade
+   that actually exists on-chain: buy the token where it is cheap,
+   sell it where it is dear, and BOTH legs walk their own curve and
+   pay their own fee. A cycle that starts with x of one token and
+   comes back to the same token composes the two constant-product
+   legs into a single saturating curve,
+     back(x) = N*x / (D + E*x),
+   with (for a B-first cycle through pool 1 then pool 2)
+     N = out2*(1-f2) * out1*(1-f1),  D = in2 * in1,
+     E = (1-f1) * (in2 + (1-f2)*out1),
+   so the cycle's marginal rate at zero size is N/D — the product of
+   the two pools' fee-adjusted marginal prices. A profitable cycle
+   exists only when that product exceeds 1 for one of the four
+   orderings (two starting tokens x two first pools); the four
+   marginals multiply pairwise to ((1-f1)(1-f2))^2 < 1, so at most
+   one ordering can ever qualify. Where one does, profit is
+   maximised where the marginal rate falls back to exactly 1:
+     x* = (sqrt(N*D) - D) / E,
+   and at that size the two pools' fee-adjusted prices have been
+   traded into line — any larger and the cycle pays back its own
+   gains, any smaller and money is left between the pools. Profit
+   here is GROSS, honestly: priority fees, compute, failed or
+   contested transactions and the other searchers racing the same
+   gap all come out of it in the real world, and none are modelled.
+   Model only — your reserves and fee tiers, not live pool data,
+   not a live quote, not financial advice. */
+function twoPoolArbitrage(a1Str, b1Str, fee1Bps, a2Str, b2Str, fee2Bps) {
+  var required = [a1Str, b1Str, fee1Bps, a2Str, b2Str, fee2Bps];
+  for (var i = 0; i < required.length; i++) {
+    if (required[i] == null || String(required[i]).trim() === "") return null;
+  }
+  var pools = [
+    { a: Number(a1Str), b: Number(b1Str), fee: Number(fee1Bps) },
+    { a: Number(a2Str), b: Number(b2Str), fee: Number(fee2Bps) }
+  ];
+  for (var p = 0; p < 2; p++) {
+    if (![pools[p].a, pools[p].b, pools[p].fee].every(Number.isFinite)) return null;
+    if (pools[p].a <= 0 || pools[p].b <= 0) return null;
+    if (pools[p].fee < 0 || pools[p].fee >= 10000) return null;
+  }
+  var spot1 = pools[0].b / pools[0].a, spot2 = pools[1].b / pools[1].a;
+  function cycle(firstIdx, secondIdx, startToken) {
+    var first = pools[firstIdx], second = pools[secondIdx];
+    var kf = 1 - first.fee / 10000, ks = 1 - second.fee / 10000;
+    var inF = startToken === "B" ? first.b : first.a;
+    var outF = startToken === "B" ? first.a : first.b;
+    var inS = startToken === "B" ? second.a : second.b;
+    var outS = startToken === "B" ? second.b : second.a;
+    var N = outS * ks * outF * kf, D = inS * inF, E = kf * (inS + ks * outF);
+    var marginal = N / D;
+    if (!(marginal > 1)) return { marginal: marginal };
+    var x = (Math.sqrt(N * D) - D) / E;
+    var netF = kf * x;
+    var mid = outF * netF / (inF + netF);
+    var netS = ks * mid;
+    var out = outS * netS / (inS + netS);
+    /* Post-trade reserves: each pool's input reserve grows by the
+       after-fee input (the hub's Tool 19 convention) and its output
+       reserve shrinks by what it paid. */
+    var state = [
+      { a: pools[0].a, b: pools[0].b },
+      { a: pools[1].a, b: pools[1].b }
+    ];
+    if (startToken === "B") {
+      state[firstIdx].b += netF; state[firstIdx].a -= mid;
+      state[secondIdx].a += netS; state[secondIdx].b -= out;
+    } else {
+      state[firstIdx].a += netF; state[firstIdx].b -= mid;
+      state[secondIdx].b += netS; state[secondIdx].a -= out;
+    }
+    return {
+      marginal: marginal,
+      firstPool: firstIdx + 1,
+      startToken: startToken,
+      midToken: startToken === "B" ? "A" : "B",
+      optimalIn: x,
+      midAmount: mid,
+      amountOut: out,
+      profit: out - x,
+      profitPct: (out - x) / x * 100,
+      postSpot1: state[0].b / state[0].a,
+      postSpot2: state[1].b / state[1].a
+    };
+  }
+  var best = null, bestMarginal = 0;
+  var combos = [[0, 1, "B"], [1, 0, "B"], [0, 1, "A"], [1, 0, "A"]];
+  for (var c = 0; c < combos.length; c++) {
+    var cand = cycle(combos[c][0], combos[c][1], combos[c][2]);
+    if (cand.marginal > bestMarginal) bestMarginal = cand.marginal;
+    if (cand.optimalIn !== undefined && (best === null || cand.profitPct > best.profitPct + 1e-9)) best = cand;
+  }
+  var base = {
+    spot1: spot1, spot2: spot2,
+    priceGapPct: (spot2 / spot1 - 1) * 100,
+    fee1Bps: pools[0].fee, fee2Bps: pools[1].fee,
+    bestMarginal: bestMarginal,
+    marginalPct: (bestMarginal - 1) * 100
+  };
+  var result;
+  if (best === null) {
+    result = Object.assign(base, {
+      direction: "none", startToken: null, firstPool: null, midToken: null,
+      optimalIn: 0, midAmount: 0, amountOut: 0, profit: 0, profitPct: 0,
+      postSpot1: spot1, postSpot2: spot2
+    });
+  } else {
+    result = Object.assign(base, {
+      direction: "cycle",
+      startToken: best.startToken, firstPool: best.firstPool, midToken: best.midToken,
+      optimalIn: best.optimalIn, midAmount: best.midAmount, amountOut: best.amountOut,
+      profit: best.profit, profitPct: best.profitPct,
+      postSpot1: best.postSpot1, postSpot2: best.postSpot2
+    });
+  }
+  var fields = Object.keys(result);
+  for (var k = 0; k < fields.length; k++) {
+    if (typeof result[fields[k]] === "number" && !Number.isFinite(result[fields[k]])) return null;
+  }
+  return result;
+}
+
 /* ---------- 52 · Fee compounding calculator (APR to APY) ---------- */
 /* Every fee tool on this hub reports a NAIVE APR (Tools 3 and 13
    annualise a day's fees by x365) and every settlement tool counts
@@ -7538,7 +7664,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -7573,7 +7699,7 @@ if (typeof document !== "undefined") {
     });
     applyFilter();
 
-    /* --- tool finder: with ninety-six tools stacked on one page, a
+    /* --- tool finder: with ninety-seven tools stacked on one page, a
        visitor who knows the question ("impermanent loss", "sandwich")
        should not have to scroll past every other tool to find it.
        Matches against each tool form's own text; hiding a form never
@@ -9563,6 +9689,34 @@ if (typeof document !== "undefined") {
         out.textContent = "Model output: your staked position of " + fmt(res.deposit, 4) + " (a " + fmt(res.sharePct, 4) + "% share of the farm) is worth " + fmt(res.lpValue, 4) + " in the pool after a " + fmt(res.priceRatio, 4) + "x price move against " + fmt(res.holdValue, 4) + " for simply holding (" + fmt(res.ilPct, 4) + "% impermanent loss). Over " + fmt(res.days, 4) + " day(s) the farm pays you " + res.rewardsPeriod + " reward tokens worth " + fmt(res.rewardsValue, 4) + " at your price — " + cover + ", and " + days + ". Settled together the position is worth " + fmt(res.netValue, 4) + ": " + fmt(Math.abs(res.netVsHold), 4) + " " + verdictWord + " holding (" + fmt(res.netVsHoldPct, 4) + "% vs holding, " + fmt(res.netReturnPct, 4) + "% on the staked value). Trading fees are not included (tools 3 and 24 settle those) — a staked position's full total is fees plus farm rewards minus impermanent loss. A farm net return model, not live farm data. Not financial advice.";
         document.getElementById("fnet-net").value = fmt(res.netVsHold, 4);
         document.getElementById("fnet-verdict").value = res.verdict;
+      }
+    });
+
+    /* --- two-pool arbitrage model --- */
+    document.getElementById("parb-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = twoPoolArbitrage(
+        document.getElementById("parb-a1").value,
+        document.getElementById("parb-b1").value,
+        document.getElementById("parb-fee1").value,
+        document.getElementById("parb-a2").value,
+        document.getElementById("parb-b2").value,
+        document.getElementById("parb-fee2").value
+      );
+      var out = document.getElementById("parb-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens in both pools, and a fee tier of 0 to under 10,000 bps for each pool.";
+        document.getElementById("parb-in").value = "";
+        document.getElementById("parb-profit").value = "";
+      } else if (res.direction === "none") {
+        out.textContent = "Model output: pool 1 prices token A at " + fmt(res.spot1, 6) + " B and pool 2 at " + fmt(res.spot2, 6) + " B (a " + fmt(res.priceGapPct, 4) + "% gap), but no cycle between the two pools pays: the best round trip's marginal rate at a vanishing size is " + fmt(res.bestMarginal, 6) + " back per unit sent, at or below the break-even 1 — the two pools' fees eat the whole gap before either curve even moves. No trade is the profitable trade here. A two-pool arbitrage model, not live pool data. Not financial advice.";
+        document.getElementById("parb-in").value = "0";
+        document.getElementById("parb-profit").value = "0";
+      } else {
+        var secondPool = res.firstPool === 1 ? 2 : 1;
+        out.textContent = "Model output: pool 1 prices token A at " + fmt(res.spot1, 6) + " B and pool 2 at " + fmt(res.spot2, 6) + " B (a " + fmt(res.priceGapPct, 4) + "% gap). The profitable cycle starts in token " + res.startToken + ": send " + fmt(res.optimalIn, 4) + " " + res.startToken + " into pool " + res.firstPool + " for " + fmt(res.midAmount, 4) + " " + res.midToken + ", then send that into pool " + secondPool + " and receive " + fmt(res.amountOut, 4) + " " + res.startToken + " back — a gross profit of " + fmt(res.profit, 4) + " " + res.startToken + " (" + fmt(res.profitPct, 4) + "% on the amount cycled). That size is the optimum, not a floor: at it the two pools' fee-adjusted prices have been traded into line (spots afterwards " + fmt(res.postSpot1, 6) + " and " + fmt(res.postSpot2, 6) + " B per A), and cycling more hands the profit back to the curves. The profit is gross — priority fees, compute, failed or contested transactions and other searchers racing the same gap all come out of it in the real world, and none of them are modelled. A two-pool arbitrage model, not live pool data. Not financial advice.";
+        document.getElementById("parb-in").value = fmt(res.optimalIn, 4);
+        document.getElementById("parb-profit").value = fmt(res.profit, 4);
       }
     });
 
