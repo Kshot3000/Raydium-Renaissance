@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=144"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=145"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v144", html.includes("app.js?v=144"));
+check("app.js cache key bumped to v145", html.includes("app.js?v=145"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -7202,6 +7202,9 @@ check("HOP3 rejects zero or negative reserves and amounts", app.threeHopSwap("0"
 check("HOP3 rejects bad fees in every fee slot", app.threeHopSwap("1000", "1000", "1000", "1000", "1000", "1000", "100", 10000, 25, 25) === null && app.threeHopSwap("1000", "1000", "1000", "1000", "1000", "1000", "100", 25, 10000, 25) === null && app.threeHopSwap("1000", "1000", "1000", "1000", "1000", "1000", "100", 25, 25, 10000) === null && app.threeHopSwap("1000", "1000", "1000", "1000", "1000", "1000", "100", -1, 25, 25) === null && app.threeHopSwap("1000", "1000", "1000", "1000", "1000", "1000", "100", 25, 25, 25.5) === null);
 check("HOP3 rejects dust that any hop rounds to zero", app.threeHopSwap("1000", "1000", "1000", "1000", "1000", "1000", "0.000000001", 25, 25, 25) === null && app.threeHopSwap("1000", "1000", "1000000000", "0.001", "1000", "1000", "100", 25, 25, 25) === null);
 check("HOP3 source composes Tool 1 three times rather than re-implementing it", (() => { const at = appSrc.indexOf("function threeHopSwap"); const body = appSrc.slice(at, at + 1600); return at !== -1 && body.includes("cpSwap(reserve1InStr, reserve1OutStr, amountInStr, fee1Bps)") && body.includes("cpSwap(reserve2InStr, reserve2OutStr, hop1.out, fee2Bps)") && body.includes("cpSwap(reserve3InStr, reserve3OutStr, hop2.out, fee3Bps)"); })());
+check("HOP3 prices a feasible route whose combined spot overflows a double, telescoped impact", (() => { const r = app.threeHopSwap("0.000000001", "3375" + "0".repeat(90), "225" + "0".repeat(91), "225" + "0".repeat(194), "15" + "0".repeat(195), "15" + "0".repeat(298), "0.000000001", 0, 0, 0); return r !== null && r.mid1Out === "16875" + "0".repeat(89) && r.spotPrice === Infinity && Math.abs(r.priceImpactPct - 82.60869565217392) < 1e-9 && r.hop1ImpactPct === 50 && r.hop2ImpactPct === 42.85714285714286 && r.hop3ImpactPct === 39.13043478260872 && Math.abs(r.effectivePrice / 5.869565217391303e307 - 1) < 1e-12; })());
+check("HOP3 dust amount through three 1e103-spot pools prices at impact exactly 100 with spot Infinity", (() => { const big = "1" + "0".repeat(103); const r = app.threeHopSwap("1", big, "1", big, "1", big, "0.000000001", 0, 0, 0); return r !== null && r.spotPrice === Infinity && r.priceImpactPct === 100 && r.effectivePrice === 1e112; })());
+check("HOP3 handler spells out the overflowing combined spot rather than formatting Infinity", (() => { const at = appSrc.indexOf('getElementById("hop3-calc").addEventListener'); const body = appSrc.slice(at, at + 4000); return at !== -1 && body.includes('res.spotPrice === Infinity ? "a combined spot too large to express as a number'); })());
 check("all hop3 controls labelled", ["hop3-r1in", "hop3-r1out", "hop3-r2in", "hop3-r2out", "hop3-r3in", "hop3-r3out", "hop3-amt", "hop3-fee1", "hop3-fee2", "hop3-fee3", "hop3-mid1", "hop3-mid2", "hop3-out", "hop3-impact"].every(id => html.includes(`for="${id}"`)));
 check("hop3 tool present in index.html", html.includes('id="hop3-calc"') && html.includes('id="hop3-result"'));
 check("hop3 handler wired to its own form", appSrc.includes('getElementById("hop3-calc")') && appSrc.includes('getElementById("hop3-result")'));
