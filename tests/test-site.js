@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=119"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=120"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v119", html.includes("app.js?v=119"));
+check("app.js cache key bumped to v120", html.includes("app.js?v=120"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6566,9 +6566,26 @@ check("JUMP jump controls present and labelled", html.includes('id="tool-jump"')
 check("JUMP menu sits above the tool grid, below the finder", html.indexOf('id="tool-jump"') > html.indexOf('id="tool-q"') && html.indexOf('id="tool-jump"') < html.indexOf('class="tool-grid"'));
 check("JUMP menu starts with an empty placeholder option", /<select id="tool-jump">\s*<option value="">/.test(html));
 check("JUMP select is styled like the other finder controls", /\.filter-row select/.test(css));
-check("JUMP wiring builds options from the tool forms via the shared helper", appSrc.includes('getElementById("tool-jump")') && appSrc.includes("toolJumpOptions(toolForms.map(") && appSrc.includes('form.querySelector("h3")') && appSrc.includes('document.createElement("option")'));
+check("JUMP wiring builds options from the tool forms via the shared helper", appSrc.includes('getElementById("tool-jump")') && appSrc.includes("toolJumpGroups(toolForms.map(") && appSrc.includes('form.querySelector("h3")') && appSrc.includes('document.createElement("option")') && appSrc.includes('document.createElement("optgroup")'));
 check("JUMP picking a hidden tool clears the search first, then scrolls and focuses its first editable input", appSrc.includes('if (target.hidden) { toolQ.value = ""; applyToolFilter(); }') && appSrc.includes("target.scrollIntoView()") && appSrc.includes('target.querySelector("input:not([readonly])")') && appSrc.includes("first.focus({ preventScroll: true })"));
 check("JUMP menu resets after a jump so the same tool can be picked again", appSrc.includes('toolJump.value = "";'));
+
+/* --- jump menu families: ninety-four flat options are their own
+   scrolling problem, so the menu groups them by pool family, read off
+   each tool's own title by toolJumpFamily. The grouping must cover
+   every tool exactly once, keep page order (numbers ascending) inside
+   each group, and order the groups by their first tool on the page. --- */
+check("GROUP family is read off the title: CLMM, stableswap, weighted markers", app.toolJumpFamily("8 · CLMM range deposit planner") === "CLMM — concentrated liquidity" && app.toolJumpFamily("58 · Stableswap swap model") === "Stableswap pools" && app.toolJumpFamily("56 · Weighted-pool swap model") === "Weighted pools");
+check("GROUP family: curve comparison and Token-2022/MEV/JIT are their own families", app.toolJumpFamily("67 · Curve comparison model") === "Comparing pool curves" && app.toolJumpFamily("91 · Token-2022 transfer-fee swap model") === "Token-2022, MEV & just-in-time" && app.toolJumpFamily("92 · Sandwich (MEV) attack model") === "Token-2022, MEV & just-in-time" && app.toolJumpFamily("94 · Just-in-time (JIT) liquidity model") === "Token-2022, MEV & just-in-time");
+check("GROUP family fallback is constant-product & general, including non-string titles", app.toolJumpFamily("1 · Constant-product swap model") === "Constant-product & general pools" && app.toolJumpFamily("10 · Slippage & minimum-received calculator") === "Constant-product & general pools" && app.toolJumpFamily(null) === "Constant-product & general pools" && app.toolJumpFamily(94) === "Constant-product & general pools");
+check("GROUP specific markers win over the fallback (a CLMM zap is CLMM, not general)", app.toolJumpFamily("33 · CLMM single-sided zap-in planner") === "CLMM — concentrated liquidity" && app.toolJumpFamily("19 · Single-sided zap-in planner") === "Constant-product & general pools");
+check("GROUP groups built from the page cover every tool exactly once", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); const flat = groups.flatMap(g => g.options); return flat.length === 94 && new Set(flat.map(o => o.id)).size === 94; })());
+check("GROUP page yields the six families in first-appearance order with their real sizes", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return JSON.stringify(groups.map(g => [g.label, g.options.length])) === JSON.stringify([["Constant-product & general pools", 29], ["CLMM — concentrated liquidity", 37], ["Weighted pools", 11], ["Stableswap pools", 11], ["Comparing pool curves", 2], ["Token-2022, MEV & just-in-time", 4]]); })());
+check("GROUP numbers ascend inside every group", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); return app.toolJumpGroups(items).every(g => { const nums = g.options.map(o => Number(o.title.split(" ")[0])); return nums.every((n, i) => i === 0 || n > nums[i - 1]); }); })());
+check("GROUP last family ends at the JIT tool and the first group starts at the swap model", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return groups[0].options[0].id === "swap-calc" && groups[groups.length - 1].options[groups[groups.length - 1].options.length - 1].id === "jit-calc"; })());
+check("GROUP invalid entries are dropped by the shared sanitiser before grouping", app.toolJumpGroups([{ id: "", title: "CLMM x" }, { id: "ok-calc", title: "  " }, null, { id: "clmm-calc", title: "8 · CLMM range deposit planner" }]).length === 1 && app.toolJumpGroups(null).length === 0 && app.toolJumpGroups("x").length === 0);
+check("GROUP wiring renders one optgroup per family with its label", appSrc.includes('document.createElement("optgroup")') && appSrc.includes("og.label = group.label") && appSrc.includes("og.appendChild(el)") && appSrc.includes("toolJump.appendChild(og)"));
+check("GROUP menu copy on the page says the list is grouped by pool family", html.includes("grouped by pool family"));
 
 /* --- tool page order: the tools are numbered, so the page (and the
    jump menu built from it) must read 1, 2, 3, … in order. Tool 74 sat

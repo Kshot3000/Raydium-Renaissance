@@ -125,6 +125,39 @@ function toolJumpOptions(items) {
   });
   return out;
 }
+/* Tool jump menu families: with ninety-four tools, one flat list of
+   ninety-four options is its own scrolling problem, so the menu groups
+   the options by pool family. The family is read off the tool's own
+   title — the same title the visitor sees on the tool — so a tool is
+   grouped by what it says it is, and a future tool lands in a family
+   automatically. Specific markers are checked before the fallback:
+   CLMM, stableswap and weighted titles name their family directly,
+   the two curve-comparison tools compare families rather than belong
+   to one, and the Token-2022 / sandwich / just-in-time tools are
+   block-and-token topics, not a pool curve. Everything else is a
+   constant-product or general pool tool (the hub's original family).
+   Groups appear in the order their first tool appears on the page,
+   and options keep page order inside each group, so numbers still
+   ascend inside every family. */
+function toolJumpFamily(title) {
+  if (typeof title !== "string") return "Constant-product & general pools";
+  if (/CLMM/.test(title)) return "CLMM — concentrated liquidity";
+  if (/Stableswap/.test(title)) return "Stableswap pools";
+  if (/Weighted-pool/.test(title)) return "Weighted pools";
+  if (/Curve comparison/.test(title)) return "Comparing pool curves";
+  if (/Token-2022|Sandwich|Just-in-time/.test(title)) return "Token-2022, MEV & just-in-time";
+  return "Constant-product & general pools";
+}
+function toolJumpGroups(items) {
+  var opts = toolJumpOptions(items);
+  var groups = [], byLabel = {};
+  opts.forEach(function (opt) {
+    var label = toolJumpFamily(opt.title);
+    if (!byLabel[label]) { byLabel[label] = { label: label, options: [] }; groups.push(byLabel[label]); }
+    byLabel[label].options.push(opt);
+  });
+  return groups;
+}
 function scaledToNumber(nano) { return Number(nano) / 1e9; }
 
 /* ---------- 1 · Constant-product swap model (x * y = k) ---------- */
@@ -7363,7 +7396,7 @@ function clmmQuadImpactSizer(liquidityStr, lowerStr, upperStr, priceStr, maxImpa
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, toolSearchMatch, toolJumpOptions, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -7422,22 +7455,29 @@ if (typeof document !== "undefined") {
 
     /* --- tool jump menu: the finder answers "which tool was it?",
        this answers "take me there". Options are built from the tool
-       forms themselves (toolJumpOptions), so the menu can never point
-       at a tool that is not on the page. Picking a tool that a search
+       forms themselves (toolJumpGroups over toolJumpOptions), grouped
+       by pool family (toolJumpFamily reads each tool's own title), so
+       the menu can never point at a tool that is not on the page.
+       Picking a tool that a search
        is currently hiding clears the search first, so the tool is
        there when the page lands; focus moves to its first editable
        input so keyboard visitors land inside the tool, not above it.
        Scrolling uses the page's own scroll-behavior, so reduced-motion
        visitors still get instant, unsmoothed scrolling. --- */
     var toolJump = document.getElementById("tool-jump");
-    toolJumpOptions(toolForms.map(function (form) {
+    toolJumpGroups(toolForms.map(function (form) {
       var h = form.querySelector("h3");
       return { id: form.id, title: h ? h.textContent : "" };
-    })).forEach(function (opt) {
-      var el = document.createElement("option");
-      el.value = opt.id;
-      el.textContent = opt.title;
-      toolJump.appendChild(el);
+    })).forEach(function (group) {
+      var og = document.createElement("optgroup");
+      og.label = group.label;
+      group.options.forEach(function (opt) {
+        var el = document.createElement("option");
+        el.value = opt.id;
+        el.textContent = opt.title;
+        og.appendChild(el);
+      });
+      toolJump.appendChild(og);
     });
     toolJump.addEventListener("change", function () {
       var target = document.getElementById(toolJump.value);
