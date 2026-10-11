@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=135"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=136"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1358,7 +1358,7 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists one hundred four tools", readme.includes("one hundred four pool tools") || readme.includes("all one hundred four"));
+check("README lists one hundred five tools", readme.includes("one hundred five pool tools") || readme.includes("all one hundred five"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2001,8 +2001,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts one hundred four tools and names the newest tools",
-  appSrc.includes("plus one hundred four fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, a Token-2022\n   transfer-fee swap model, a sandwich\n   (MEV) attack model, a Token-2022\n   transfer-fee exact-out swap model,\n   a just-in-time (JIT) liquidity model,\n   a farm rewards estimator (liquidity mining),\n   a farm net return calculator, a\n   two-pool arbitrage model, an LP\n   delta-hedge calculator, a CLMM\n   delta-hedge calculator, a\n   weighted-pool delta-hedge calculator,\n   a leveraged LP position model, a\n   sliced (TWAP-style) swap planner, a\n   Solana transaction cost estimator, and a\n   stableswap delta-hedge calculator.\n   These are educational MODELS"));
+check("app.js header counts one hundred five tools and names the newest tools",
+  appSrc.includes("plus one hundred five fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, a Token-2022\n   transfer-fee swap model, a sandwich\n   (MEV) attack model, a Token-2022\n   transfer-fee exact-out swap model,\n   a just-in-time (JIT) liquidity model,\n   a farm rewards estimator (liquidity mining),\n   a farm net return calculator, a\n   two-pool arbitrage model, an LP\n   delta-hedge calculator, a CLMM\n   delta-hedge calculator, a\n   weighted-pool delta-hedge calculator,\n   a leveraged LP position model, a\n   sliced (TWAP-style) swap planner, a\n   Solana transaction cost estimator, a\n   stableswap delta-hedge calculator, and a\n   leveraged CLMM position model.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v135", html.includes("app.js?v=135"));
+check("app.js cache key bumped to v136", html.includes("app.js?v=136"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6840,13 +6840,13 @@ check("FINDER on the real page, 96 finds only tool 96 itself", (() => { const fo
 check("FINDER on the real page, 97 finds tool 97 and tool 103 (whose prose cross-references it) and two-pool finds tool 97 alone", (() => { const forms = [...html.matchAll(/<form class="tool" id="([^"]+)">([\s\S]*?)<\/form>/g)].map(m => ({ id: m[1], text: m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ") })); return JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "97")).map(f => f.id)) === JSON.stringify(["parb-calc", "txcost-calc"]) && JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "two-pool arbitrage")).map(f => f.id)) === JSON.stringify(["parb-calc"]); })());
 check("FINDER on the real page, delta hedge finds all four hedge tools and weighted delta hedge finds tools 100 and 104 (whose prose names the weighted family)", (() => { const forms = [...html.matchAll(/<form class="tool" id="([^"]+)">([\s\S]*?)<\/form>/g)].map(m => ({ id: m[1], text: m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ") })); return JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "99")).map(f => f.id)) === JSON.stringify(["chedge-calc", "whedge-calc"]) && JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "clmm delta hedge")).map(f => f.id)) === JSON.stringify(["chedge-calc", "whedge-calc", "shedge-calc"]) && JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "delta hedge")).map(f => f.id)) === JSON.stringify(["hedge-calc", "chedge-calc", "whedge-calc", "shedge-calc"]) && JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "stableswap delta hedge")).map(f => f.id)) === JSON.stringify(["shedge-calc"]) && JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "weighted delta hedge")).map(f => f.id)) === JSON.stringify(["whedge-calc", "shedge-calc"]); })());
 check("FINDER on the real page, 94 still finds only tool 94 and farm finds both farm tools", (() => { const forms = [...html.matchAll(/<form class="tool" id="([^"]+)">([\s\S]*?)<\/form>/g)].map(m => ({ id: m[1], text: m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ") })); return JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "94")).map(f => f.id)) === JSON.stringify(["jit-calc"]) && JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "farm")).map(f => f.id)) === JSON.stringify(["farm-calc", "fnet-calc"]); })());
-check("FINDER on the real page, 101 and leveraged find only the leveraged LP model", (() => { const forms = [...html.matchAll(/<form class="tool" id="([^"]+)">([\s\S]*?)<\/form>/g)].map(m => ({ id: m[1], text: m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ") })); return JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "101")).map(f => f.id)) === JSON.stringify(["lev-calc"]) && JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "leveraged")).map(f => f.id)) === JSON.stringify(["lev-calc"]); })());
+check("FINDER on the real page, 101 and leveraged find the leveraged LP model and the leveraged CLMM model (whose prose cross-references tool 101)", (() => { const forms = [...html.matchAll(/<form class="tool" id="([^"]+)">([\s\S]*?)<\/form>/g)].map(m => ({ id: m[1], text: m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ") })); return JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "101")).map(f => f.id)) === JSON.stringify(["lev-calc", "clev-calc"]) && JSON.stringify(forms.filter(f => app.toolSearchMatch(f.text, "leveraged")).map(f => f.id)) === JSON.stringify(["lev-calc", "clev-calc"]); })());
 check("FINDER numeric refinement leaves word matching alone (substrings of words still match)", app.toolSearchMatch("58 · Stableswap swap model", "swap") === true && app.toolSearchMatch("58 · Stableswap swap model", "stable") === true && app.toolSearchMatch("a 0.25% fee tier", "0.25") === true);
 check("FINDER extra whitespace in the query is ignored", app.toolSearchMatch("sandwich (MEV) attack model", "  sandwich   mev ") === true);
 check("FINDER non-string haystack never matches", app.toolSearchMatch(null, "swap") === false && app.toolSearchMatch(undefined, "") === false);
 check("FINDER finder controls present and labelled", html.includes('id="tool-q"') && html.includes('for="tool-q"') && html.includes('id="tool-filter-status"') && html.includes('id="tool-no-results"'));
 check("FINDER status is a polite live region", /id="tool-filter-status"[^>]*role="status"[^>]*aria-live="polite"/.test(html));
-check("FINDER finder sits above the tool grid and counts the tools honestly", html.indexOf('id="tool-q"') > html.indexOf('id="tools"') && html.indexOf('id="tool-q"') < html.indexOf('class="tool-grid"') && html.includes("Find a tool among the one hundred four"));
+check("FINDER finder sits above the tool grid and counts the tools honestly", html.indexOf('id="tool-q"') > html.indexOf('id="tools"') && html.indexOf('id="tool-q"') < html.indexOf('class="tool-grid"') && html.includes("Find a tool among the one hundred five"));
 check("FINDER wiring uses the shared matcher over every tool form", appSrc.includes('querySelectorAll(".tool-grid .tool")') && appSrc.includes('getElementById("tool-q")') && appSrc.includes("toolSearchMatch(form.textContent, toolQ.value)") && appSrc.includes('addEventListener("input", applyToolFilter)'));
 check("FINDER hiding never deletes: filter toggles hidden only", appSrc.includes("form.hidden = !show") && !/toolForms\.forEach[\s\S]{0,400}remove\(\)/.test(appSrc));
 check("FINDER hidden actually hides: stylesheet forces [hidden] to display:none (the .tool grid display would otherwise override the UA rule and leave filtered tools rendered)", /\[hidden\]\s*\{\s*display\s*:\s*none\s*!important/.test(css));
@@ -6859,7 +6859,7 @@ check("JUMP options keep valid entries in page order", JSON.stringify(app.toolJu
 check("JUMP options drop entries that cannot be jumped to", app.toolJumpOptions([{ id: "", title: "No id" }, { id: "x-calc", title: "  " }, { id: "y-calc" }, { title: "No id either" }, null, { id: 94, title: "Numeric id" }]).length === 0);
 check("JUMP options trim surrounding whitespace", JSON.stringify(app.toolJumpOptions([{ id: " jit-calc ", title: "  94 · Just-in-time (JIT) liquidity model " }])) === JSON.stringify([{ id: "jit-calc", title: "94 · Just-in-time (JIT) liquidity model" }]));
 check("JUMP non-array input yields no options", app.toolJumpOptions(null).length === 0 && app.toolJumpOptions("swap-calc").length === 0 && app.toolJumpOptions(undefined).length === 0);
-check("JUMP options built from the page itself cover every tool exactly once", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const opts = app.toolJumpOptions(items); return items.length === 104 && opts.length === 104 && new Set(opts.map(o => o.id)).size === 104 && opts[0].id === "swap-calc" && opts[93].id === "jit-calc" && opts[94].id === "farm-calc" && opts[95].id === "fnet-calc" && opts[96].id === "parb-calc" && opts[97].id === "hedge-calc" && opts[98].id === "chedge-calc" && opts[99].id === "whedge-calc" && opts[100].id === "lev-calc" && opts[101].id === "twap-calc" && opts[102].id === "txcost-calc" && opts[103].id === "shedge-calc"; })());
+check("JUMP options built from the page itself cover every tool exactly once", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const opts = app.toolJumpOptions(items); return items.length === 105 && opts.length === 105 && new Set(opts.map(o => o.id)).size === 105 && opts[0].id === "swap-calc" && opts[93].id === "jit-calc" && opts[94].id === "farm-calc" && opts[95].id === "fnet-calc" && opts[96].id === "parb-calc" && opts[97].id === "hedge-calc" && opts[98].id === "chedge-calc" && opts[99].id === "whedge-calc" && opts[100].id === "lev-calc" && opts[101].id === "twap-calc" && opts[102].id === "txcost-calc" && opts[103].id === "shedge-calc" && opts[104].id === "clev-calc"; })());
 check("JUMP jump controls present and labelled", html.includes('id="tool-jump"') && html.includes('for="tool-jump"') && html.includes("Jump straight to a tool"));
 check("JUMP menu sits above the tool grid, below the finder", html.indexOf('id="tool-jump"') > html.indexOf('id="tool-q"') && html.indexOf('id="tool-jump"') < html.indexOf('class="tool-grid"'));
 check("JUMP menu starts with an empty placeholder option", /<select id="tool-jump">\s*<option value="">/.test(html));
@@ -6877,13 +6877,13 @@ check("GROUP family is read off the title: CLMM, stableswap, weighted markers", 
 check("GROUP family: curve comparison and Token-2022/MEV/JIT are their own families", app.toolJumpFamily("67 · Curve comparison model") === "Comparing pool curves" && app.toolJumpFamily("91 · Token-2022 transfer-fee swap model") === "Token-2022, MEV & just-in-time" && app.toolJumpFamily("92 · Sandwich (MEV) attack model") === "Token-2022, MEV & just-in-time" && app.toolJumpFamily("94 · Just-in-time (JIT) liquidity model") === "Token-2022, MEV & just-in-time");
 check("GROUP family fallback is constant-product & general, including non-string titles", app.toolJumpFamily("1 · Constant-product swap model") === "Constant-product & general pools" && app.toolJumpFamily("10 · Slippage & minimum-received calculator") === "Constant-product & general pools" && app.toolJumpFamily("95 · Farm rewards estimator (liquidity mining)") === "Constant-product & general pools" && app.toolJumpFamily("96 · Farm net return calculator") === "Constant-product & general pools" && app.toolJumpFamily("97 · Two-pool arbitrage model") === "Constant-product & general pools" && app.toolJumpFamily("98 · LP delta-hedge calculator") === "Constant-product & general pools" && app.toolJumpFamily("101 · Leveraged LP position model") === "Constant-product & general pools" && app.toolJumpFamily("102 · Sliced (TWAP-style) swap planner") === "Constant-product & general pools" && app.toolJumpFamily("103 · Solana transaction cost estimator") === "Constant-product & general pools" && app.toolJumpFamily(null) === "Constant-product & general pools" && app.toolJumpFamily(94) === "Constant-product & general pools");
 check("GROUP specific markers win over the fallback (a CLMM zap is CLMM, not general)", app.toolJumpFamily("33 · CLMM single-sided zap-in planner") === "CLMM — concentrated liquidity" && app.toolJumpFamily("19 · Single-sided zap-in planner") === "Constant-product & general pools");
-check("GROUP groups built from the page cover every tool exactly once", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); const flat = groups.flatMap(g => g.options); return flat.length === 104 && new Set(flat.map(o => o.id)).size === 104; })());
-check("GROUP page yields the six families in first-appearance order with their real sizes", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return JSON.stringify(groups.map(g => [g.label, g.options.length])) === JSON.stringify([["Constant-product & general pools", 36], ["CLMM — concentrated liquidity", 38], ["Weighted pools", 12], ["Stableswap pools", 12], ["Comparing pool curves", 2], ["Token-2022, MEV & just-in-time", 4]]); })());
+check("GROUP groups built from the page cover every tool exactly once", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); const flat = groups.flatMap(g => g.options); return flat.length === 105 && new Set(flat.map(o => o.id)).size === 105; })());
+check("GROUP page yields the six families in first-appearance order with their real sizes", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return JSON.stringify(groups.map(g => [g.label, g.options.length])) === JSON.stringify([["Constant-product & general pools", 36], ["CLMM — concentrated liquidity", 39], ["Weighted pools", 12], ["Stableswap pools", 12], ["Comparing pool curves", 2], ["Token-2022, MEV & just-in-time", 4]]); })());
 check("GROUP the weighted family ends at the weighted delta-hedge tool (tool 100 reads Weighted-pool off its title)", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); const weighted = groups.find(g => g.label === "Weighted pools"); return app.toolJumpFamily("100 · Weighted-pool delta-hedge calculator") === "Weighted pools" && weighted.options[weighted.options.length - 1].id === "whedge-calc"; })());
 check("GROUP the general family ends at the transaction cost estimator (tool 103 reads no family marker off its title)", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); const general = groups.find(g => g.label === "Constant-product & general pools"); return general.options[general.options.length - 1].id === "txcost-calc"; })());
 check("GROUP the general family ends at the transaction cost estimator (tool 103 is the fallback family's last tool in page order)", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return groups[0].options[groups[0].options.length - 1].id === "txcost-calc"; })());
 check("GROUP the stableswap family ends at the stableswap delta-hedge tool (tool 104 reads Stableswap off its title)", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); const stable = groups.find(g => g.label === "Stableswap pools"); return app.toolJumpFamily("104 · Stableswap delta-hedge calculator") === "Stableswap pools" && stable.options[stable.options.length - 1].id === "shedge-calc"; })());
-check("GROUP the CLMM family ends at the CLMM delta-hedge tool (tool 99 reads CLMM off its title)", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); const clmm = groups.find(g => g.label === "CLMM — concentrated liquidity"); return app.toolJumpFamily("99 · CLMM delta-hedge calculator") === "CLMM — concentrated liquidity" && clmm.options[clmm.options.length - 1].id === "chedge-calc"; })());
+check("GROUP the CLMM family ends at the leveraged CLMM model (tool 105 reads CLMM off its title)", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); const clmm = groups.find(g => g.label === "CLMM — concentrated liquidity"); return app.toolJumpFamily("105 · Leveraged CLMM position model") === "CLMM — concentrated liquidity" && clmm.options[clmm.options.length - 1].id === "clev-calc"; })());
 check("GROUP numbers ascend inside every group", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); return app.toolJumpGroups(items).every(g => { const nums = g.options.map(o => Number(o.title.split(" ")[0])); return nums.every((n, i) => i === 0 || n > nums[i - 1]); }); })());
 check("GROUP last family ends at the JIT tool and the first group starts at the swap model", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const groups = app.toolJumpGroups(items); return groups[0].options[0].id === "swap-calc" && groups[groups.length - 1].options[groups[groups.length - 1].options.length - 1].id === "jit-calc"; })());
 check("GROUP invalid entries are dropped by the shared sanitiser before grouping", app.toolJumpGroups([{ id: "", title: "CLMM x" }, { id: "ok-calc", title: "  " }, null, { id: "clmm-calc", title: "8 · CLMM range deposit planner" }]).length === 1 && app.toolJumpGroups(null).length === 0 && app.toolJumpGroups("x").length === 0);
@@ -6894,9 +6894,9 @@ check("GROUP menu copy on the page says the list is grouped by pool family", htm
    jump menu built from it) must read 1, 2, 3, … in order. Tool 74 sat
    between tools 67 and 68 until 2026-10-10 — scrolling visitors met it
    seven tools early and the menu read …, 67, 74, 68, … --- */
-check("ORDER tool numbers in page order are exactly 1 to 104, sequential", (() => { const nums = [...html.matchAll(/<form class="tool" id="[^"]+">\s*<h3>(\d+) ·/g)].map(m => Number(m[1])); return nums.length === 104 && nums.every((n, i) => n === i + 1); })());
+check("ORDER tool numbers in page order are exactly 1 to 105, sequential", (() => { const nums = [...html.matchAll(/<form class="tool" id="[^"]+">\s*<h3>(\d+) ·/g)].map(m => Number(m[1])); return nums.length === 105 && nums.every((n, i) => n === i + 1); })());
 check("ORDER tool 74 sits between tools 73 and 75", (() => { const ids = [...html.matchAll(/<form class="tool" id="([^"]+)">/g)].map(m => m[1]); const at = ids.indexOf("ccx-calc"); return at > 0 && ids[at - 1] === "sbed-calc" && ids[at + 1] === "wband-calc"; })());
-check("ORDER jump menu built from the page reads in numeric order", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const nums = app.toolJumpOptions(items).map(o => Number(o.title.split(" ")[0])); return nums.length === 104 && nums.every((n, i) => n === i + 1); })());
+check("ORDER jump menu built from the page reads in numeric order", (() => { const items = [...html.matchAll(/<form class="tool" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map(m => ({ id: m[1], title: m[2] })); const nums = app.toolJumpOptions(items).map(o => Number(o.title.split(" ")[0])); return nums.length === 105 && nums.every((n, i) => n === i + 1); })());
 
 /* --- guide checklist order: the guide's section-3 checklist is
    numbered 1..98 and readers follow it in order, so the items must
@@ -6904,10 +6904,11 @@ check("ORDER jump menu built from the page reads in numeric order", (() => { con
    file had items 29-96 stranded after the closing "Building" and
    "Support" sections, with item 39 orphaned inside Support itself —
    every item's text was right, only its place was wrong. --- */
-check("GUIDE checklist numbers are exactly 1 to 105, sequential", (() => { const nums = [...guide.matchAll(/^(\d+)\. \*\*/gm)].map(m => Number(m[1])); return nums.length === 105 && nums.every((n, i) => n === i + 1); })());
+check("GUIDE checklist numbers are exactly 1 to 106, sequential", (() => { const nums = [...guide.matchAll(/^(\d+)\. \*\*/gm)].map(m => Number(m[1])); return nums.length === 106 && nums.every((n, i) => n === i + 1); })());
 check("GUIDE item 103 sits between items 102 and 104", (() => { const at = guide.indexOf("\n103. **Slice a large swap over time"); return at > guide.indexOf("\n102. **Size a leveraged LP position") && at < guide.indexOf("\n104. **Count the network"); })());
 check("GUIDE item 104 sits between items 103 and 105", (() => { const at = guide.indexOf("\n104. **Count the network"); return at > guide.indexOf("\n103. **Slice a large swap over time") && at < guide.indexOf("\n105. **A stableswap hedge"); })());
-check("GUIDE item 105 sits between item 104 and the Building section", (() => { const at = guide.indexOf("\n105. **A stableswap hedge"); return at > guide.indexOf("\n104. **Count the network") && at < guide.indexOf("## 4 ·"); })());
+check("GUIDE item 105 sits between item 104 and item 106", (() => { const at = guide.indexOf("\n105. **A stableswap hedge"); return at > guide.indexOf("\n104. **Count the network") && at < guide.indexOf("\n106. **Leverage inside a range"); })());
+check("GUIDE item 106 sits between item 105 and the Building section", (() => { const at = guide.indexOf("\n106. **Leverage inside a range"); return at > guide.indexOf("\n105. **A stableswap hedge") && at < guide.indexOf("## 4 ·"); })());
 check("GUIDE item 39 sits between items 38 and 40", (() => { const at = guide.indexOf("\n39. **Plan a constant-product deposit from your wallet"); return at > guide.indexOf("\n38. **Size a CLMM exit") && at < guide.indexOf("\n40. **Price a routed trade backwards"); })());
 check("GUIDE whole checklist lives in section 3, before Building and Support", (() => { const s3 = guide.indexOf("## 3 ·"); const first = guide.indexOf("\n1. **Fee tier**"); const last = guide.indexOf("\n99. **Hedge an LP position's delta"); const s4 = guide.indexOf("## 4 ·"); const sup = guide.indexOf("## Support"); return s3 !== -1 && s3 < first && first < last && last < s4 && s4 < sup; })());
 check("GUIDE no checklist item appears after the Support heading", (() => { const sup = guide.indexOf("## Support"); return sup !== -1 && !/^\d+\. \*\*/m.test(guide.slice(sup)); })());
@@ -7003,6 +7004,81 @@ check("shedge tool present in index.html", html.includes('id="shedge-calc"') && 
 check("shedge handler wired to its own form", appSrc.includes('getElementById("shedge-calc")') && appSrc.includes('getElementById("shedge-result")'));
 check("shedge honesty: near-binary depeg warning and not-live labels", html.includes("a stableswap position that depegs is nearly binary") && html.includes("no borrow or funding cost, no margin or liquidation") && html.includes("not live pool data, not a live quote, not financial advice"));
 check("guide covers stableswap hedging", guide.includes("A stableswap hedge removes small-move direction and keeps the depeg"));
+
+/* ---------- 105 · Leveraged CLMM position model (CLEV) ---------- */
+/* headline: 0.8–1.25 entered at 1, equity 100 B at 3x, 10% APR for a
+   year, 10% margin. L = 300 / tool 9's unit value = 1420.8203932499366
+   (1.5x tool 8's headline L), entry holdings 150 A / 150 B, debt
+   200 -> 220. At the top edge the position is worth its ceiling
+   317.70509831248427 B, so equity settles UNDER the unlevered line. */
+const clev3 = app.clmmLeveragedLp("0.8", "1.25", "1", "100", "3", "10", "365", "10", "1.25");
+near("CLEV headline liquidity", clev3.liquidity, 1420.8203932499366, 1e-9);
+near("CLEV headline entry holdings", clev3.entryAmountA, 150, 1e-9);
+near("CLEV headline entry holdings B", clev3.entryAmountB, 150, 1e-9);
+near("CLEV headline debt grows 200 to 220", clev3.debtEnd, 220, 1e-12);
+near("CLEV headline value at top edge is the ceiling", clev3.valueAfter, 317.70509831248427, 1e-9);
+check("CLEV headline value equals its ceiling exactly", clev3.valueAfter === clev3.valueCeiling);
+near("CLEV headline levered equity", clev3.equityAfter, 97.70509831248427, 1e-9);
+near("CLEV headline levered change is negative on a winning move", clev3.equityChangePct, -2.294901687515738, 1e-9);
+near("CLEV headline unlevered settles at +5.9017%", clev3.unleveredChangePct, 5.901699437494757, 1e-9);
+check("CLEV headline break-even is honestly unreachable (target 320 above the 317.7051 ceiling)", clev3.breakEvenRatio === null && clev3.breakEvenUnreachable === true && clev3.breakEvenTarget === 320);
+near("CLEV headline wipeout multiple", clev3.wipeoutRatio, 0.6924660673327163, 1e-9);
+near("CLEV headline liquidation multiple", clev3.liquidationRatio, 0.7694067414807959, 1e-9);
+check("CLEV headline not breached at entry", clev3.breachedAtEntry === false);
+/* saturation: at 2x the position is worth exactly what it is worth
+   at the top edge — the value stopped growing at 1.25 */
+check("CLEV value saturates above the range", app.clmmLeveragedLp("0.8", "1.25", "1", "100", "3", "10", "365", "10", "2").valueAfter === clev3.valueAfter);
+/* at 2x the year's target (210 B) fits under the ceiling (211.8034 B)
+   and break-even is a real multiple; all three solved multiples
+   price back to their exact targets through tool 9 itself */
+const clev2 = app.clmmLeveragedLp("0.8", "1.25", "1", "100", "2", "10", "365", "10", "1.25");
+near("CLEV 2x break-even multiple", clev2.breakEvenRatio, 1.1489631345985876, 1e-9);
+check("CLEV 2x break-even is reachable", clev2.breakEvenUnreachable === false);
+near("CLEV 2x break-even prices back to its target through Tool 9", app.clmmPositionAtPrice(String(clev2.liquidity), "0.8", "1.25", String(clev2.breakEvenRatio)).valueInB, 210, 1e-6);
+near("CLEV 2x wipeout prices back to the debt through Tool 9", app.clmmPositionAtPrice(String(clev2.liquidity), "0.8", "1.25", String(clev2.wipeoutRatio)).valueInB, 110, 1e-6);
+near("CLEV 2x liquidation prices back to its target through Tool 9", app.clmmPositionAtPrice(String(clev2.liquidity), "0.8", "1.25", String(clev2.liquidationRatio)).valueInB, 110 / 0.9, 1e-6);
+/* entry and check holdings are tool 9's own, verbatim, at a sweep */
+check("CLEV holdings are Tool 9 verbatim across a sweep", [["3", "1.25"], ["2", "0.8"], ["5", "1.1"], ["1.5", "0.5"]].every(([lev, r]) => { const c = app.clmmLeveragedLp("0.8", "1.25", "1", "100", lev, "10", "365", "10", r); const e = app.clmmPositionAtPrice(String(c.liquidity), "0.8", "1.25", "1"); const k = app.clmmPositionAtPrice(String(c.liquidity), "0.8", "1.25", String(Number(r))); return c.entryAmountA === e.amountA && c.entryAmountB === e.amountB && c.checkAmountA === k.amountA && c.checkAmountB === k.amountB && c.valueAfter === k.valueInB && c.unleveredAfter === k.valueInB / Number(lev); }));
+/* 1x degenerates to the unlevered position exactly */
+const clev1 = app.clmmLeveragedLp("0.8", "1.25", "1", "100", "1", "10", "365", "10", "1.25");
+check("CLEV 1x has no debt and degenerates exactly", clev1.debtStart === 0 && clev1.debtEnd === 0 && clev1.equityAfter === clev1.valueAfter && clev1.equityChangePct === clev1.unleveredChangePct && clev1.breakEvenRatio === 1 && clev1.wipeoutRatio === 0 && clev1.liquidationRatio === 0);
+/* zero interest: break-even is exactly the entry multiple and a flat
+   check settles exactly at the equity */
+const clev0 = app.clmmLeveragedLp("0.8", "1.25", "1", "100", "3", "0", "365", "10", "1");
+check("CLEV zero interest breaks even at exactly 1x and settles flat", clev0.breakEvenRatio === 1 && clev0.equityAfter === 100 && clev0.interest === 0);
+/* a zero margin makes liquidation and wipeout the same price */
+near("CLEV zero margin: liquidation equals wipeout", app.clmmLeveragedLp("0.8", "1.25", "1", "100", "3", "10", "365", "0", "1.25").liquidationRatio, clev3.wipeoutRatio, 1e-9);
+/* downside check at the lower edge: value falls through the range */
+const clevDown = app.clmmLeveragedLp("0.8", "1.25", "1", "100", "3", "10", "365", "10", "0.8");
+near("CLEV downside value at the lower edge", clevDown.valueAfter, 254.16407864998743, 1e-9);
+near("CLEV downside levered change", clevDown.equityChangePct, -65.83592135001257, 1e-9);
+near("CLEV downside unlevered change", clevDown.unleveredChangePct, -15.278640450004188, 1e-9);
+/* entry below the range: entirely A at entry, break-even a clean 16/15 */
+const clevBelow = app.clmmLeveragedLp("0.8", "1.25", "0.5", "100", "3", "10", "365", "10", "2");
+check("CLEV below-range entry holds only A", clevBelow.entryAmountB === 0 && clevBelow.entryStatus === "below");
+near("CLEV below-range entry holdings", clevBelow.entryAmountA, 600, 1e-9);
+near("CLEV below-range break-even", clevBelow.breakEvenRatio, 1.0666666666666664, 1e-9);
+near("CLEV below-range wipeout", clevBelow.wipeoutRatio, 0.7333333333333334, 1e-9);
+/* entry above the range: entirely B, value can never grow, so any
+   interest makes break-even unreachable */
+const clevAbove = app.clmmLeveragedLp("0.8", "1.25", "2", "100", "3", "10", "365", "10", "0.5");
+check("CLEV above-range entry holds only B and its ceiling is its entry value", clevAbove.entryAmountA === 0 && clevAbove.entryAmountB === 300 && clevAbove.valueCeiling === 300 && clevAbove.breakEvenUnreachable === true);
+near("CLEV above-range wipeout", clevAbove.wipeoutRatio, 0.3666666666666667, 1e-9);
+/* extreme terms breach at entry: the position opens already past
+   the maintenance line and settles deeply underwater on paper */
+const clevBreach = app.clmmLeveragedLp("0.8", "1.25", "1", "100", "10", "1000", "3650", "10", "1");
+check("CLEV breached at entry under extreme terms", clevBreach.breachedAtEntry === true && clevBreach.wipeoutRatio === 1 && clevBreach.liquidationRatio === 1 && clevBreach.equityAfter === -89900 && clevBreach.breakEvenUnreachable === true);
+/* more leverage or more interest can only worsen the downside lines */
+check("CLEV downside lines worsen with leverage and APR", app.clmmLeveragedLp("0.8", "1.25", "1", "100", "5", "10", "365", "10", "1").wipeoutRatio > clev3.wipeoutRatio && app.clmmLeveragedLp("0.8", "1.25", "1", "100", "3", "50", "365", "10", "1").liquidationRatio > clev3.liquidationRatio);
+check("CLEV rejects leverage outside 1-100 and non-positive equity", app.clmmLeveragedLp("0.8", "1.25", "1", "100", "0.5", "10", "365", "10", "1") === null && app.clmmLeveragedLp("0.8", "1.25", "1", "100", "101", "10", "365", "10", "1") === null && app.clmmLeveragedLp("0.8", "1.25", "1", "0", "3", "10", "365", "10", "1") === null);
+check("CLEV rejects inverted range, bad prices and bad ratio", app.clmmLeveragedLp("1.25", "0.8", "1", "100", "3", "10", "365", "10", "1") === null && app.clmmLeveragedLp("0.8", "1.25", "0", "100", "3", "10", "365", "10", "1") === null && app.clmmLeveragedLp("0.8", "1.25", "1", "100", "3", "10", "365", "10", "0") === null && app.clmmLeveragedLp("0.8", "1.25", "1", "100", "3", "10", "365", "10", "-1") === null);
+check("CLEV rejects bad borrow terms and margins", app.clmmLeveragedLp("0.8", "1.25", "1", "100", "3", "-1", "365", "10", "1") === null && app.clmmLeveragedLp("0.8", "1.25", "1", "100", "3", "10", "0", "10", "1") === null && app.clmmLeveragedLp("0.8", "1.25", "1", "100", "3", "10", "365", "100", "1") === null && app.clmmLeveragedLp("0.8", "1.25", "1", "100", "3", "10", "365", "-1", "1") === null);
+check("CLEV rejects junk / empty", app.clmmLeveragedLp("x", "1.25", "1", "100", "3", "10", "365", "10", "1") === null && app.clmmLeveragedLp("0.8", "1.25", "1", "", "3", "10", "365", "10", "1") === null && app.clmmLeveragedLp("0.8", "1.25", "1", "100", "3", "10", "365", "10", "") === null && app.clmmLeveragedLp(null, "1.25", "1", "100", "3", "10", "365", "10", "1") === null);
+check("all clev controls labelled", ["clev-lower", "clev-upper", "clev-entry", "clev-equity", "clev-lev", "clev-apr", "clev-days", "clev-margin", "clev-ratio", "clev-out", "clev-be"].every(id => html.includes(`for="${id}"`)));
+check("clev tool present in index.html", html.includes('id="clev-calc"') && html.includes('id="clev-result"'));
+check("clev handler wired to its own form", appSrc.includes('getElementById("clev-calc")') && appSrc.includes('getElementById("clev-result")'));
+check("clev honesty: capped upside, unreachable break-even and not-live labels", html.includes("break-even is unreachable at any higher price") && html.includes("the maintenance line is this model's, not any protocol's") && html.includes("not live pool data, not a live quote, not financial advice"));
+check("guide covers leveraged CLMM positions", guide.includes("Leverage inside a range can make break-even unreachable"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

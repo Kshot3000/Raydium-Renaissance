@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred four</label>
+      <label for="tool-q">Find a tool among the one hundred five</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred four tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred five tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred four.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred five.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2468,6 +2468,35 @@
         <button type="submit" class="btn primary">Size my stableswap hedge</button>
         <p id="shedge-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="clev-calc">
+        <h3>105 · Leveraged CLMM position model</h3>
+        <p>Tool 101's borrow-and-deposit loop, concentrated. Your equity in token B, levered, controls a CLMM position in a range you choose, entered at a price you choose, and owes the borrowed share of token B at a borrow APR (simple interest) — every position value is tool 9's own position maths for the liquidity your entry funds. Concentration changes leverage's answers in a way a constant-product position cannot: the upside is capped. Enter 100 B of equity at 3x into the 0.8–1.25 range at price 1 with a 10% borrow APR for a year: the position is 150 A / 150 B worth 300 B, the debt grows 200 → 220 B, and at the range's top edge the position is worth ≈317.7051 B — so the levered equity settles at ≈97.7051 B (−2.2949%) where the same range unlevered makes +5.9017%. Worse, repaying the debt with the equity intact needs the position to be worth 320 B, but above the top edge it is entirely token B and can never be worth more than ≈317.7051 B: break-even is unreachable at any higher price, because the position capped out while the debt kept growing. At 2x the same year's target fits under the ceiling and break-even is a ≈1.1490x rise. The downside runs out the bottom of the range instead: below the lower edge the position is entirely token A and its value falls linearly, so the maintenance-liquidation and wipeout multiples are real prices (at 3x and a 10% margin, ≈0.7694x and ≈0.6925x). No trading fees earned are modelled — fees are what a real levered position races the interest with — and the maintenance line is this model's, not any protocol's. Educational model only — your range, entry, equity, leverage and borrow terms, not live pool data, not a live quote, not financial advice.</p>
+        <label for="clev-lower">Range lower price (token B per token A)</label>
+        <input id="clev-lower" inputmode="decimal" placeholder="e.g. 0.8" autocomplete="off">
+        <label for="clev-upper">Range upper price (token B per token A)</label>
+        <input id="clev-upper" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="clev-entry">Entry price (token B per token A)</label>
+        <input id="clev-entry" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="clev-equity">Your equity (token B)</label>
+        <input id="clev-equity" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="clev-lev">Leverage (1 to 100x)</label>
+        <input id="clev-lev" inputmode="decimal" placeholder="e.g. 3" autocomplete="off">
+        <label for="clev-apr">Borrow APR %</label>
+        <input id="clev-apr" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="clev-days">Days borrowed</label>
+        <input id="clev-days" inputmode="decimal" placeholder="e.g. 365" autocomplete="off">
+        <label for="clev-margin">Maintenance margin %</label>
+        <input id="clev-margin" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="clev-ratio">Price multiple to check (2 = doubled, 0.5 = halved)</label>
+        <input id="clev-ratio" inputmode="decimal" placeholder="e.g. 1.25" autocomplete="off">
+        <label for="clev-out">Equity at the check price — token B (model)</label>
+        <input id="clev-out" readonly placeholder="—" autocomplete="off">
+        <label for="clev-be">Break-even price multiple (model)</label>
+        <input id="clev-be" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model my levered CLMM position</button>
+        <p id="clev-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2495,6 +2524,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=135"></script>
+<script src="app.js?v=136"></script>
 </body>
 </html>
