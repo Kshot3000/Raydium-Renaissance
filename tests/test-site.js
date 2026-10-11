@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=124"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=125"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v124", html.includes("app.js?v=124"));
+check("app.js cache key bumped to v124", html.includes("app.js?v=125"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6599,7 +6599,9 @@ check("PARB a bigger fee on the first pool shrinks the cycle and its profit", ((
 check("PARB sweep: every reported cycle composes, is optimal against its neighbours, and never drains a reserve", (() => { const cases = [["1000", "1000", 25, "1000", "1210", 25], ["2000", "500", 25, "500", "2000", 50], ["1000000", "250000", 5, "900000", "360000", 100], ["1000", "1210", 25, "1000", "1000", 25], ["5000", "5000", 0, "4000", "6000", 30]]; return cases.every(([a1, b1, f1, a2, b2, f2]) => { const r = app.twoPoolArbitrage(a1, b1, f1, a2, b2, f2); if (r === null || r.direction !== "cycle") return false; const pools = [{ a: Number(a1), b: Number(b1), fee: Number(f1) }, { a: Number(a2), b: Number(b2), fee: Number(f2) }]; const first = pools[r.firstPool - 1], second = pools[2 - r.firstPool]; const kf = 1 - first.fee / 10000, ks = 1 - second.fee / 10000; const inF = r.startToken === "B" ? first.b : first.a, outF = r.startToken === "B" ? first.a : first.b, inS = r.startToken === "B" ? second.a : second.b, outS = r.startToken === "B" ? second.b : second.a; const F = x => { const net = kf * x; const mid = outF * net / (inF + net); const net2 = ks * mid; return outS * net2 / (inS + net2); }; return Math.abs(F(r.optimalIn) - r.amountOut) < 1e-6 * Math.max(1, r.amountOut) && F(r.optimalIn * 0.9) - r.optimalIn * 0.9 <= r.profit + 1e-9 && F(r.optimalIn * 1.1) - r.optimalIn * 1.1 <= r.profit + 1e-9 && r.midAmount < outF && r.amountOut < outS && r.profit > 0; }); })());
 check("PARB rejects blanks and non-numbers", app.twoPoolArbitrage("", "1000", 25, "1000", "1210", 25) === null && app.twoPoolArbitrage("1000", "1000", 25, "1000", "abc", 25) === null && app.twoPoolArbitrage("1000", "1000", null, "1000", "1210", 25) === null);
 check("PARB rejects non-positive reserves and out-of-range fees", app.twoPoolArbitrage("0", "1000", 25, "1000", "1210", 25) === null && app.twoPoolArbitrage("1000", "-5", 25, "1000", "1210", 25) === null && app.twoPoolArbitrage("1000", "1000", 10000, "1000", "1210", 25) === null && app.twoPoolArbitrage("1000", "1000", -1, "1000", "1210", 25) === null && app.twoPoolArbitrage("1000", "1000", 25, "1000", "1210", 10000) === null);
-check("PARB source composes its closed form", appSrc.includes("function twoPoolArbitrage") && appSrc.includes("Math.sqrt(N * D) - D") && appSrc.includes("outS * ks * outF * kf"));
+check("PARB huge reserves keep the cycle (marginal evaluated at price scale, not via the overflowing N product)", (() => { const h = app.twoPoolArbitrage("1e200", "1e200", 25, "1e200", "1.21e200", 25); return h.direction === "cycle" && Math.abs(h.profitPct - parb1.profitPct) < 1e-9 && Math.abs(h.optimalIn / 1e200 - parb1.optimalIn / 1000) < 1e-12 && Math.abs(h.bestMarginal - parb1.bestMarginal) < 1e-12; })());
+check("PARB crossed pools at the double ceiling still cycle instead of reporting none", (() => { const h = app.twoPoolArbitrage("1e308", "1e308", 0, "5e307", "1e308", 0); return h !== null && h.direction === "cycle" && Math.abs(h.profitPct - (Math.sqrt(2) - 1) * 100) < 1e-9; })());
+check("PARB source composes its closed form at price scale", appSrc.includes("function twoPoolArbitrage") && appSrc.includes("(outF * kf / inF) * (outS * ks / inS)") && appSrc.includes("inF * (Math.sqrt(marginal) - 1)"));
 check("all parb controls labelled", ["parb-a1", "parb-b1", "parb-fee1", "parb-a2", "parb-b2", "parb-fee2", "parb-in", "parb-profit"].every(id => html.includes(`for="${id}"`)));
 check("parb tool present in index.html", html.includes('id="parb-calc"') && html.includes('id="parb-result"'));
 check("parb handler wired to its own form", appSrc.includes('getElementById("parb-calc")') && appSrc.includes('getElementById("parb-result")'));

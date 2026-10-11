@@ -4618,14 +4618,21 @@ function twoPoolArbitrage(a1Str, b1Str, fee1Bps, a2Str, b2Str, fee2Bps) {
     var outF = startToken === "B" ? first.a : first.b;
     var inS = startToken === "B" ? second.a : second.b;
     var outS = startToken === "B" ? second.b : second.a;
-    var N = outS * ks * outF * kf, D = inS * inF, E = kf * (inS + ks * outF);
-    var marginal = N / D;
+    /* The marginal is the product of the two legs' own fee-adjusted
+       rates, and x* is (sqrt(N*D) - D)/E divided top and bottom by
+       inS*inF — the same closed form evaluated at price scale.
+       Forming N = outS*ks*outF*kf first overflows a double once the
+       reserves pass ~1e154 (N ~ reserve^2), the NaN marginal was
+       silently skipped, and a real gap at 1e200 reserves reported
+       "no cycle" with bestMarginal 0. */
+    var marginal = (outF * kf / inF) * (outS * ks / inS);
+    if (Number.isNaN(marginal)) return { marginal: marginal, indeterminate: true };
     if (!(marginal > 1)) return { marginal: marginal };
-    var x = (Math.sqrt(N * D) - D) / E;
+    var x = inF * (Math.sqrt(marginal) - 1) / (kf * (1 + ks * outF / inS));
     var netF = kf * x;
-    var mid = outF * netF / (inF + netF);
+    var mid = outF * (netF / (inF + netF));
     var netS = ks * mid;
-    var out = outS * netS / (inS + netS);
+    var out = outS * (netS / (inS + netS));
     /* Post-trade reserves: each pool's input reserve grows by the
        after-fee input (the hub's Tool 19 convention) and its output
        reserve shrinks by what it paid. */
@@ -4658,6 +4665,7 @@ function twoPoolArbitrage(a1Str, b1Str, fee1Bps, a2Str, b2Str, fee2Bps) {
   var combos = [[0, 1, "B"], [1, 0, "B"], [0, 1, "A"], [1, 0, "A"]];
   for (var c = 0; c < combos.length; c++) {
     var cand = cycle(combos[c][0], combos[c][1], combos[c][2]);
+    if (cand.indeterminate) return null;
     if (cand.marginal > bestMarginal) bestMarginal = cand.marginal;
     if (cand.optimalIn !== undefined && (best === null || cand.profitPct > best.profitPct + 1e-9)) best = cand;
   }
