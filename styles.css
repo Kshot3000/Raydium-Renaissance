@@ -4,6 +4,7 @@
   --cyan:#00c2ff; --pink:#ff5ca8; --radius:14px;
 }
 *{box-sizing:border-box}
+[hidden]{display:none !important} /* author display (e.g. .tool's grid) would otherwise override the UA [hidden] rule and keep filtered-out tools visible */
 html{scroll-behavior:smooth}
 body{margin:0;background:radial-gradient(1000px 480px at 88% -80px,#3b1470 0%,transparent 55%),radial-gradient(760px 420px at 6% 220px,#063a4d 0%,transparent 55%),var(--bg);
   color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}

@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=117"));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=117"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -6548,6 +6548,7 @@ check("FINDER status is a polite live region", /id="tool-filter-status"[^>]*role
 check("FINDER finder sits above the tool grid and counts the tools honestly", html.indexOf('id="tool-q"') > html.indexOf('id="tools"') && html.indexOf('id="tool-q"') < html.indexOf('class="tool-grid"') && html.includes("Find a tool among the ninety-four"));
 check("FINDER wiring uses the shared matcher over every tool form", appSrc.includes('querySelectorAll(".tool-grid .tool")') && appSrc.includes('getElementById("tool-q")') && appSrc.includes("toolSearchMatch(form.textContent, toolQ.value)") && appSrc.includes('addEventListener("input", applyToolFilter)'));
 check("FINDER hiding never deletes: filter toggles hidden only", appSrc.includes("form.hidden = !show") && !/toolForms\.forEach[\s\S]{0,400}remove\(\)/.test(appSrc));
+check("FINDER hidden actually hides: stylesheet forces [hidden] to display:none (the .tool grid display would otherwise override the UA rule and leave filtered tools rendered)", /\[hidden\]\s*\{\s*display\s*:\s*none\s*!important/.test(css));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
