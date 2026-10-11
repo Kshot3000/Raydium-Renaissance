@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the ninety-nine</label>
+      <label for="tool-q">Find a tool among the one hundred</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all ninety-nine tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all ninety-nine.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2355,6 +2355,27 @@
         <button type="submit" class="btn primary">Size my CLMM hedge</button>
         <p id="chedge-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="whedge-calc">
+        <h3>100 · Weighted-pool delta-hedge calculator</h3>
+        <p>Tools 98 and 99 size a delta hedge for a constant-product and a CLMM position; a weighted-pool position obeys the same identity — its value moves with token A's price at exactly the rate of its own token-A holding, so shorting that many A zeroes its delta — but the size is set by the weight, not by tool 98's always-half rule or tool 99's range. Enter the pool's reserves, token A's weight, your share of the pool, and a price multiple to check. Because a weighted pool's spot is (reserve B ÷ weight B) ÷ (reserve A ÷ weight A), the token-A side of any position is worth exactly its weight of the position's total value: in an 80/20 pool holding 1,000/1,000 (spot 4 B per A), a 10% share is 100 A and 100 B worth 500 B, so the hedge is a short of 100 A worth 400 B — 80% of the position, not half; in a 20/80 pool the same share hedges with only 20% of its value. When the price moves, arbitrage pins the reserves to reserve A × r<sup>−weight B</sup> and reserve B × r<sup>weight A</sup>, so the position's value scales by exactly r<sup>weight A</sup> and its impermanent loss is tool 60's figure. At a doubling of the 80/20 headline the position is worth ≈870.5506 B (+74.1101%, against 900 B for holding), the short loses exactly 400 B, and the hedged settle is ≈470.5506 B, −5.8899% — hedging removed the direction and kept the convexity cost, which is smaller here than tool 98's −8.5786% at 50/50 and bigger than −5.1302% at 20/80: the cost peaks near the middle weights, it does not grow with the weight. The hedge drifts too: after the doubling the position holds only ≈87.0551 A, so re-hedging means covering ≈12.9449 A of the short. Weighted pools are a generalised AMM design used elsewhere, modelled here like the rest of the weighted family — Raydium's own constant-product pools are the 50/50 case, where this tool and tool 98 agree exactly. The hedge is modelled as a frictionless short held outside the pool — no borrow or funding cost, no margin or liquidation, no fees on establishing or adjusting it, and no rebalancing inside the scenario. Educational model only — your reserves, weight, share and price move, not live pool data, not a live quote, not financial advice.</p>
+        <label for="whedge-ra">Pool reserve of token A</label>
+        <input id="whedge-ra" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="whedge-rb">Pool reserve of token B</label>
+        <input id="whedge-rb" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="whedge-w">Token A weight, % (the two weights sum to 100)</label>
+        <input id="whedge-w" inputmode="decimal" placeholder="e.g. 80" autocomplete="off">
+        <label for="whedge-share">Your share of the pool, %</label>
+        <input id="whedge-share" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+        <label for="whedge-ratio">Price multiple to check (2 = doubled, 0.5 = halved)</label>
+        <input id="whedge-ratio" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="whedge-size">Hedge size: token A to short at the current price (model)</label>
+        <input id="whedge-size" readonly placeholder="—" autocomplete="off">
+        <label for="whedge-net">Hedged change at the check price, % of starting value (model)</label>
+        <input id="whedge-net" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Size my weighted hedge</button>
+        <p id="whedge-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2382,6 +2403,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=127"></script>
+<script src="app.js?v=128"></script>
 </body>
 </html>
