@@ -4907,7 +4907,13 @@ function weightedDeltaHedge(reserveAStr, reserveBStr, weightAPctStr, sharePctStr
   if (sharePct <= 0 || sharePct > 100) return null;
   if (ratio <= 0) return null;
   var w = weightAPct / 100, share = sharePct / 100;
-  var spot = (reserveB / (1 - w)) / (reserveA / w);
+  /* The spot (reserveB / wB) / (reserveA / wA) is evaluated at price
+     scale, as (reserveB / reserveA) x (w / (1 - w)): forming the two
+     weight-divided reserves first overflows a double for reserves
+     above ~(1 - w) x 1.8e308 (or underflows the quotient to 0) even
+     when the spot itself is modest and every result field would be
+     finite — the ratio-first form prices those pools exactly. */
+  var spot = (reserveB / reserveA) * (w / (1 - w));
   if (!Number.isFinite(spot) || spot <= 0) return null;
   var newPrice = spot * ratio;
   var newReserveA = reserveA * Math.pow(ratio, -(1 - w));

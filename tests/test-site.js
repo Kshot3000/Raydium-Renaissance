@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=128"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=129"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v128", html.includes("app.js?v=128"));
+check("app.js cache key bumped to v129", html.includes("app.js?v=129"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6718,7 +6718,9 @@ check("WHEDGE sole staker holds the whole pool", (() => { const s = app.weighted
 check("WHEDGE rejects blanks and non-numbers", app.weightedDeltaHedge("", "1000", "80", "10", 2) === null && app.weightedDeltaHedge("1000", "1000", "", "10", 2) === null && app.weightedDeltaHedge("1000", "1000", "80", "10", "") === null && app.weightedDeltaHedge("1000", "1000", "abc", "10", 2) === null && app.weightedDeltaHedge(null, "1000", "80", "10", 2) === null && app.weightedDeltaHedge("1000", "1000", "80", "10", null) === null);
 check("WHEDGE rejects weights at or outside (0, 100), shares outside (0, 100], non-positive reserves and moves", app.weightedDeltaHedge("1000", "1000", "0", "10", 2) === null && app.weightedDeltaHedge("1000", "1000", "100", "10", 2) === null && app.weightedDeltaHedge("1000", "1000", "-5", "10", 2) === null && app.weightedDeltaHedge("1000", "1000", "80", "0", 2) === null && app.weightedDeltaHedge("1000", "1000", "80", "101", 2) === null && app.weightedDeltaHedge("0", "1000", "80", "10", 2) === null && app.weightedDeltaHedge("1000", "1000", "80", "10", 0) === null && app.weightedDeltaHedge("1000", "1000", "80", "10", -2) === null);
 check("WHEDGE rejects a move or reserve that overflows", app.weightedDeltaHedge("1e308", "1e308", "80", "10", 10) === null && app.weightedDeltaHedge("1000", "1000", "80", "10", Infinity) === null && app.weightedDeltaHedge("1000", "1000", "80", "10", 1e308) === null);
-check("WHEDGE source carries the weighted spot and reserve identities", appSrc.includes("function weightedDeltaHedge") && appSrc.includes("(reserveB / (1 - w)) / (reserveA / w)") && appSrc.includes("Math.pow(ratio, -(1 - w))"));
+check("WHEDGE source carries the weighted spot and reserve identities", appSrc.includes("function weightedDeltaHedge") && appSrc.includes("(reserveB / reserveA) * (w / (1 - w))") && appSrc.includes("Math.pow(ratio, -(1 - w))"));
+check("WHEDGE spot is evaluated at price scale: huge reserves with a modest spot still price", (() => { const a = app.weightedDeltaHedge("1e308", "1e308", "80", "10", 1); const b = app.weightedDeltaHedge("1e308", "1e308", "80", "10", 2); const c = app.weightedDeltaHedge("1e307", "1e307", "99", "10", 1); const d = app.weightedDeltaHedge("9e307", "9e307", "10", "10", 1); const e = app.weightedDeltaHedge("1e308", "5e307", "80", "10", 1); return a !== null && Math.abs(a.spotPrice - 4) < 1e-9 && a.hedgedChange === 0 && b !== null && Math.abs(b.spotPrice - 4) < 1e-9 && Math.abs(b.hedgedChangePct - -5.889887340775203) < 1e-9 && c !== null && Math.abs(c.spotPrice - 99) < 1e-7 && d !== null && Math.abs(d.spotPrice - 1 / 9) < 1e-12 && e !== null && Math.abs(e.spotPrice - 2) < 1e-9; })());
+check("WHEDGE genuine overflows still reject after the price-scale fix", app.weightedDeltaHedge("1e308", "1e308", "80", "10", 10) === null && app.weightedDeltaHedge("1", "1e308", "80", "10", 1) === null);
 check("all whedge controls labelled", ["whedge-ra", "whedge-rb", "whedge-w", "whedge-share", "whedge-ratio", "whedge-size", "whedge-net"].every(id => html.includes(`for="${id}"`)));
 check("whedge tool present in index.html", html.includes('id="whedge-calc"') && html.includes('id="whedge-result"'));
 check("whedge handler wired to its own form", appSrc.includes('getElementById("whedge-calc")') && appSrc.includes('getElementById("whedge-result")'));
