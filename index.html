@@ -2947,6 +2947,45 @@
         <button type="submit" class="btn primary">Compare the two referral tiers for the builder</button>
         <p id="rtier-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="rntier-calc">
+        <h3>120 · Referral fee-share net tier comparison model</h3>
+        <p>The referral fee-share tier comparison model ranks two complete offers by what the builder keeps after the split, and the referral fee-share net revenue estimator nets one split fee against one builder's operating cost. This one ranks two complete offers by what the builder nets after each tier's own operating cost — each tier is a platform rate, a referrer share of that tier's fee, the daily volume you expect at that pairing, and the daily operating cost of running that tier — because a tier's cost is part of the offer: support, promotion and infrastructure can differ between tiers, and the ranking by net can disagree with the ranking by the builder cut, which can already disagree with the ranking by the fee collected. The split divides the fee and never adds a charge on top of it, and each tier's cost comes off that tier's builder cut alone, never off the referrer's. On the headline numbers, tier A charges 0.25% on 100,000 of volume a day with no referrer and a daily operating cost of 200: it collects a platform fee of 250 a day that its builder keeps whole, and nets 50 a day after the cost — 1,500 over 30 days. Tier B charges 0.5% on 80,000 a day with half of its fee to the referrer and a daily operating cost of 50: it collects more, 400 a day, splits it 200 to the referrer and 200 kept by the builder, and nets 150 a day — 4,500 over the period. So tier B wins the fee collected and the net, while tier A wins the builder cut before costs: all three rankings need not agree, and the cost is what moves the last one. Stated as volumes: tier B would need 39,999.9999998 of daily volume at its own rate, share and cost to match tier A's daily net, while tier A needs 140,000 a day at its own to match tier B's. Each share is a share of that tier's platform fee, not of its volume: half here means half of the 0.5% fee, an effective 0.25% of tier B's day's volume — never half of the volume itself. The net is a signed figure: a tier can net less than nothing on a day its cost outruns its builder cut, and the model reports the shortfall rather than rounding it to zero. The edges are stated plainly: a tier charging nothing earns no fee at any volume, and a tier giving its whole fee to its referrer keeps no builder cut at any volume, so with a positive builder cut to find — the other tier's net plus this tier's own cost — either one leaves no break-even volume, and the model says which cause applies to that tier; where that target is zero or less there is nothing to catch up and the break-even volume is exactly zero. Each day's fee is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, the referrer's cut is rounded down and the builder keeps the remainder, so the two cuts always sum exactly to the fee — and a real interface taking its fee trade by trade rounds every single trade down, so what it collects, and therefore both cuts and both nets, are never more than these figures and usually a little less on a day of many small trades; read them as ceilings, not deposits. Both volumes and both costs are yours to supply and nothing here predicts them: how volume actually answers a rate, a share or a cost change is each offer's own experiment — no elasticity, growth or decline is assumed — and each tier's volume, rate, share and cost are held constant across the period, with refunds and failed trades not modelled, and volume served at a different rate or share, or fee-free, not told apart. The volumes and costs are in one unit of value, and both tiers use the same unit, or the comparison means nothing; the unit is yours to choose. On an interface I build, whichever tier is chosen is the disclosed one, labelled before any trade, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and any referrer's cut goes to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volumes, fees, shares, costs and period, not live data, not a forecast, not financial advice.</p>
+        <label for="rntier-vola">Daily volume you expect at tier A, in your unit of value</label>
+        <input id="rntier-vola" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="rntier-feea">Tier A platform fee (basis points, 25 = 0.25%)</label>
+        <input id="rntier-feea" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="rntier-sharea">Tier A referrer share of the platform fee (basis points of the fee, 0 = no referrer)</label>
+        <input id="rntier-sharea" inputmode="numeric" placeholder="e.g. 0" autocomplete="off">
+        <label for="rntier-costa">Tier A daily operating cost, in the same unit as the volume</label>
+        <input id="rntier-costa" inputmode="decimal" placeholder="e.g. 200" autocomplete="off">
+        <label for="rntier-volb">Daily volume you expect at tier B, in the same unit of value</label>
+        <input id="rntier-volb" inputmode="decimal" placeholder="e.g. 80000" autocomplete="off">
+        <label for="rntier-feeb">Tier B platform fee (basis points, 50 = 0.5%)</label>
+        <input id="rntier-feeb" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="rntier-shareb">Tier B referrer share of the platform fee (basis points of the fee, 5000 = 50% of the fee)</label>
+        <input id="rntier-shareb" inputmode="numeric" placeholder="e.g. 5000" autocomplete="off">
+        <label for="rntier-costb">Tier B daily operating cost, in the same unit as the volume</label>
+        <input id="rntier-costb" inputmode="decimal" placeholder="e.g. 50" autocomplete="off">
+        <label for="rntier-days">Period (days)</label>
+        <input id="rntier-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="rntier-net-a">Tier A builder net per day, after the split and tier A's cost (model, signed)</label>
+        <input id="rntier-net-a" readonly placeholder="—" autocomplete="off">
+        <label for="rntier-net-b">Tier B builder net per day, after the split and tier B's cost (model, signed)</label>
+        <input id="rntier-net-b" readonly placeholder="—" autocomplete="off">
+        <label for="rntier-period-a">Tier A builder net over the period (model, signed)</label>
+        <input id="rntier-period-a" readonly placeholder="—" autocomplete="off">
+        <label for="rntier-period-b">Tier B builder net over the period (model, signed)</label>
+        <input id="rntier-period-b" readonly placeholder="—" autocomplete="off">
+        <label for="rntier-diff">Daily builder-net difference, tier B minus tier A (model, signed)</label>
+        <input id="rntier-diff" readonly placeholder="—" autocomplete="off">
+        <label for="rntier-be-b">Daily volume tier B needs to match tier A's daily net (model)</label>
+        <input id="rntier-be-b" readonly placeholder="—" autocomplete="off">
+        <label for="rntier-be-a">Daily volume tier A needs to match tier B's daily net (model)</label>
+        <input id="rntier-be-a" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Compare the two referral tiers by net</button>
+        <p id="rntier-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2974,6 +3013,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=160"></script>
+<script src="app.js?v=161"></script>
 </body>
 </html>
