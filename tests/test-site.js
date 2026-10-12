@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=153"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=154"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v153", html.includes("app.js?v=153"));
+check("app.js cache key bumped to v154", html.includes("app.js?v=154"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -7396,6 +7396,8 @@ check("TIER rejects zero volumes and zero or over-long periods", app.feeTierComp
 check("TIER rejects bad platform fees in either tier", app.feeTierCompare("100000", 10000, "80000", 50, "30") === null && app.feeTierCompare("100000", 25, "80000", 10000, "30") === null && app.feeTierCompare("100000", -1, "80000", 50, "30") === null && app.feeTierCompare("100000", 25, "80000", 50.5, "30") === null && app.feeTierCompare("100000", "abc", "80000", 50, "30") === null);
 check("TIER source floors each tier's aggregate day's fee once and solves both break-evens in closed form", (() => { const at = appSrc.indexOf("function feeTierCompare"); const body = appSrc.slice(at, at + 2400); return at !== -1 && body.includes("volA * BigInt(feeA) / 10000n") && body.includes("volB * BigInt(feeB) / 10000n") && body.includes("(target * 10000n + BigInt(fee) - 1n) / BigInt(fee)"); })());
 check("TIER handler branches its winner sentence on the winner field", appSrc.includes('res.winner === "B"') && appSrc.includes('res.winner === "A"') && appSrc.includes("The two tiers earn exactly the same"));
+check("TIER tier B can win with the LOWER rate on more volume, and tier A with the HIGHER rate — the winner does not determine the rate relation", (() => { const lo = app.feeTierCompare("10000", 50, "100000", 25, "30"); const hi = app.feeTierCompare("100000", 50, "80000", 25, "30"); const eq = app.feeTierCompare("10000", 25, "100000", 25, "30"); return lo !== null && lo.winner === "B" && lo.platformFeeBPct < lo.platformFeeAPct && hi !== null && hi.winner === "A" && hi.platformFeeAPct > hi.platformFeeBPct && eq !== null && eq.winner === "B" && eq.platformFeeAPct === eq.platformFeeBPct; })());
+check("TIER handler chooses its rate clause from the two rates themselves, not from the winner", appSrc.includes("rateClause(res.platformFeeBPct, res.platformFeeAPct)") && appSrc.includes("rateClause(res.platformFeeAPct, res.platformFeeBPct)") && appSrc.includes("both tiers charge the same rate"));
 check("TIER handler branches both break-even sentences on the zero-rate null and the zero-target case", appSrc.includes("res.breakEvenVolumeB === null") && appSrc.includes("res.breakEvenVolumeA === null") && appSrc.includes("no catch-up volume") && appSrc.includes('res.breakEvenVolumeB === "0"') && appSrc.includes('res.breakEvenVolumeA === "0"'));
 check("all tier controls labelled", ["tier-vola", "tier-feea", "tier-volb", "tier-feeb", "tier-days", "tier-daily-a", "tier-daily-b", "tier-period-a", "tier-period-b", "tier-diff", "tier-be-b", "tier-be-a"].every(id => html.includes(`for="${id}"`)));
 check("tier tool present in index.html", html.includes('id="tier-calc"') && html.includes('id="tier-result"'));

@@ -9330,7 +9330,11 @@ function interfaceFeeRevenue(dailyVolumeStr, platformFeeBps, daysStr, dailyCostS
    at the smallest unit, the counting convention of the tools around
    this one); the difference is signed — it is tier B minus tier A,
    so a negative difference means the FIRST tier earns more, and the
-   winner field names the tier from the daily revenues themselves.
+   winner field names the tier from the daily revenues themselves —
+   which tier wins is NOT determined by which rate is higher:
+   either rate can win on the volume it keeps, and at equal rates
+   volume alone decides, so any prose about the winner must read
+   the two rates themselves rather than assume the winner's.
    The two break-even volumes restate the comparison as volumes:
    the smallest daily volume at tier B's rate whose floored day's
    revenue reaches tier A's daily revenue is, in closed form,
@@ -11964,16 +11968,27 @@ if (typeof document !== "undefined") {
         document.getElementById("tier-be-b").value = "";
         document.getElementById("tier-be-a").value = "";
       } else {
-        /* The winner sentence branches on the winner field itself:
-           tier B ahead, tier A ahead, or an exact tie — prose must
-           say which one happened, and the difference is quoted as
-           a positive amount in the winning direction. */
+        /* The winner sentence branches on the winner field itself
+           AND on the exact fee relation between the tiers: which
+           tier won says nothing by itself about which rate is
+           higher — a tier can win with the lower rate on more
+           volume, with the higher rate, or at an equal rate purely
+           on volume — so the rate clause must be chosen from the
+           two rates themselves, never assumed from the winner.
+           The difference is quoted as a positive amount in the
+           winning direction. */
         var absDiff = res.diffDaily.charAt(0) === "-" ? res.diffDaily.slice(1) : res.diffDaily;
+        var absDiffPeriod = res.diffPeriod.charAt(0) === "-" ? res.diffPeriod.slice(1) : res.diffPeriod;
+        function rateClause(winnerFee, loserFee) {
+          if (winnerFee > loserFee) return "the higher rate wins on the volumes you supplied.";
+          if (winnerFee < loserFee) return "the lower rate wins on the volumes you supplied, because the volume it keeps pays more than the higher rate's cut of less flow.";
+          return "both tiers charge the same rate, so the larger volume wins: at an equal rate, revenue follows volume.";
+        }
         var winnerSentence;
         if (res.winner === "B") {
-          winnerSentence = "Tier B earns more: " + absDiff + " a day more than tier A, " + res.diffPeriod + " more over the period — the higher rate wins on the volumes you supplied.";
+          winnerSentence = "Tier B earns more: " + absDiff + " a day more than tier A, " + absDiffPeriod + " more over the period — " + rateClause(res.platformFeeBPct, res.platformFeeAPct);
         } else if (res.winner === "A") {
-          winnerSentence = "Tier A earns more: " + absDiff + " a day more than tier B, " + (res.diffPeriod.charAt(0) === "-" ? res.diffPeriod.slice(1) : res.diffPeriod) + " more over the period — the lower rate wins on the volumes you supplied, because the volume it keeps pays more than the higher rate's cut of less flow.";
+          winnerSentence = "Tier A earns more: " + absDiff + " a day more than tier B, " + absDiffPeriod + " more over the period — " + rateClause(res.platformFeeAPct, res.platformFeeBPct);
         } else {
           winnerSentence = "The two tiers earn exactly the same: the difference is 0 a day and 0 over the period, so on revenue alone there is nothing to choose between them — the choice then rests on what each rate does to the traders paying it, which this model does not score.";
         }
