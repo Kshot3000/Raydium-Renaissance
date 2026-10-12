@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=150"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=151"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v150", html.includes("app.js?v=150"));
+check("app.js cache key bumped to v151", html.includes("app.js?v=151"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -7338,6 +7338,8 @@ check("PFXO rejects a target at or above the whole reserve out", app.platformFee
 check("PFXO rejects bad fees in both slots", app.platformFeeSwapExactOut("1000", "1000", "90", 10000, 50) === null && app.platformFeeSwapExactOut("1000", "1000", "90", 25, 10000) === null && app.platformFeeSwapExactOut("1000", "1000", "90", -1, 50) === null && app.platformFeeSwapExactOut("1000", "1000", "90", 25, -1) === null && app.platformFeeSwapExactOut("1000", "1000", "90", 25.5, 50) === null && app.platformFeeSwapExactOut("1000", "1000", "90", 25, 50.5) === null);
 check("PFXO source composes Tools 6 and 111 and grosses up in closed form", (() => { const at = appSrc.indexOf("function platformFeeSwapExactOut"); const body = appSrc.slice(at, at + 3200); return at !== -1 && body.includes("cpSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, poolFee)") && body.includes("platformFeeSwap(reserveInStr, reserveOutStr, formatScaled(totalIn), poolFee, platFee)") && body.includes("(netIn - 1n) * 10000n / BigInt(10000 - platFee) + 1n"); })());
 check("PFXO handler branches its payout sentence on the exact excess, never rounding it away in prose", appSrc.includes('res.excessOut === "0"') && appSrc.includes("That is exactly your target at the smallest unit the model can state") && appSrc.includes("more than your target at the smallest unit the model can state"));
+check("PFXO handler branches its cost sentence on the exact fee-versus-rate relation in BigInt", appSrc.includes("parseScaled(res.platformFeeAmount) * 10000n") && appSrc.includes("BigInt(platBps) * parseScaled(res.netAmountIn)") && appSrc.includes("feeLhs > feeRhs") && appSrc.includes("feeLhs < feeRhs"));
+check("PFXO cost branches cover higher, lower, exactly-equal, fee-floored and zero-rate in prose", appSrc.includes("so measured against the baseline it reads a little higher") && appSrc.includes("a little LESS than the headline platform rate would suggest") && appSrc.includes("exactly the headline platform rate measured on that baseline") && appSrc.includes("the platform fee on the total rounds down to zero at the smallest unit") && appSrc.includes("with no platform fee charged, the total is exactly the exact-out model's own charge"));
 check("all pfx controls labelled", ["pfx-rin", "pfx-rout", "pfx-aout", "pfx-poolfee", "pfx-platfee", "pfx-total", "pfx-feeamt", "pfx-net", "pfx-out", "pfx-excess"].every(id => html.includes(`for="${id}"`)));
 check("pfx tool present in index.html", html.includes('id="pfx-calc"') && html.includes('id="pfx-result"'));
 check("pfx handler wired to its own form", appSrc.includes('getElementById("pfx-calc")') && appSrc.includes('getElementById("pfx-result")'));

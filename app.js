@@ -9144,7 +9144,12 @@ function platformFeeSwap(reserveInStr, reserveOutStr, amountInStr, poolFeeBps, p
    headline 0.5%, because the rate is a share of everything paid
    while the baseline it is measured against is smaller; measured
    as a share of the total it is the headline rate itself, up to
-   the fee's own smallest-unit flooring. Two edges stay honest.
+   the fee's own smallest-unit flooring. The extra measured on
+   the no-fee baseline is NOT always above the headline rate,
+   though: at dust scale the fee's own flooring can pull it to
+   or under the rate, and can floor the fee itself to zero, so
+   the handler compares the exact scaled fee against the exact
+   rate and says which one happened. Two edges stay honest.
    First, the payout: tool 6 rounds its charge up twice, so
    feeding this total back through tool 111 can pay a few
    smallest units MORE than the target (54 units on a 54.321
@@ -11678,7 +11683,33 @@ if (typeof document !== "undefined") {
         } else {
           excessSentence = "That is " + res.excessOut + " more than your target at the smallest unit the model can state: the amount the pool needs is rounded up to that unit, and the pool's own maths can pay a few units past a target — the excess is shown here, not rounded away.";
         }
-        out.textContent = "Model output: to receive your target of " + res.targetOut + " you pay " + res.amountIn + " in total (spot " + fmt(res.spotPrice, 6) + " out per in, pool fee " + fmt(res.poolFeePct, 4) + "%). Of that total, " + res.platformFeeAmount + " is the platform fee — a disclosed " + fmt(res.platformFeePct, 4) + "% of everything you pay in, charged in the token you pay and routed to the interface's own fee wallet; on an interface I build, that wallet is my SOL address in the support section below, labelled before any trade, never added after — and " + res.netAmountIn + " reaches the pool, exactly what the exact-out swap model charges for this target with no platform fee at all. So the platform layer costs exactly its fee here: " + res.extraIn + " more than the " + res.noPlatformFeeIn + " you would pay without it, about " + fmt(res.extraPct, 4) + "% on top of that smaller baseline (the rate itself is a share of the total you pay, so measured against the baseline it reads a little higher). The pool pays " + res.amountOut + " at a modelled price impact of " + fmt(res.priceImpactPct, 4) + "% measured against everything you paid in, platform fee included. " + excessSentence + " The platform fee is the platform-fee swap model's own floored fee, grossed up exactly; a real interface rounding its fee up, or charging a minimum, would take more, and as a platform rate approaches 100% the grossed-up total grows without bound — a rate that large is a warning, not a price. Network and priority fees, and any fee an interface charges on the output side or as a flat amount, are not modelled. This page executes nothing: no wallet connects here and no fee is taken by using this model. A platform-fee exact-out swap model, not live pool data. Not financial advice.";
+        /* The cost sentence branches on the EXACT scaled relation
+           between the fee and the headline rate (fee·10000 vs
+           platformBps·net, in BigInt): measured on the smaller
+           no-fee baseline the fee usually reads a little ABOVE the
+           rate, because the rate is a share of the total paid —
+           but at dust scale the fee's own smallest-unit flooring
+           can pull it to or under the rate, and can floor the fee
+           itself to zero, and at a zero rate there is no cost at
+           all — prose must say which one happened. */
+        var platBps = Number(document.getElementById("pfx-platfee").value);
+        var costSentence;
+        if (platBps === 0) {
+          costSentence = "So the platform layer costs you nothing here: with no platform fee charged, the total is exactly the exact-out model's own charge for this target.";
+        } else if (res.platformFeeAmount === "0") {
+          costSentence = "So the platform layer costs you nothing here either — at this size the platform fee on the total rounds down to zero at the smallest unit, so the total is exactly what you would pay without it.";
+        } else {
+          var feeLhs = parseScaled(res.platformFeeAmount) * 10000n;
+          var feeRhs = BigInt(platBps) * parseScaled(res.netAmountIn);
+          if (feeLhs > feeRhs) {
+            costSentence = "So the platform layer costs exactly its fee here: " + res.extraIn + " more than the " + res.noPlatformFeeIn + " you would pay without it, about " + fmt(res.extraPct, 4) + "% on top of that smaller baseline (the rate itself is a share of the total you pay, so measured against the baseline it reads a little higher).";
+          } else if (feeLhs < feeRhs) {
+            costSentence = "So the platform layer costs exactly its fee here: " + res.extraIn + " more than the " + res.noPlatformFeeIn + " you would pay without it, about " + fmt(res.extraPct, 4) + "% on top of that smaller baseline — a little LESS than the headline platform rate would suggest: at this size the fee's own rounding down to the smallest unit shaves off more than the share-of-the-total effect adds.";
+          } else {
+            costSentence = "So the platform layer costs exactly its fee here: " + res.extraIn + " more than the " + res.noPlatformFeeIn + " you would pay without it, about " + fmt(res.extraPct, 4) + "% on top of that smaller baseline — exactly the headline platform rate measured on that baseline: here the fee's smallest-unit rounding and the share-of-the-total effect happen to cancel out.";
+          }
+        }
+        out.textContent = "Model output: to receive your target of " + res.targetOut + " you pay " + res.amountIn + " in total (spot " + fmt(res.spotPrice, 6) + " out per in, pool fee " + fmt(res.poolFeePct, 4) + "%). Of that total, " + res.platformFeeAmount + " is the platform fee — a disclosed " + fmt(res.platformFeePct, 4) + "% of everything you pay in, charged in the token you pay and routed to the interface's own fee wallet; on an interface I build, that wallet is my SOL address in the support section below, labelled before any trade, never added after — and " + res.netAmountIn + " reaches the pool, exactly what the exact-out swap model charges for this target with no platform fee at all. " + costSentence + " The pool pays " + res.amountOut + " at a modelled price impact of " + fmt(res.priceImpactPct, 4) + "% measured against everything you paid in, platform fee included. " + excessSentence + " The platform fee is the platform-fee swap model's own floored fee, grossed up exactly; a real interface rounding its fee up, or charging a minimum, would take more, and as a platform rate approaches 100% the grossed-up total grows without bound — a rate that large is a warning, not a price. Network and priority fees, and any fee an interface charges on the output side or as a flat amount, are not modelled. This page executes nothing: no wallet connects here and no fee is taken by using this model. A platform-fee exact-out swap model, not live pool data. Not financial advice.";
         document.getElementById("pfx-total").value = res.amountIn;
         document.getElementById("pfx-feeamt").value = res.platformFeeAmount;
         document.getElementById("pfx-net").value = res.netAmountIn;
