@@ -9797,8 +9797,156 @@ function referralNetRevenue(dailyVolumeStr, platformFeeBps, referralShareBps, da
   return result;
 }
 
+/* ---------- 119 · Referral fee-share tier comparison model ---------- */
+/* The interface fee-tier comparison model (tool 114) ranks two
+   disclosed platform rates by the fee each earns, and the
+   referral fee-share revenue estimator (tool 117) splits ONE
+   rate's fee between a referrer and the builder over time. This
+   joins the two questions the way a builder choosing between
+   two referral offers actually faces them: each tier here is a
+   rate AND a referrer share AND the daily volume expected at
+   that pairing, and the tiers are ranked by what the BUILDER
+   KEEPS after the split — not by the fee the tier collects,
+   because the two rankings can disagree: a tier can collect
+   more fee overall and still leave its builder less, once the
+   referrer's share of the larger fee is paid. Each tier's fee
+   and split are tool 117's own floored arithmetic verbatim —
+   the day's fee is floor(V · p / 10000), the referrer's cut is
+   floor(fee · share / 10000), the builder keeps the remainder,
+   so the two cuts sum exactly to the fee — and the tests assert
+   each tier against tool 117 itself. The period figures are
+   the daily figures carried over the period the same way tool
+   117 carries them (the period builder cut is the period fee
+   less the period referrer cut, the remainder convention). The
+   winner field names the tier from the daily BUILDER cuts —
+   which tier wins is NOT determined by which rate is higher,
+   which share is larger, or which fee is bigger: any prose
+   about the winner must read the two builder cuts themselves,
+   and must keep the gross ranking (the diffDailyFee field)
+   apart from the builder ranking, because the headline case
+   below is exactly the case where they point opposite ways.
+   The two break-even volumes restate the comparison in the
+   builder's terms: the smallest daily volume at tier B's rate
+   and share whose builder cut reaches tier A's daily builder
+   cut. The builder's cut of a day's fee F is
+   F − floor(F · share / 10000), exactly
+   ceil(F · (10000 − share) / 10000), so the smallest fee that
+   reaches a target builder cut C is
+   floor((C − 1) · 10000 / (10000 − share)) + 1 and the
+   smallest volume whose floored fee reaches it is that fee
+   grossed back up through the rate, ceil(fee · 10000 / p) —
+   one smallest unit of volume less leaves the builder strictly
+   short (asserted in the tests, measured through tool 117's
+   own builder cut). The closed form was verified against a
+   brute-force search before it was shipped. Edges are
+   reported, not hidden: when the other tier's builder cut is
+   exactly zero the break-even volume is exactly zero, because
+   there is nothing to match; and a tier whose rate is zero
+   earns no fee at any volume, while a tier whose share is
+   100% keeps no builder cut at any volume — with a positive
+   target either cause leaves NO break-even volume, the field
+   is null, and the handler names which cause applies (or
+   both). Headline: tier A charges 25 bps on 100,000 of volume
+   a day with no referrer, collecting a fee of 250 that its
+   builder keeps whole; tier B charges 50 bps on 80,000 a day
+   with 50% of the fee to the referrer, collecting MORE fee —
+   400 a day, split 200 / 200 — yet its builder keeps 50 a day
+   LESS than tier A's (6,000 against 7,500 over 30 days). Tier
+   B would need 99,999.9999998 of daily volume at its own rate
+   and share to match tier A's builder cut, while tier A needs
+   just 80,000 a day at its own to match tier B's. At a 0%
+   share on both tiers the builder cuts are tool 114's own
+   revenues verbatim (asserted in the tests). The volumes are
+   supplied scenarios, never derived: no elasticity formula
+   here pretends to know how volume answers a rate or a share
+   change, and each tier is held constant across the period;
+   growth, decline, refunds, failed trades and volume served
+   at a different rate or share, or fee-free, are not modelled
+   — supply each tier's fee-bearing volume. Aggregating
+   carries the usual honest consequence: a real interface
+   taking its fee trade by trade floors EVERY trade, so the
+   fee it collects, and therefore both cuts of it, are never
+   more than these figures and usually a little less on a day
+   of many small trades; this model is the ceiling, stated as
+   such. The volumes are in one unit of value — the user's to
+   choose — and both tiers use the same unit, or the
+   comparison means nothing. Model only: this page executes
+   nothing, connects no wallet and collects no fee; on an
+   interface I build, whichever tier is chosen is the
+   disclosed one from the platform-fee tools, the builder's
+   cut goes to my own SOL fee wallet — the address in the
+   support section below — and any referrer's cut goes to that
+   referrer's own wallet, both labelled before any trade. Not
+   financial advice. */
+function referralTierCompare(dailyVolumeAStr, platformFeeABps, referralShareABps, dailyVolumeBStr, platformFeeBBps, referralShareBBps, daysStr) {
+  var raw = [dailyVolumeAStr, platformFeeABps, referralShareABps, dailyVolumeBStr, platformFeeBBps, referralShareBBps, daysStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var volA = parseScaled(dailyVolumeAStr), volB = parseScaled(dailyVolumeBStr), days = parseScaled(daysStr);
+  var feeA = Number(platformFeeABps), feeB = Number(platformFeeBBps);
+  var shareA = Number(referralShareABps), shareB = Number(referralShareBBps);
+  if (volA === null || volB === null || days === null) return null;
+  if (volA <= 0n || volB <= 0n || days <= 0n || days > 36500n * SCALE) return null;
+  if (!Number.isInteger(feeA) || feeA < 0 || feeA > 9999) return null;
+  if (!Number.isInteger(feeB) || feeB < 0 || feeB > 9999) return null;
+  if (!Number.isInteger(shareA) || shareA < 0 || shareA > 10000) return null;
+  if (!Number.isInteger(shareB) || shareB < 0 || shareB > 10000) return null;
+  function signed(n) { return n < 0n ? "-" + formatScaled(-n) : formatScaled(n); }
+  function tierOf(vol, fee, share) {
+    var feeAmt = vol * BigInt(fee) / 10000n;
+    var referral = feeAmt * BigInt(share) / 10000n;
+    return { feeAmt: feeAmt, referral: referral, builder: feeAmt - referral };
+  }
+  function breakEven(targetBuilder, fee, share) {
+    if (targetBuilder === 0n) return "0";
+    if (fee === 0 || share === 10000) return null;
+    var feeNeeded = (targetBuilder - 1n) * 10000n / (10000n - BigInt(share)) + 1n;
+    return formatScaled((feeNeeded * 10000n + BigInt(fee) - 1n) / BigInt(fee));
+  }
+  var a = tierOf(volA, feeA, shareA), b = tierOf(volB, feeB, shareB);
+  var periodFeeA = a.feeAmt * days / SCALE, periodFeeB = b.feeAmt * days / SCALE;
+  var periodReferralA = a.referral * days / SCALE, periodReferralB = b.referral * days / SCALE;
+  var periodBuilderA = periodFeeA - periodReferralA, periodBuilderB = periodFeeB - periodReferralB;
+  var result = {
+    dailyVolumeA: formatScaled(volA),
+    platformFeeAPct: feeA / 100,
+    referralShareAPct: shareA / 100,
+    builderShareAPct: (10000 - shareA) / 100,
+    dailyFeeA: formatScaled(a.feeAmt),
+    dailyReferralA: formatScaled(a.referral),
+    dailyBuilderA: formatScaled(a.builder),
+    periodFeeA: formatScaled(periodFeeA),
+    periodReferralA: formatScaled(periodReferralA),
+    periodBuilderA: formatScaled(periodBuilderA),
+    dailyVolumeB: formatScaled(volB),
+    platformFeeBPct: feeB / 100,
+    referralShareBPct: shareB / 100,
+    builderShareBPct: (10000 - shareB) / 100,
+    dailyFeeB: formatScaled(b.feeAmt),
+    dailyReferralB: formatScaled(b.referral),
+    dailyBuilderB: formatScaled(b.builder),
+    periodFeeB: formatScaled(periodFeeB),
+    periodReferralB: formatScaled(periodReferralB),
+    periodBuilderB: formatScaled(periodBuilderB),
+    days: scaledToNumber(days),
+    diffDailyFee: signed(b.feeAmt - a.feeAmt),
+    diffDailyBuilder: signed(b.builder - a.builder),
+    diffPeriodBuilder: signed(periodBuilderB - periodBuilderA),
+    winner: b.builder > a.builder ? "B" : (a.builder > b.builder ? "A" : "tie"),
+    grossWinner: b.feeAmt > a.feeAmt ? "B" : (a.feeAmt > b.feeAmt ? "A" : "tie"),
+    breakEvenVolumeB: breakEven(a.builder, feeB, shareB),
+    breakEvenVolumeA: breakEven(b.builder, feeA, shareA)
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, interfaceFeeRevenue, feeTierCompare, referralFeeSwap, referralFeeSwapExactOut, referralFeeRevenue, referralNetRevenue, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, interfaceFeeRevenue, feeTierCompare, referralFeeSwap, referralFeeSwapExactOut, referralFeeRevenue, referralNetRevenue, referralTierCompare, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -13800,6 +13948,90 @@ if (typeof document !== "undefined") {
         document.getElementById("rnet-net").value = res.netBuilder;
         document.getElementById("rnet-breakeven").value = res.breakEvenDailyVolume === null ? "no break-even volume" : res.breakEvenDailyVolume;
         document.getElementById("rnet-annualnet").value = res.annualNetRunRate;
+      }
+    });
+
+    document.getElementById("rtier-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = referralTierCompare(
+        document.getElementById("rtier-vola").value,
+        document.getElementById("rtier-feea").value,
+        document.getElementById("rtier-sharea").value,
+        document.getElementById("rtier-volb").value,
+        document.getElementById("rtier-feeb").value,
+        document.getElementById("rtier-shareb").value,
+        document.getElementById("rtier-days").value
+      );
+      var out = document.getElementById("rtier-result");
+      if (res === null) {
+        out.textContent = "Enter a positive expected daily volume for each tier (up to 9 decimal places, in the same unit of value for both), a platform fee for each tier in whole basis points from 0 to 9999 (25 = 0.25%, 50 = 0.5%), a referrer share of the platform fee for each tier in whole basis points of the fee from 0 to 10000 (2500 = 25% of the fee), and a positive period of at most 36500 days.";
+        document.getElementById("rtier-builder-a").value = "";
+        document.getElementById("rtier-builder-b").value = "";
+        document.getElementById("rtier-period-a").value = "";
+        document.getElementById("rtier-period-b").value = "";
+        document.getElementById("rtier-diff").value = "";
+        document.getElementById("rtier-be-b").value = "";
+        document.getElementById("rtier-be-a").value = "";
+      } else {
+        /* The winner sentence branches on the builder winner AND
+           on the gross ranking, read from their own fields: the
+           two can point opposite ways — a tier can collect more
+           platform fee overall and still leave its builder with
+           less once the referrer's share of the larger fee is
+           paid — so neither ranking may be inferred from the
+           other, from the rates, or from the shares. The builder
+           difference is quoted as a positive amount in the
+           winning direction. */
+        var absDiff = res.diffDailyBuilder.charAt(0) === "-" ? res.diffDailyBuilder.slice(1) : res.diffDailyBuilder;
+        var absDiffPeriod = res.diffPeriodBuilder.charAt(0) === "-" ? res.diffPeriodBuilder.slice(1) : res.diffPeriodBuilder;
+        var grossClause;
+        if (res.winner === "tie") {
+          grossClause = "";
+        } else if (res.grossWinner === res.winner) {
+          grossClause = " The same tier also collects more platform fee overall (" + res.dailyFeeA + " a day at tier A against " + res.dailyFeeB + " at tier B, before either split), so the gross ranking and the builder ranking agree here.";
+        } else if (res.grossWinner === "tie") {
+          grossClause = " The two tiers collect exactly the same platform fee overall (" + res.dailyFeeA + " a day each, before either split), so the whole builder difference comes from the shares: the tier keeping the larger share of the same fee keeps more.";
+        } else {
+          grossClause = " Note the rankings disagree: tier " + res.grossWinner + " collects more platform fee overall (" + res.dailyFeeA + " a day at tier A against " + res.dailyFeeB + " at tier B, before either split), but its referrer's share of that larger fee leaves its builder with less — the split, not the size of the fee, decides what the builder keeps here.";
+        }
+        var winnerSentence;
+        if (res.winner === "B") {
+          winnerSentence = "For the builder, tier B keeps more: " + absDiff + " a day more than tier A, " + absDiffPeriod + " more over the period." + grossClause;
+        } else if (res.winner === "A") {
+          winnerSentence = "For the builder, tier A keeps more: " + absDiff + " a day more than tier B, " + absDiffPeriod + " more over the period." + grossClause;
+        } else {
+          winnerSentence = "For the builder, the two tiers keep exactly the same: the builder difference is 0 a day and 0 over the period, so on the builder's cut alone there is nothing to choose between them — the choice then rests on what each rate and share does to the traders and referrers living with it, which this model does not score.";
+        }
+        /* Each break-even sentence names the exact cause when
+           there is no break-even volume for that tier: a zero
+           rate earns no fee at any volume, a 100% share leaves
+           its builder nothing at any volume, and the two are NOT
+           merged when both apply to that tier. */
+        function beSentence(letter, be, feePct, sharePct, otherBuilder, otherLetter) {
+          if (be === null && feePct === 0 && sharePct === 100) {
+            return "Tier " + letter + " has no break-even volume: its disclosed rate is 0%, so no volume earns a fee at all, and its referrer's share is 100%, so its builder would keep nothing of a fee in any case — its builder's cut can never reach tier " + otherLetter + "'s " + otherBuilder + " a day.";
+          }
+          if (be === null && feePct === 0) {
+            return "Tier " + letter + " has no break-even volume: at a disclosed rate of 0% its fee is 0 at any volume, so its builder's cut can never reach tier " + otherLetter + "'s " + otherBuilder + " a day, however large the flow — there is no catch-up volume, and the model says so rather than inventing one.";
+          }
+          if (be === null) {
+            return "Tier " + letter + " has no break-even volume: at a referrer share of 100% its builder keeps nothing at any volume, so its builder's cut can never reach tier " + otherLetter + "'s " + otherBuilder + " a day — there is no catch-up volume in that direction.";
+          }
+          if (be === "0") {
+            return "Tier " + letter + " matches tier " + otherLetter + "'s daily builder cut at exactly 0 of daily volume, because tier " + otherLetter + "'s daily builder cut is 0 — there is nothing to match.";
+          }
+          return "Tier " + letter + " matches tier " + otherLetter + "'s daily builder cut at " + be + " of daily volume — the smallest daily volume whose builder cut at tier " + letter + "'s rate and share reaches tier " + otherLetter + "'s; one smallest unit less leaves its builder strictly short.";
+        }
+        var beBSentence = beSentence("B", res.breakEvenVolumeB, res.platformFeeBPct, res.referralShareBPct, res.dailyBuilderA, "A");
+        var beASentence = beSentence("A", res.breakEvenVolumeA, res.platformFeeAPct, res.referralShareAPct, res.dailyBuilderB, "B");
+        out.textContent = "Model output: tier A — a disclosed platform fee of " + fmt(res.platformFeeAPct, 4) + "% on " + res.dailyVolumeA + " of volume a day, with " + fmt(res.referralShareAPct, 4) + "% of the fee to its referrer — collects " + res.dailyFeeA + " a day, split " + res.dailyReferralA + " to the referrer and " + res.dailyBuilderA + " kept by the builder (" + res.periodBuilderA + " over " + fmt(res.days, 4) + " day(s)). Tier B — " + fmt(res.platformFeeBPct, 4) + "% on " + res.dailyVolumeB + " a day, with " + fmt(res.referralShareBPct, 4) + "% of the fee to its referrer — collects " + res.dailyFeeB + " a day, split " + res.dailyReferralB + " to the referrer and " + res.dailyBuilderB + " kept by the builder (" + res.periodBuilderB + " over the period). " + winnerSentence + " " + beBSentence + " " + beASentence + " Each share is a share of that tier's platform fee, not of its volume. Both volumes are scenarios you supplied: nothing here predicts how volume answers a rate or a share change, no elasticity, growth or decline is assumed, and each tier's volume, rate and share are held constant across the period, with refunds and failed trades not modelled. Each day's fee is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, with the referrer's cut rounded down and the builder keeping the remainder, so a real interface taking its fee trade by trade collects never more than these figures, and usually a little less on a day of many small trades. On an interface I build, whichever tier is chosen is the disclosed one, labelled before any trade, with the builder's cut taken to my own fee wallet — the SOL address in the support section below — and any referrer's cut to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by using this model. A referral fee-share tier comparison model, not live data, not a forecast. Not financial advice.";
+        document.getElementById("rtier-builder-a").value = res.dailyBuilderA;
+        document.getElementById("rtier-builder-b").value = res.dailyBuilderB;
+        document.getElementById("rtier-period-a").value = res.periodBuilderA;
+        document.getElementById("rtier-period-b").value = res.periodBuilderB;
+        document.getElementById("rtier-diff").value = res.diffDailyBuilder;
+        document.getElementById("rtier-be-b").value = res.breakEvenVolumeB === null ? "no break-even volume" : res.breakEvenVolumeB;
+        document.getElementById("rtier-be-a").value = res.breakEvenVolumeA === null ? "no break-even volume" : res.breakEvenVolumeA;
       }
     });
 
