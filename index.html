@@ -2819,6 +2819,39 @@
         <button type="submit" class="btn primary">Model the split platform fee</button>
         <p id="ref-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="rfx-calc">
+        <h3>116 · Referral fee-share exact-out swap model</h3>
+        <p>The referral fee-share swap model splits a disclosed platform fee when the amount you pay in is fixed. This one splits the same fee when what you must receive is fixed instead: you name an exact amount out, and the model prices the total you pay in — platform fee included, grossed up exactly the way the platform-fee exact-out swap model prices it — then divides that fee between a referrer who brought you and the builder, in the token you pay. On the headline numbers — balanced 1,000 / 1,000 reserves, exactly 90 to receive, a 0.25% pool fee and a disclosed 0.5% platform fee with 25% of the fee to the referrer — the total is 99.647207367: the fee is 0.498236036, the referrer takes 0.124559009, the builder keeps 0.373677027, 99.148971331 reaches the pool and the pool pays exactly 90. The split never changes what you pay to hit the target: the total and the payout are the platform-fee exact-out model's own at every share, because the split divides the fee and never adds a second charge on top of it. The share is a share of the platform fee, not of the trade: 25% here means a quarter of the 0.5% fee, an effective ≈0.125% of the total you pay in — never 25% of the trade itself. The division is exact: the referrer's cut is the fee times the share, rounded down to the smallest unit, and the builder keeps the remainder, so the two cuts always sum exactly to the fee. That flooring is shown honestly at dust scale, where the referrer's cut can round to zero while the builder keeps the whole tiny fee; a 0% share pays the referrer nothing by design and a 100% share leaves the builder nothing, and the model says each plainly. The exact-out edges stay visible too: the amount the pool needs is rounded up to the smallest unit, so the pool can pay a few of those units more than your target — the model shows that excess rather than rounding it away — and the grossed-up total grows without bound as a platform rate approaches 100%, so a rate that large reads as the warning it is. On an interface I build, the builder's cut is routed to my own fee wallet — the SOL address in the support section below — and the referrer's cut goes to that referrer's own wallet, both labelled before any trade. What is not modelled: network and priority fees, and any fee an interface charges on the output side or as a flat amount. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your pool, target, fees and share, not live pool data, not a live quote, not financial advice.</p>
+        <label for="rfx-rin">Pool reserve of the token you pay (model)</label>
+        <input id="rfx-rin" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="rfx-rout">Pool reserve of the token you receive (model)</label>
+        <input id="rfx-rout" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="rfx-aout">Exact amount you want to receive</label>
+        <input id="rfx-aout" inputmode="decimal" placeholder="e.g. 90" autocomplete="off">
+        <label for="rfx-poolfee">Pool fee (basis points, 25 = 0.25%)</label>
+        <input id="rfx-poolfee" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="rfx-platfee">Platform fee charged by the interface (basis points, 50 = 0.5%)</label>
+        <input id="rfx-platfee" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="rfx-share">Referrer share of the platform fee (basis points of the fee, 2500 = 25% of the fee)</label>
+        <input id="rfx-share" inputmode="numeric" placeholder="e.g. 2500" autocomplete="off">
+        <label for="rfx-total">Total you pay in, platform fee included (model)</label>
+        <input id="rfx-total" readonly placeholder="—" autocomplete="off">
+        <label for="rfx-feeamt">Platform fee taken (model)</label>
+        <input id="rfx-feeamt" readonly placeholder="—" autocomplete="off">
+        <label for="rfx-refamt">Referrer cut of the platform fee (model)</label>
+        <input id="rfx-refamt" readonly placeholder="—" autocomplete="off">
+        <label for="rfx-buildamt">Builder cut of the platform fee (model)</label>
+        <input id="rfx-buildamt" readonly placeholder="—" autocomplete="off">
+        <label for="rfx-net">Amount reaching the pool after the platform fee (model)</label>
+        <input id="rfx-net" readonly placeholder="—" autocomplete="off">
+        <label for="rfx-out">Amount you receive (model)</label>
+        <input id="rfx-out" readonly placeholder="—" autocomplete="off">
+        <label for="rfx-excess">Amount above your target, at the smallest unit (model)</label>
+        <input id="rfx-excess" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Model the split platform fee on my exact amount out</button>
+        <p id="rfx-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2846,6 +2879,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=156"></script>
+<script src="app.js?v=157"></script>
 </body>
 </html>

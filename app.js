@@ -9485,8 +9485,93 @@ function referralFeeSwap(reserveInStr, reserveOutStr, amountInStr, poolFeeBps, p
   return result;
 }
 
+/* ---------- 116 · Referral fee-share exact-out swap model (constant-product pools) ---------- */
+/* The referral fee-share swap model splits a disclosed platform
+   fee when the amount paid in is fixed. This is its exact-out
+   mirror: the amount received is fixed instead, and the total
+   paid in — platform fee included — is whatever the platform-fee
+   exact-out swap model charges for that target, grossed up
+   exactly. The split then divides THAT fee, and nothing else
+   changes: this model composes the platform-fee exact-out model
+   verbatim — total, net, payout and excess are its own — and
+   divides its floored fee exactly as the referral fee-share
+   model divides the exact-in fee: the referrer's cut is
+   floor(fee · share / 10000) at 9 dp and the builder keeps the
+   remainder, so the two cuts always sum EXACTLY to the fee, with
+   the flooring remainder going to the builder. Headline:
+   balanced 1,000/1,000 reserves, a target of exactly 90 out, a
+   25 bps pool fee and a disclosed 50 bps platform fee, with 25%
+   of the fee to the referrer — the total is 99.647207367, the
+   fee is 0.498236036, the referrer takes 0.124559009, the
+   builder keeps 0.373677027, 99.148971331 reaches the pool and
+   the pool pays exactly 90. The split changes who receives the
+   fee, never what the trader pays to hit the target: the total
+   and the payout are the platform-fee exact-out model's,
+   unchanged at every share. The exact-out edges carry over
+   honestly. The payout can run a few smallest units past the
+   target (the exact-out charge is rounded up) and that excess
+   is reported, never rounded away; and the grossed-up total
+   grows without bound as the platform rate approaches 100% —
+   a rate that large is a warning, not a price. The split's own
+   edges stay honest too: at dust scale the referrer's floored
+   cut can be exactly zero while the builder keeps the whole
+   tiny fee, a 0% share pays the referrer nothing by design, a
+   100% share leaves the builder nothing, and a platform fee
+   that floors to zero leaves nothing to split at all. The
+   share is a share OF THE PLATFORM FEE, not of the trade: 25%
+   here means a quarter of the 0.5% fee (an effective
+   ≈0.125% of the total paid in), never 25% of the trade
+   itself. Model only: your pool, target, fees and share, one
+   constant-product pool, no network or priority fees, no
+   output-side or flat platform charges; not live pool data,
+   not a live quote, not financial advice. This page executes
+   nothing — no wallet connects here and no fee is taken by
+   using the model. On an interface I build, the builder's cut
+   goes to my own SOL fee wallet — the address in the support
+   section below — and any referrer's cut goes to that
+   referrer's own wallet, both labelled before any trade. */
+function referralFeeSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, poolFeeBps, platformFeeBps, referralShareBps) {
+  var raw = [reserveInStr, reserveOutStr, amountOutStr, poolFeeBps, platformFeeBps, referralShareBps];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var share = Number(referralShareBps);
+  if (!Number.isInteger(share) || share < 0 || share > 10000) return null;
+  var leg = platformFeeSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, poolFeeBps, platformFeeBps);
+  if (leg === null) return null;
+  var feeScaled = parseScaled(leg.platformFeeAmount);
+  var referral = feeScaled * BigInt(share) / 10000n;
+  var builder = feeScaled - referral;
+  var result = {
+    amountIn: leg.amountIn,
+    targetOut: leg.targetOut,
+    amountOut: leg.amountOut,
+    excessOut: leg.excessOut,
+    platformFeeAmount: leg.platformFeeAmount,
+    referralAmount: formatScaled(referral),
+    builderAmount: formatScaled(builder),
+    netAmountIn: leg.netAmountIn,
+    noPlatformFeeIn: leg.noPlatformFeeIn,
+    extraIn: leg.extraIn,
+    extraPct: leg.extraPct,
+    feeSharePct: leg.feeSharePct,
+    spotPrice: leg.spotPrice,
+    effectivePrice: leg.effectivePrice,
+    priceImpactPct: leg.priceImpactPct,
+    poolFeePct: leg.poolFeePct,
+    platformFeePct: leg.platformFeePct,
+    referralSharePct: share / 100,
+    builderSharePct: (10000 - share) / 100
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, interfaceFeeRevenue, feeTierCompare, referralFeeSwap, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, interfaceFeeRevenue, feeTierCompare, referralFeeSwap, referralFeeSwapExactOut, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -13257,6 +13342,84 @@ if (typeof document !== "undefined") {
         document.getElementById("ref-net").value = res.netAmountIn;
         document.getElementById("ref-out").value = res.out;
         document.getElementById("ref-cost").value = res.costOut;
+      }
+    });
+
+    document.getElementById("rfx-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = referralFeeSwapExactOut(
+        document.getElementById("rfx-rin").value,
+        document.getElementById("rfx-rout").value,
+        document.getElementById("rfx-aout").value,
+        document.getElementById("rfx-poolfee").value,
+        document.getElementById("rfx-platfee").value,
+        document.getElementById("rfx-share").value
+      );
+      var out = document.getElementById("rfx-result");
+      if (res === null) {
+        out.textContent = "Enter positive reserves for both tokens and a positive target amount to receive (up to 9 decimal places), smaller than the pool's reserve of the token you receive — a constant-product pool can never pay out its whole reserve — plus a pool fee and a platform fee, each in whole basis points from 0 to 9999 (25 = 0.25%), and a referrer share of the platform fee in whole basis points from 0 to 10000 (2500 = 25% of the fee).";
+        document.getElementById("rfx-total").value = "";
+        document.getElementById("rfx-feeamt").value = "";
+        document.getElementById("rfx-refamt").value = "";
+        document.getElementById("rfx-buildamt").value = "";
+        document.getElementById("rfx-net").value = "";
+        document.getElementById("rfx-out").value = "";
+        document.getElementById("rfx-excess").value = "";
+      } else {
+        /* The split sentence branches on the EXACT amounts, never
+           on the headline share: the referrer's floored cut can be
+           zero at dust scale even at a large share, a zero share
+           pays nothing by design, a 100% share leaves the builder
+           nothing, and a zero platform fee leaves nothing to split
+           at all — each case is stated as what it is. A zero fee
+           itself has two different causes and they are NOT merged:
+           a disclosed rate of 0% charges nothing by design, while
+           a positive rate can floor to zero at a dust target size.
+           The effective-rate sentence below is likewise computed
+           from the exact scaled cut and total paid in, never from
+           the headline rates multiplied together. */
+        var splitSentence;
+        if (res.platformFeeAmount === "0" && res.platformFeePct === 0) {
+          splitSentence = "No platform fee is charged here — the disclosed rate is 0% — so there is nothing to split: the referrer takes 0 and the builder keeps 0.";
+        } else if (res.platformFeeAmount === "0") {
+          splitSentence = "The platform fee itself is 0 at this target size — the disclosed rate floors to zero at the smallest unit — so there is nothing to split: the referrer takes 0 and the builder keeps 0.";
+        } else if (res.referralAmount === "0" && res.referralSharePct === 0) {
+          splitSentence = "At a referrer share of 0% the referrer takes nothing by design, and the builder keeps the whole fee of " + res.platformFeeAmount + ".";
+        } else if (res.referralAmount === "0") {
+          splitSentence = "The referrer's cut floors to zero at this target size: at a " + fmt(res.referralSharePct, 4) + "% share of a fee of only " + res.platformFeeAmount + ", the floored cut is 0 and the builder keeps the whole fee — a real interface rounding the referrer's cut up, or paying a minimum, would divide it differently.";
+        } else if (res.builderAmount === "0") {
+          splitSentence = "At a referrer share of 100% the referrer takes the whole fee of " + res.platformFeeAmount + " and the builder keeps nothing.";
+        } else {
+          splitSentence = "Of that fee, the referrer takes " + res.referralAmount + " (a " + fmt(res.referralSharePct, 4) + "% share of the fee) and the builder keeps " + res.builderAmount + " (the remaining " + fmt(res.builderSharePct, 4) + "%); the two cuts sum exactly to the fee, with the smallest-unit flooring remainder going to the builder.";
+        }
+        /* The payout sentence branches on the exact excess: the
+           exact-out charge is rounded up to the smallest unit, so
+           the pool can pay a few of those units past the target —
+           prose must say whether it did, never round it away. */
+        var excessSentence;
+        if (res.excessOut === "0") {
+          excessSentence = "That is exactly your target at the smallest unit the model can state.";
+        } else {
+          excessSentence = "That is " + res.excessOut + " more than your target at the smallest unit the model can state: the amount the pool needs is rounded up to that unit, and the pool's own maths can pay a few units past a target — the excess is shown here, not rounded away.";
+        }
+        /* The referrer's effective rate from the exact scaled
+           amounts (the bounded-ratio rescale of the platform-fee
+           tools: converting both BigInts first overflows past
+           ~1.8e299 tokens, so there the ratio is taken at fixed
+           scale). */
+        var refScaled = parseScaled(res.referralAmount), totalScaled = parseScaled(res.amountIn);
+        var effRefPct = Number(refScaled) / Number(totalScaled) * 100;
+        if (!Number.isFinite(Number(refScaled)) || !Number.isFinite(Number(totalScaled))) {
+          effRefPct = Number(refScaled * (10n ** 18n) / totalScaled) / 1e16;
+        }
+        out.textContent = "Model output: to receive your target of " + res.targetOut + " you pay " + res.amountIn + " in total (spot " + fmt(res.spotPrice, 6) + " out per in, pool fee " + fmt(res.poolFeePct, 4) + "%). Of that total, " + res.platformFeeAmount + " is the platform fee — a disclosed " + fmt(res.platformFeePct, 4) + "% of everything you pay in, charged in the token you pay — and " + res.netAmountIn + " reaches the pool, exactly what the exact-out swap model charges for this target with no platform fee at all. " + splitSentence + " The share is a share of the platform fee, not of your trade: the referrer's cut is an effective " + fmt(effRefPct, 4) + "% of the total you pay in, and the split never changes what you pay to hit the target — the pool pays " + res.amountOut + " at a modelled price impact of " + fmt(res.priceImpactPct, 4) + "% measured against everything you paid in, platform fee included. " + excessSentence + " On an interface I build, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and the referrer's cut goes to that referrer's own wallet, both labelled before any trade. Network and priority fees, and any fee an interface charges on the output side or as a flat amount, are not modelled. This page executes nothing: no wallet connects here and no fee is taken by using this model. A referral fee-share exact-out swap model, not live pool data. Not financial advice.";
+        document.getElementById("rfx-total").value = res.amountIn;
+        document.getElementById("rfx-feeamt").value = res.platformFeeAmount;
+        document.getElementById("rfx-refamt").value = res.referralAmount;
+        document.getElementById("rfx-buildamt").value = res.builderAmount;
+        document.getElementById("rfx-net").value = res.netAmountIn;
+        document.getElementById("rfx-out").value = res.amountOut;
+        document.getElementById("rfx-excess").value = res.excessOut;
       }
     });
 
