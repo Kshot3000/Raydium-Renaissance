@@ -9570,8 +9570,111 @@ function referralFeeSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, pool
   return result;
 }
 
+/* ---------- 117 · Referral fee-share revenue estimator ---------- */
+/* The referral fee-share swap models split a disclosed platform
+   fee on ONE trade. This prices the same split as a business
+   over time, the way the interface fee-revenue estimator prices
+   the unsplit fee: on a day whose total volume through an
+   interface is V, the day's platform fee is floor(V · p / 10000)
+   at a rate of p basis points — the fee-revenue estimator's own
+   floored arithmetic, and the tests assert the totals are its
+   figures verbatim at zero operating cost. The split then
+   divides THAT fee exactly as the referral fee-share models
+   divide a single trade's fee: the referrer's cut is
+   floor(fee · share / 10000) at 9 dp and the builder keeps the
+   remainder, so the two cuts sum EXACTLY to the fee at every
+   level the model reports. The period figures are the daily
+   figures times the number of days, floored at the smallest
+   unit (the counting convention of the tools around this
+   one): the period referrer cut is the daily cut carried over
+   the period, and the period builder cut is the remainder of
+   the period fee after it, so the period cuts also sum
+   exactly to the period fee — the remainder convention can
+   leave the builder at most one smallest unit more than
+   flooring the daily builder cut over the period would. The
+   annual figures are the daily figures times 365 — naive
+   annualisation, labelled a run-rate as the fee-revenue
+   estimator labels its own: every future day is assumed to
+   match the one modelled, which no real interface's days do.
+   Headline: 100,000 of daily volume at a disclosed 50 bps
+   platform fee with 25% of the fee to the referrer earns a
+   day's fee of 500, split 125 to the referrer and 375 to the
+   builder; over 30 days the fee is 15,000, split 3,750 /
+   11,250; the naive annual run-rates are 182,500 of fee,
+   45,625 to the referrer and 136,875 to the builder. The
+   split's edges stay honest over time exactly as they are on
+   one trade: a zero platform rate leaves nothing to split at
+   any volume; at dust volume the day's fee itself can floor
+   to zero, or the fee can survive while the referrer's floored
+   cut is exactly zero and the builder keeps the whole tiny
+   fee; a 0% share pays the referrer nothing and a 100% share
+   leaves the builder nothing. The share is a share OF THE
+   PLATFORM FEE, not of the volume: 25% here means a quarter
+   of the 0.5% fee (an effective 0.125% of the day's volume),
+   never 25% of the volume itself. One honest consequence of
+   aggregating carries over from the fee-revenue estimator: a
+   real interface taking its fee trade by trade floors EVERY
+   trade, so the sum it actually collects — and therefore
+   both cuts of it — is never more than this aggregate figure
+   and usually a little less on a day of many small trades;
+   this model is the ceiling, stated as such. Volume, rate
+   and share are all held constant across the period; growth,
+   decline, refunds, failed trades and volume served at a
+   different rate, or fee-free, are not modelled — supply the
+   fee-bearing volume if only part of the flow pays. The
+   volume is in one unit of value — the user's to choose.
+   Model only: a projection of a supplied day, not a
+   forecast and not a promise of income; this page executes
+   nothing, connects no wallet and collects no fee. On an
+   interface I build, the builder's cut goes to my own SOL
+   fee wallet — the address in the support section below —
+   and any referrer's cut goes to that referrer's own wallet,
+   both labelled before any trade. Not financial advice. */
+function referralFeeRevenue(dailyVolumeStr, platformFeeBps, referralShareBps, daysStr) {
+  var raw = [dailyVolumeStr, platformFeeBps, referralShareBps, daysStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var vol = parseScaled(dailyVolumeStr), days = parseScaled(daysStr);
+  var platFee = Number(platformFeeBps), share = Number(referralShareBps);
+  if (vol === null || days === null) return null;
+  if (vol <= 0n || days <= 0n || days > 36500n * SCALE) return null;
+  if (!Number.isInteger(platFee) || platFee < 0 || platFee > 9999) return null;
+  if (!Number.isInteger(share) || share < 0 || share > 10000) return null;
+  var dailyFee = vol * BigInt(platFee) / 10000n;
+  var dailyReferral = dailyFee * BigInt(share) / 10000n;
+  var dailyBuilder = dailyFee - dailyReferral;
+  var periodFee = dailyFee * days / SCALE;
+  var periodReferral = dailyReferral * days / SCALE;
+  var periodBuilder = periodFee - periodReferral;
+  var annualFee = dailyFee * 365n;
+  var annualReferral = dailyReferral * 365n;
+  var annualBuilder = annualFee - annualReferral;
+  var result = {
+    dailyVolume: formatScaled(vol),
+    days: scaledToNumber(days),
+    platformFeePct: platFee / 100,
+    referralSharePct: share / 100,
+    builderSharePct: (10000 - share) / 100,
+    dailyFee: formatScaled(dailyFee),
+    dailyReferral: formatScaled(dailyReferral),
+    dailyBuilder: formatScaled(dailyBuilder),
+    periodFee: formatScaled(periodFee),
+    periodReferral: formatScaled(periodReferral),
+    periodBuilder: formatScaled(periodBuilder),
+    annualFee: formatScaled(annualFee),
+    annualReferral: formatScaled(annualReferral),
+    annualBuilder: formatScaled(annualBuilder)
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, interfaceFeeRevenue, feeTierCompare, referralFeeSwap, referralFeeSwapExactOut, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, interfaceFeeRevenue, feeTierCompare, referralFeeSwap, referralFeeSwapExactOut, referralFeeRevenue, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -13420,6 +13523,75 @@ if (typeof document !== "undefined") {
         document.getElementById("rfx-net").value = res.netAmountIn;
         document.getElementById("rfx-out").value = res.amountOut;
         document.getElementById("rfx-excess").value = res.excessOut;
+      }
+    });
+
+    document.getElementById("rrev-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = referralFeeRevenue(
+        document.getElementById("rrev-volume").value,
+        document.getElementById("rrev-platfee").value,
+        document.getElementById("rrev-share").value,
+        document.getElementById("rrev-days").value
+      );
+      var out = document.getElementById("rrev-result");
+      if (res === null) {
+        out.textContent = "Enter a positive daily volume and a positive period in days (up to 9 decimal places; the period is capped at 36,500 days), a platform fee in whole basis points from 0 to 9999 (50 = 0.5%), and a referrer share of the platform fee in whole basis points from 0 to 10000 (2500 = 25% of the fee).";
+        document.getElementById("rrev-dailyfee").value = "";
+        document.getElementById("rrev-dailyref").value = "";
+        document.getElementById("rrev-dailybuild").value = "";
+        document.getElementById("rrev-periodref").value = "";
+        document.getElementById("rrev-periodbuild").value = "";
+        document.getElementById("rrev-annualref").value = "";
+        document.getElementById("rrev-annualbuild").value = "";
+      } else {
+        /* The split sentence branches on the EXACT daily amounts,
+           never on the headline share: the referrer's floored cut
+           can be zero at dust volume even at a large share, a zero
+           share pays nothing by design, a 100% share leaves the
+           builder nothing, and a zero day's fee leaves nothing to
+           split at all — each case is stated as what it is. A zero
+           fee itself has two different causes and they are NOT
+           merged: a disclosed rate of 0% charges nothing by
+           design, while a positive rate can floor the day's fee
+           to zero at a dust volume. The effective-rate sentence
+           below is likewise computed from the exact scaled daily
+           cut and volume, never from the headline rates
+           multiplied together: at dust volume the nominal product
+           names a percentage the referrer does not actually
+           receive. */
+        var splitSentence;
+        if (res.dailyFee === "0" && res.platformFeePct === 0) {
+          splitSentence = "No platform fee is charged here — the disclosed rate is 0% — so there is nothing to split on any day: the referrer takes 0 and the builder keeps 0.";
+        } else if (res.dailyFee === "0") {
+          splitSentence = "The day's platform fee itself is 0 at this volume — the disclosed rate floors to zero at the smallest unit — so there is nothing to split on any day: the referrer takes 0 and the builder keeps 0.";
+        } else if (res.dailyReferral === "0" && res.referralSharePct === 0) {
+          splitSentence = "At a referrer share of 0% the referrer takes nothing by design, and the builder keeps the whole fee of " + res.dailyFee + " a day.";
+        } else if (res.dailyReferral === "0") {
+          splitSentence = "The referrer's cut floors to zero at this volume: at a " + fmt(res.referralSharePct, 4) + "% share of a day's fee of only " + res.dailyFee + ", the floored cut is 0 and the builder keeps the whole fee — a real interface rounding the referrer's cut up, or paying a minimum, would divide it differently.";
+        } else if (res.dailyBuilder === "0") {
+          splitSentence = "At a referrer share of 100% the referrer takes the whole fee of " + res.dailyFee + " a day and the builder keeps nothing.";
+        } else {
+          splitSentence = "Of that fee, the referrer takes " + res.dailyReferral + " a day (a " + fmt(res.referralSharePct, 4) + "% share of the fee) and the builder keeps " + res.dailyBuilder + " a day (the remaining " + fmt(res.builderSharePct, 4) + "%); the two cuts sum exactly to the fee, with the smallest-unit flooring remainder going to the builder.";
+        }
+        /* The referrer's effective rate from the exact scaled
+           amounts (the bounded-ratio rescale of the referral
+           tools: converting both BigInts first overflows past
+           ~1.8e299 tokens, so there the ratio is taken at fixed
+           scale). */
+        var refScaled = parseScaled(res.dailyReferral), volScaled = parseScaled(res.dailyVolume);
+        var effRefPct = Number(refScaled) / Number(volScaled) * 100;
+        if (!Number.isFinite(Number(refScaled)) || !Number.isFinite(Number(volScaled))) {
+          effRefPct = Number(refScaled * (10n ** 18n) / volScaled) / 1e16;
+        }
+        out.textContent = "Model output: on a day with " + res.dailyVolume + " of fee-bearing volume, the disclosed platform fee of " + fmt(res.platformFeePct, 4) + "% earns " + res.dailyFee + " a day. " + splitSentence + " The share is a share of the platform fee, not of the volume: the referrer's cut is an effective " + fmt(effRefPct, 4) + "% of the day's volume. Over " + fmt(res.days, 4) + " days at that same day, the fee is " + res.periodFee + ": the referrer takes " + res.periodReferral + " and the builder keeps " + res.periodBuilder + ", the two cuts summing exactly to the period fee. The naive annual run-rates — each daily figure times 365, assuming every future day matches this one, which no real interface's days do — are " + res.annualReferral + " a year to the referrer and " + res.annualBuilder + " a year to the builder, out of " + res.annualFee + " of fee. These aggregate figures are ceilings: a real interface taking its fee trade by trade floors every trade, so what it collects, and therefore both cuts, are never more than this and usually a little less on a day of many small trades. On an interface I build, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and the referrer's cut goes to that referrer's own wallet, both labelled before any trade. Volume, rate and share are held constant; growth, decline, refunds and fee-free volume are not modelled. This page executes nothing: no wallet connects here and no fee is taken by using this model. A referral fee-share revenue estimator, not live data, not a forecast. Not financial advice.";
+        document.getElementById("rrev-dailyfee").value = res.dailyFee;
+        document.getElementById("rrev-dailyref").value = res.dailyReferral;
+        document.getElementById("rrev-dailybuild").value = res.dailyBuilder;
+        document.getElementById("rrev-periodref").value = res.periodReferral;
+        document.getElementById("rrev-periodbuild").value = res.periodBuilder;
+        document.getElementById("rrev-annualref").value = res.annualReferral;
+        document.getElementById("rrev-annualbuild").value = res.annualBuilder;
       }
     });
 

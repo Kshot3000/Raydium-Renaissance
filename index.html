@@ -2852,6 +2852,35 @@
         <button type="submit" class="btn primary">Model the split platform fee on my exact amount out</button>
         <p id="rfx-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="rrev-calc">
+        <h3>117 · Referral fee-share revenue estimator</h3>
+        <p>The referral fee-share swap models split a disclosed platform fee on a single trade, and the interface fee-revenue estimator prices that same fee as a business over time when one wallet takes it all. This one prices the split itself over time: on a day when the total volume passing through an interface is V, the day's platform fee is V times the disclosed rate, and that fee is divided between a referrer who brought the traders and the builder — the split divides the fee and never adds a charge on top of the trades that paid it. On the headline numbers — 100,000 of volume a day at a disclosed 0.5% platform fee, with 25% of the fee to the referrer — the day's fee is 500: the referrer takes 125 and the builder keeps 375. Over 30 days the fee is 15,000, split 3,750 to the referrer and 11,250 to the builder, and the naive annual run-rates — each daily figure times 365, assuming every future day matches this one, which no real interface's days do — are 45,625 a year to the referrer and 136,875 to the builder. The share is a share of the platform fee, not of the volume: 25% here means a quarter of the 0.5% fee, an effective 0.125% of the day's volume — never 25% of the volume itself. The division is exact at every level: the referrer's cut is the fee times the share, rounded down to the smallest unit, and the builder keeps the remainder, so the two cuts always sum exactly to the fee. That flooring is shown honestly at dust volume, where the day's fee can round to zero, or the fee can survive while the referrer's cut rounds to zero and the builder keeps the whole tiny fee; a 0% share pays the referrer nothing by design and a 100% share leaves the builder nothing, and the model says each plainly. One honest consequence of working on the day's whole volume: a real interface taking its fee trade by trade rounds every single trade down, so what it actually collects — and therefore both cuts of it — is never more than these figures and usually a little less on a day of many small trades; read them as ceilings, not deposits. Volume, rate and share are all held constant across the period, so growth and decline are not in it; refunds and failed trades are not in it; and volume served at a different rate, or fee-free, is not told apart — enter only the fee-bearing volume if part of the flow pays nothing. The volume is in one unit of value, and the unit is yours to choose. On an interface I build, the builder's cut is routed to my own fee wallet — the SOL address in the support section below — and the referrer's cut goes to that referrer's own wallet, both labelled before any trade. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volume, fee, share and period, not live data, not a forecast, not financial advice.</p>
+        <label for="rrev-volume">Total volume through the interface per day, in your unit of value</label>
+        <input id="rrev-volume" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="rrev-platfee">Platform fee charged by the interface (basis points, 50 = 0.5%)</label>
+        <input id="rrev-platfee" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="rrev-share">Referrer share of the platform fee (basis points of the fee, 2500 = 25% of the fee)</label>
+        <input id="rrev-share" inputmode="numeric" placeholder="e.g. 2500" autocomplete="off">
+        <label for="rrev-days">Period (days)</label>
+        <input id="rrev-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="rrev-dailyfee">Platform fee per day, before the split (model)</label>
+        <input id="rrev-dailyfee" readonly placeholder="—" autocomplete="off">
+        <label for="rrev-dailyref">Referrer cut of the platform fee per day (model)</label>
+        <input id="rrev-dailyref" readonly placeholder="—" autocomplete="off">
+        <label for="rrev-dailybuild">Builder cut of the platform fee per day (model)</label>
+        <input id="rrev-dailybuild" readonly placeholder="—" autocomplete="off">
+        <label for="rrev-periodref">Referrer cut over the period (model)</label>
+        <input id="rrev-periodref" readonly placeholder="—" autocomplete="off">
+        <label for="rrev-periodbuild">Builder cut over the period (model)</label>
+        <input id="rrev-periodbuild" readonly placeholder="—" autocomplete="off">
+        <label for="rrev-annualref">Referrer cut, naive annual run-rate (model)</label>
+        <input id="rrev-annualref" readonly placeholder="—" autocomplete="off">
+        <label for="rrev-annualbuild">Builder cut, naive annual run-rate (model)</label>
+        <input id="rrev-annualbuild" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Estimate the split fee revenue</button>
+        <p id="rrev-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2879,6 +2908,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=157"></script>
+<script src="app.js?v=158"></script>
 </body>
 </html>
