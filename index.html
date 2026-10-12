@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred twelve</label>
+      <label for="tool-q">Find a tool among the one hundred thirteen</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred twelve tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred thirteen tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred twelve.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred thirteen.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2734,6 +2734,29 @@
         <button type="submit" class="btn primary">Price my exact amount out, platform fee included</button>
         <p id="pfx-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="rev-calc">
+        <h3>113 · Interface fee-revenue estimator</h3>
+        <p>The two platform-fee models above price the cut on a single trade. This one prices the same disclosed cut as a business over time: on a day when the total volume passing through an interface is V, a platform fee of p% of that volume earns V × p% that day — the same fee arithmetic, applied once to the day's whole volume. On 100,000 of volume a day at a 0.5% platform fee, that is 500 a day and 15,000 over 30 days; against a daily operating cost of 100 (3,000 over the period) the period nets 12,000, the interface breaks even at 20,000 of volume a day, and the naive annual run-rate — the daily revenue times 365, assuming every future day matches this one, which no real interface's days do — is 182,500. One honest consequence of working on the day's whole volume: a real interface taking its fee trade by trade rounds every single trade down to the smallest unit, so what it actually collects is never more than this figure and usually a little less on a day of many small trades — read this as the ceiling, not the deposit. On an interface I build, the fee this estimates is that same disclosed cut, taken to my own fee wallet — the SOL address in the support section below — and labelled in the interface before any trade, never added after. What is not modelled: volume, the rate and costs are all held constant across the period, so growth and decline are not in it; refunds and failed trades are not in it; and volume served at a different rate, or fee-free, is not told apart — enter only the fee-bearing volume if part of the flow pays nothing. The volume and the cost are in the same unit of value, and the unit is yours to choose. This is a projection of a day you supplied, not a forecast and not a promise of income. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volume, fee, period and costs, not live data, not financial advice.</p>
+        <label for="rev-volume">Total volume through the interface per day, in your unit of value</label>
+        <input id="rev-volume" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="rev-fee">Platform fee charged by the interface (basis points, 50 = 0.5%)</label>
+        <input id="rev-fee" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="rev-days">Period (days)</label>
+        <input id="rev-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="rev-cost">Operating cost per day, in the same unit of value as the volume</label>
+        <input id="rev-cost" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="rev-daily">Platform-fee revenue per day (model)</label>
+        <input id="rev-daily" readonly placeholder="—" autocomplete="off">
+        <label for="rev-period">Platform-fee revenue over the period (model)</label>
+        <input id="rev-period" readonly placeholder="—" autocomplete="off">
+        <label for="rev-net">Net over the period after operating costs (model)</label>
+        <input id="rev-net" readonly placeholder="—" autocomplete="off">
+        <label for="rev-breakeven">Daily volume needed to break even (model)</label>
+        <input id="rev-breakeven" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Estimate the interface's fee revenue</button>
+        <p id="rev-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2761,6 +2784,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=151"></script>
+<script src="app.js?v=152"></script>
 </body>
 </html>

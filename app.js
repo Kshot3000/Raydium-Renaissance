@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus one hundred twelve fully
+/* Raydium Renaissance hub logic: project filtering plus one hundred thirteen fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -82,8 +82,9 @@
    swap model, a three-hop exact-out
    swap model, a route-length
    comparison model, a platform-fee
-   swap model, and a platform-fee
-   exact-out swap model.
+   swap model, a platform-fee
+   exact-out swap model, and an
+   interface fee-revenue estimator.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -9224,8 +9225,93 @@ function platformFeeSwapExactOut(reserveInStr, reserveOutStr, amountOutStr, pool
   return result;
 }
 
+/* ---------- 113 · Interface fee-revenue estimator ---------- */
+/* Tools 111 and 112 price the platform fee on ONE swap. This prices
+   the same disclosed fee as a business over time: an interface that
+   takes the platform-fee model's cut on every swap it serves earns,
+   on a day whose total volume through it is V, exactly
+   floor(V · p / 10000) at a rate of p basis points — the same
+   floored arithmetic, applied once to the day's aggregate volume.
+   One honest consequence of aggregating: a real interface taking
+   its fee trade by trade floors EVERY trade, so the sum it
+   actually collects is never more than this aggregate figure and
+   is usually a little less when the day is many small trades —
+   this model is the ceiling, stated as such. The period figures
+   are that daily revenue and a daily operating cost, each
+   multiplied by the number of days (the multiplications floor at
+   the smallest unit, the counting convention of the tools around
+   this one); the net is their difference and is a signed figure —
+   a period can lose money on paper, and the model reports the
+   shortfall rather than flooring it at zero. The annual run-rate
+   is the daily revenue times 365 — naive annualisation, labelled
+   as such: it assumes every future day matches the one modelled,
+   which no real interface's days do. The break-even daily volume
+   is the smallest daily volume whose floored day's revenue covers
+   the daily cost, in closed form: revenue reaches the cost exactly
+   when V · p / 10000 reaches it, so the smallest such V is
+   ceil(cost · 10000 / p) — one smallest unit less earns strictly
+   less than the cost (asserted in the tests). Two edges are
+   reported, not hidden: at a zero rate with a positive cost there
+   IS no break-even volume — the field is null and the handler
+   says so — and at a zero cost the break-even volume is exactly
+   zero, because there is nothing to cover. Headline: 100,000 of
+   daily volume at 50 bps over 30 days at a daily cost of 100
+   earns 500 a day and 15,000 over the period against 3,000 of
+   costs, netting 12,000, breaking even at 20,000 of daily volume,
+   a naive annual run-rate of 182,500. The volume and the cost are
+   in the same unit of value — the unit is the user's to choose
+   (a token, or a currency the volume is measured in) — and both
+   are supplied, never fetched: this is a projection of a supplied
+   day, not a forecast, not live volume data, and not a promise
+   of income. Volume, rate and costs are all held constant across
+   the period; growth, decline, refunds and failed trades are not
+   modelled. Volume the interface serves at a different rate, or
+   fee-free, is not distinguished — supply the fee-bearing volume
+   if only part of the flow pays. Model only: this page executes
+   nothing, connects no wallet and collects no fee; on an
+   interface I build, the fee this estimates is the disclosed one
+   from the two tools above it, taken to my own SOL fee wallet
+   and labelled before any trade. Not financial advice. */
+function interfaceFeeRevenue(dailyVolumeStr, platformFeeBps, daysStr, dailyCostStr) {
+  var raw = [dailyVolumeStr, platformFeeBps, daysStr, dailyCostStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var vol = parseScaled(dailyVolumeStr), days = parseScaled(daysStr), cost = parseScaled(dailyCostStr);
+  var platFee = Number(platformFeeBps);
+  if (vol === null || days === null || cost === null) return null;
+  if (vol <= 0n || days <= 0n || days > 36500n * SCALE) return null;
+  if (!Number.isInteger(platFee) || platFee < 0 || platFee > 9999) return null;
+  function signed(n) { return n < 0n ? "-" + formatScaled(-n) : formatScaled(n); }
+  var dailyRevenue = vol * BigInt(platFee) / 10000n;
+  var periodRevenue = dailyRevenue * days / SCALE;
+  var periodCosts = cost * days / SCALE;
+  var net = periodRevenue - periodCosts;
+  var breakEven;
+  if (cost === 0n) breakEven = "0";
+  else if (platFee === 0) breakEven = null;
+  else breakEven = formatScaled((cost * 10000n + BigInt(platFee) - 1n) / BigInt(platFee));
+  var result = {
+    dailyVolume: formatScaled(vol),
+    days: scaledToNumber(days),
+    platformFeePct: platFee / 100,
+    dailyRevenue: formatScaled(dailyRevenue),
+    periodRevenue: formatScaled(periodRevenue),
+    dailyCost: formatScaled(cost),
+    periodCosts: formatScaled(periodCosts),
+    netRevenue: signed(net),
+    breakEvenDailyVolume: breakEven,
+    annualRunRate: formatScaled(dailyRevenue * 365n)
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, interfaceFeeRevenue, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -11715,6 +11801,53 @@ if (typeof document !== "undefined") {
         document.getElementById("pfx-net").value = res.netAmountIn;
         document.getElementById("pfx-out").value = res.amountOut;
         document.getElementById("pfx-excess").value = res.excessOut;
+      }
+    });
+
+    document.getElementById("rev-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = interfaceFeeRevenue(
+        document.getElementById("rev-volume").value,
+        document.getElementById("rev-fee").value,
+        document.getElementById("rev-days").value,
+        document.getElementById("rev-cost").value
+      );
+      var out = document.getElementById("rev-result");
+      if (res === null) {
+        out.textContent = "Enter a positive daily volume and a positive period of at most 36500 days (up to 9 decimal places), a platform fee in whole basis points from 0 to 9999 (50 = 0.5%), and a daily operating cost of zero or more, in the same unit of value as the volume.";
+        document.getElementById("rev-daily").value = "";
+        document.getElementById("rev-period").value = "";
+        document.getElementById("rev-net").value = "";
+        document.getElementById("rev-breakeven").value = "";
+      } else {
+        /* The net sentence branches on the exact sign of the
+           period's net: a shortfall is reported as a shortfall,
+           never floored at zero in prose. */
+        var netSentence;
+        if (res.netRevenue.charAt(0) === "-") {
+          netSentence = "After " + res.periodCosts + " of operating costs over the period, the period nets " + res.netRevenue + " — a shortfall: at this volume and rate the interface does not cover its costs, and the model says so rather than rounding the loss away.";
+        } else if (res.netRevenue === "0") {
+          netSentence = "After " + res.periodCosts + " of operating costs over the period, the period nets exactly 0 — the revenue covers the costs and nothing more.";
+        } else {
+          netSentence = "After " + res.periodCosts + " of operating costs over the period, the period nets " + res.netRevenue + ".";
+        }
+        /* The break-even sentence branches on why the figure is
+           what it is: nothing to cover, no rate to cover it with,
+           or the closed-form volume whose day's revenue first
+           reaches the daily cost. */
+        var breakSentence;
+        if (res.dailyCost === "0") {
+          breakSentence = "With no daily operating cost there is nothing to cover, so the break-even daily volume is exactly 0.";
+        } else if (res.breakEvenDailyVolume === null) {
+          breakSentence = "At a platform fee of zero there is no break-even daily volume: no volume at all covers a positive daily cost when the rate takes nothing, however large the flow.";
+        } else {
+          breakSentence = "The interface breaks even at " + res.breakEvenDailyVolume + " of daily volume — the smallest daily volume whose day's platform-fee revenue reaches the " + res.dailyCost + " daily cost; one smallest unit less earns strictly less than the cost.";
+        }
+        out.textContent = "Model output: at " + res.dailyVolume + " of volume a day and a disclosed platform fee of " + fmt(res.platformFeePct, 4) + "%, the interface earns " + res.dailyRevenue + " a day in platform fees — " + res.periodRevenue + " over " + fmt(res.days, 4) + " day(s), a naive annual run-rate of " + res.annualRunRate + " if every future day matched this one, which no real interface's days do. " + netSentence + " " + breakSentence + " The revenue is the platform-fee model's own floored fee applied once to the day's whole volume: an interface taking its fee trade by trade floors every trade, so what it actually collects is never more than this figure and usually a little less on a day of many small trades — read this as the ceiling. Volume, rate and costs are held constant across the period; growth, decline, refunds and failed trades are not modelled, and volume served at a different rate, or fee-free, is not distinguished — supply only the fee-bearing volume if part of the flow pays nothing. This is a projection of a day you supplied, not a forecast and not a promise of income. This page executes nothing: no wallet connects here and no fee is taken by using this model. An interface fee-revenue estimator, not live data. Not financial advice.";
+        document.getElementById("rev-daily").value = res.dailyRevenue;
+        document.getElementById("rev-period").value = res.periodRevenue;
+        document.getElementById("rev-net").value = res.netRevenue;
+        document.getElementById("rev-breakeven").value = res.breakEvenDailyVolume === null ? "no break-even at a zero fee" : res.breakEvenDailyVolume;
       }
     });
 
