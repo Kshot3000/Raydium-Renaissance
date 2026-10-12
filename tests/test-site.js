@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=155"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=156"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v155", html.includes("app.js?v=155"));
+check("app.js cache key bumped to v156", html.includes("app.js?v=156"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -7424,6 +7424,8 @@ check("REF rejects zero reserves and amounts", app.referralFeeSwap("0", "1000", 
 check("REF rejects bad fees and bad shares", app.referralFeeSwap("1000", "1000", "100", 10000, 50, 2500) === null && app.referralFeeSwap("1000", "1000", "100", 25, 10000, 2500) === null && app.referralFeeSwap("1000", "1000", "100", 25, 50, 10001) === null && app.referralFeeSwap("1000", "1000", "100", 25, 50, -1) === null && app.referralFeeSwap("1000", "1000", "100", 25, 50, 2500.5) === null && app.referralFeeSwap("1000", "1000", "100", 25.5, 50, 2500) === null);
 check("REF source composes Tool 111 and floors the referrer cut from its fee", (() => { const at = appSrc.indexOf("function referralFeeSwap"); const body = appSrc.slice(at, at + 1600); return at !== -1 && body.includes("platformFeeSwap(reserveInStr, reserveOutStr, amountInStr, poolFeeBps, platformFeeBps)") && body.includes("feeScaled * BigInt(share) / 10000n") && body.includes("feeScaled - referral"); })());
 check("REF handler branches its split sentence on the exact amounts, never the headline share alone", appSrc.includes('res.platformFeeAmount === "0"') && appSrc.includes('res.referralAmount === "0" && res.referralSharePct === 0') && appSrc.includes('res.builderAmount === "0"') && appSrc.includes("The referrer's cut floors to zero at this trade size") && appSrc.includes("the two cuts sum exactly to the fee"));
+check("REF handler keeps the two zero-fee causes apart: a 0% rate charges nothing by design, a positive rate floors to zero at dust size", appSrc.includes('res.platformFeeAmount === "0" && res.platformFeePct === 0') && appSrc.includes("No platform fee is charged here — the disclosed rate is 0%") && appSrc.includes("the disclosed rate floors to zero at the smallest unit"));
+check("REF handler states the referrer's effective rate from the exact scaled cut and amount in, never the headline rates multiplied together", appSrc.includes("parseScaled(res.referralAmount)") && appSrc.includes("effRefPct") && !appSrc.includes("res.platformFeePct * res.referralSharePct"));
 check("all ref controls labelled", ["ref-rin", "ref-rout", "ref-ain", "ref-poolfee", "ref-platfee", "ref-share", "ref-feeamt", "ref-refamt", "ref-buildamt", "ref-net", "ref-out", "ref-cost"].every(id => html.includes(`for="${id}"`)));
 check("ref tool present in index.html", html.includes('id="ref-calc"') && html.includes('id="ref-result"'));
 check("ref handler wired to its own form", appSrc.includes('getElementById("ref-calc")') && appSrc.includes('getElementById("ref-result")'));

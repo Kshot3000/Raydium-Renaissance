@@ -13215,9 +13215,22 @@ if (typeof document !== "undefined") {
            zero at dust scale even at a large share, a zero share
            pays nothing by design, a 100% share leaves the builder
            nothing, and a zero platform fee leaves nothing to split
-           at all — each case is stated as what it is. */
+           at all — each case is stated as what it is. A zero fee
+           itself has two different causes and they are NOT merged:
+           a disclosed rate of 0% charges nothing by design, while
+           a positive rate can floor to zero at a dust trade size
+           (tool 111's handler makes the same distinction). The
+           effective-rate sentence below is likewise computed from
+           the exact scaled cut and amount in, never from the
+           headline rates multiplied together: the nominal product
+           is the two floored cuts' rate only before flooring, and
+           at dust scale it names a percentage the referrer does
+           not actually receive (a floored-to-zero cut beside a
+           nominal 0.1250%). */
         var splitSentence;
-        if (res.platformFeeAmount === "0") {
+        if (res.platformFeeAmount === "0" && res.platformFeePct === 0) {
+          splitSentence = "No platform fee is charged here — the disclosed rate is 0% — so there is nothing to split: the referrer takes 0 and the builder keeps 0.";
+        } else if (res.platformFeeAmount === "0") {
           splitSentence = "The platform fee itself is 0 at this trade size — the disclosed rate floors to zero at the smallest unit — so there is nothing to split: the referrer takes 0 and the builder keeps 0.";
         } else if (res.referralAmount === "0" && res.referralSharePct === 0) {
           splitSentence = "At a referrer share of 0% the referrer takes nothing by design, and the builder keeps the whole fee of " + res.platformFeeAmount + ".";
@@ -13228,7 +13241,16 @@ if (typeof document !== "undefined") {
         } else {
           splitSentence = "Of that fee, the referrer takes " + res.referralAmount + " (a " + fmt(res.referralSharePct, 4) + "% share of the fee) and the builder keeps " + res.builderAmount + " (the remaining " + fmt(res.builderSharePct, 4) + "%); the two cuts sum exactly to the fee, with the smallest-unit flooring remainder going to the builder.";
         }
-        out.textContent = "Model output: of the " + res.amountIn + " you pay in, the disclosed platform fee takes " + res.platformFeeAmount + " (a " + fmt(res.platformFeePct, 4) + "% platform rate, charged in the token you pay) and " + res.netAmountIn + " reaches the pool. " + splitSentence + " The share is a share of the platform fee, not of your trade: the referrer's cut is an effective " + fmt(res.platformFeePct * res.referralSharePct / 100, 4) + "% of the amount you pay in, and the split never changes what you pay — the pool pays " + res.out + " out, against " + res.noPlatformFeeOut + " with no platform fee at all, a platform-layer cost of " + res.costOut + " (" + fmt(res.costPct, 4) + "% of the no-fee output) at a modelled price impact of " + fmt(res.priceImpactPct, 4) + "% measured against everything you paid in. On an interface I build, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and the referrer's cut goes to that referrer's own wallet, both labelled before any trade. Network and priority fees, and any fee an interface charges on the output side or as a flat amount, are not modelled. This page executes nothing: no wallet connects here and no fee is taken by using this model. A referral fee-share swap model, not live pool data, not a live quote. Not financial advice.";
+        /* The referrer's effective rate from the exact scaled
+           amounts (the bounded-ratio rescale of tools 107/111:
+           converting both BigInts first overflows past ~1.8e299
+           tokens, so there the ratio is taken at fixed scale). */
+        var refScaled = parseScaled(res.referralAmount), ainScaled = parseScaled(res.amountIn);
+        var effRefPct = Number(refScaled) / Number(ainScaled) * 100;
+        if (!Number.isFinite(Number(refScaled)) || !Number.isFinite(Number(ainScaled))) {
+          effRefPct = Number(refScaled * (10n ** 18n) / ainScaled) / 1e16;
+        }
+        out.textContent = "Model output: of the " + res.amountIn + " you pay in, the disclosed platform fee takes " + res.platformFeeAmount + " (a " + fmt(res.platformFeePct, 4) + "% platform rate, charged in the token you pay) and " + res.netAmountIn + " reaches the pool. " + splitSentence + " The share is a share of the platform fee, not of your trade: the referrer's cut is an effective " + fmt(effRefPct, 4) + "% of the amount you pay in, and the split never changes what you pay — the pool pays " + res.out + " out, against " + res.noPlatformFeeOut + " with no platform fee at all, a platform-layer cost of " + res.costOut + " (" + fmt(res.costPct, 4) + "% of the no-fee output) at a modelled price impact of " + fmt(res.priceImpactPct, 4) + "% measured against everything you paid in. On an interface I build, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and the referrer's cut goes to that referrer's own wallet, both labelled before any trade. Network and priority fees, and any fee an interface charges on the output side or as a flat amount, are not modelled. This page executes nothing: no wallet connects here and no fee is taken by using this model. A referral fee-share swap model, not live pool data, not a live quote. Not financial advice.";
         document.getElementById("ref-feeamt").value = res.platformFeeAmount;
         document.getElementById("ref-refamt").value = res.referralAmount;
         document.getElementById("ref-buildamt").value = res.builderAmount;
