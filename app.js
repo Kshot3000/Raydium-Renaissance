@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus one hundred thirteen fully
+/* Raydium Renaissance hub logic: project filtering plus one hundred fourteen fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -83,8 +83,9 @@
    swap model, a route-length
    comparison model, a platform-fee
    swap model, a platform-fee
-   exact-out swap model, and an
-   interface fee-revenue estimator.
+   exact-out swap model, an
+   interface fee-revenue estimator, and an
+   interface fee-tier comparison model.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -9310,8 +9311,99 @@ function interfaceFeeRevenue(dailyVolumeStr, platformFeeBps, daysStr, dailyCostS
   return result;
 }
 
+/* ---------- 114 · Interface fee-tier comparison model ---------- */
+/* The fee-revenue estimator prices ONE disclosed platform rate as a
+   business over time. Choosing that rate is the step before, and it
+   is a comparison: a higher rate earns more per unit of volume and
+   may keep less of it. This model compares two rates side by side,
+   each with the daily volume the operator expects AT that rate —
+   the volumes are supplied scenarios, never derived: no elasticity
+   formula on this page pretends to know how volume answers a rate
+   change, because that is the interface's own experiment. Each
+   tier's day's revenue is the fee-revenue estimator's own floored
+   arithmetic, floor(V · p / 10000), applied once to that tier's
+   day's whole volume, so each figure carries the same honest
+   ceiling the estimator states: a real interface taking its fee
+   trade by trade floors every trade and collects never more, and
+   usually a little less on a day of many small trades. The period
+   figures are the daily revenues times the number of days (floored
+   at the smallest unit, the counting convention of the tools around
+   this one); the difference is signed — it is tier B minus tier A,
+   so a negative difference means the FIRST tier earns more, and the
+   winner field names the tier from the daily revenues themselves.
+   The two break-even volumes restate the comparison as volumes:
+   the smallest daily volume at tier B's rate whose floored day's
+   revenue reaches tier A's daily revenue is, in closed form,
+   ceil(revenueA · 10000 / feeB) — one smallest unit less earns
+   strictly less (asserted in the tests) — and symmetrically for
+   tier A. Two edges are reported, not hidden: at a zero rate a
+   tier earns nothing at any volume, so when the other tier earns
+   anything its break-even field is null and the handler says there
+   is no catch-up volume; and when the other tier's revenue is
+   exactly zero the break-even volume is exactly zero, because
+   there is nothing to match. Headline: 100,000 of volume a day at
+   25 bps earns 250 a day and 7,500 over 30 days, while 80,000 a
+   day at 50 bps earns 400 a day and 12,000 over the period — the
+   higher rate earns 150 a day more on a fifth less volume; tier B
+   matches tier A on just 50,000 of volume a day, and tier A would
+   need 160,000 a day to match tier B. Volumes, rates and the
+   period are all supplied and each tier is held constant across
+   the period; growth, decline, refunds and failed trades are not
+   modelled, and volume served at a different rate, or fee-free,
+   is not distinguished within a tier — supply each tier's
+   fee-bearing volume. The volumes are in one unit of value — the
+   unit is the user's to choose — and both tiers use the same unit,
+   or the comparison means nothing. Model only: this page executes
+   nothing, connects no wallet and collects no fee; on an interface
+   I build, whichever tier is chosen is the disclosed one from the
+   platform-fee tools, taken to my own SOL fee wallet and labelled
+   before any trade. Not financial advice. */
+function feeTierCompare(dailyVolumeAStr, platformFeeABps, dailyVolumeBStr, platformFeeBBps, daysStr) {
+  var raw = [dailyVolumeAStr, platformFeeABps, dailyVolumeBStr, platformFeeBBps, daysStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var volA = parseScaled(dailyVolumeAStr), volB = parseScaled(dailyVolumeBStr), days = parseScaled(daysStr);
+  var feeA = Number(platformFeeABps), feeB = Number(platformFeeBBps);
+  if (volA === null || volB === null || days === null) return null;
+  if (volA <= 0n || volB <= 0n || days <= 0n || days > 36500n * SCALE) return null;
+  if (!Number.isInteger(feeA) || feeA < 0 || feeA > 9999) return null;
+  if (!Number.isInteger(feeB) || feeB < 0 || feeB > 9999) return null;
+  function signed(n) { return n < 0n ? "-" + formatScaled(-n) : formatScaled(n); }
+  function breakEven(target, fee) {
+    if (target === 0n) return "0";
+    if (fee === 0) return null;
+    return formatScaled((target * 10000n + BigInt(fee) - 1n) / BigInt(fee));
+  }
+  var dailyRevenueA = volA * BigInt(feeA) / 10000n;
+  var dailyRevenueB = volB * BigInt(feeB) / 10000n;
+  var periodRevenueA = dailyRevenueA * days / SCALE;
+  var periodRevenueB = dailyRevenueB * days / SCALE;
+  var result = {
+    dailyVolumeA: formatScaled(volA),
+    platformFeeAPct: feeA / 100,
+    dailyRevenueA: formatScaled(dailyRevenueA),
+    periodRevenueA: formatScaled(periodRevenueA),
+    dailyVolumeB: formatScaled(volB),
+    platformFeeBPct: feeB / 100,
+    dailyRevenueB: formatScaled(dailyRevenueB),
+    periodRevenueB: formatScaled(periodRevenueB),
+    days: scaledToNumber(days),
+    diffDaily: signed(dailyRevenueB - dailyRevenueA),
+    diffPeriod: signed(periodRevenueB - periodRevenueA),
+    winner: dailyRevenueB > dailyRevenueA ? "B" : (dailyRevenueA > dailyRevenueB ? "A" : "tie"),
+    breakEvenVolumeB: breakEven(dailyRevenueA, feeB),
+    breakEvenVolumeA: breakEven(dailyRevenueB, feeA)
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, interfaceFeeRevenue, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, interfaceFeeRevenue, feeTierCompare, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -11848,6 +11940,71 @@ if (typeof document !== "undefined") {
         document.getElementById("rev-period").value = res.periodRevenue;
         document.getElementById("rev-net").value = res.netRevenue;
         document.getElementById("rev-breakeven").value = res.breakEvenDailyVolume === null ? "no break-even at a zero fee" : res.breakEvenDailyVolume;
+      }
+    });
+
+
+    document.getElementById("tier-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = feeTierCompare(
+        document.getElementById("tier-vola").value,
+        document.getElementById("tier-feea").value,
+        document.getElementById("tier-volb").value,
+        document.getElementById("tier-feeb").value,
+        document.getElementById("tier-days").value
+      );
+      var out = document.getElementById("tier-result");
+      if (res === null) {
+        out.textContent = "Enter a positive expected daily volume for each tier (up to 9 decimal places, in the same unit of value for both), a platform fee for each tier in whole basis points from 0 to 9999 (25 = 0.25%, 50 = 0.5%), and a positive period of at most 36500 days.";
+        document.getElementById("tier-daily-a").value = "";
+        document.getElementById("tier-daily-b").value = "";
+        document.getElementById("tier-period-a").value = "";
+        document.getElementById("tier-period-b").value = "";
+        document.getElementById("tier-diff").value = "";
+        document.getElementById("tier-be-b").value = "";
+        document.getElementById("tier-be-a").value = "";
+      } else {
+        /* The winner sentence branches on the winner field itself:
+           tier B ahead, tier A ahead, or an exact tie — prose must
+           say which one happened, and the difference is quoted as
+           a positive amount in the winning direction. */
+        var absDiff = res.diffDaily.charAt(0) === "-" ? res.diffDaily.slice(1) : res.diffDaily;
+        var winnerSentence;
+        if (res.winner === "B") {
+          winnerSentence = "Tier B earns more: " + absDiff + " a day more than tier A, " + res.diffPeriod + " more over the period — the higher rate wins on the volumes you supplied.";
+        } else if (res.winner === "A") {
+          winnerSentence = "Tier A earns more: " + absDiff + " a day more than tier B, " + (res.diffPeriod.charAt(0) === "-" ? res.diffPeriod.slice(1) : res.diffPeriod) + " more over the period — the lower rate wins on the volumes you supplied, because the volume it keeps pays more than the higher rate's cut of less flow.";
+        } else {
+          winnerSentence = "The two tiers earn exactly the same: the difference is 0 a day and 0 over the period, so on revenue alone there is nothing to choose between them — the choice then rests on what each rate does to the traders paying it, which this model does not score.";
+        }
+        /* Each break-even sentence branches on why its figure is
+           what it is: no rate to catch up with, nothing to match,
+           or the closed-form volume whose day's revenue first
+           reaches the other tier's. */
+        var beBSentence;
+        if (res.breakEvenVolumeB === null) {
+          beBSentence = "At a platform fee of zero, tier B has no break-even volume: no volume at all matches tier A's revenue when tier B's rate takes nothing, however large the flow — there is no catch-up volume, and the model says so rather than inventing one.";
+        } else if (res.breakEvenVolumeB === "0") {
+          beBSentence = "Tier B matches tier A's daily revenue at exactly 0 of daily volume, because tier A's daily revenue is 0 — there is nothing to match.";
+        } else {
+          beBSentence = "Tier B matches tier A's daily revenue at " + res.breakEvenVolumeB + " of daily volume — the smallest daily volume whose day's platform-fee revenue at tier B's rate reaches tier A's; one smallest unit less earns strictly less.";
+        }
+        var beASentence;
+        if (res.breakEvenVolumeA === null) {
+          beASentence = "At a platform fee of zero, tier A has no break-even volume either: no volume at all matches tier B's revenue when tier A's rate takes nothing — there is no catch-up volume in that direction.";
+        } else if (res.breakEvenVolumeA === "0") {
+          beASentence = "Tier A matches tier B's daily revenue at exactly 0 of daily volume, because tier B's daily revenue is 0 — there is nothing to match.";
+        } else {
+          beASentence = "Tier A matches tier B's daily revenue at " + res.breakEvenVolumeA + " of daily volume — the smallest daily volume whose day's platform-fee revenue at tier A's rate reaches tier B's; one smallest unit less earns strictly less.";
+        }
+        out.textContent = "Model output: tier A — a disclosed platform fee of " + fmt(res.platformFeeAPct, 4) + "% on " + res.dailyVolumeA + " of volume a day — earns " + res.dailyRevenueA + " a day, " + res.periodRevenueA + " over " + fmt(res.days, 4) + " day(s). Tier B — " + fmt(res.platformFeeBPct, 4) + "% on " + res.dailyVolumeB + " a day — earns " + res.dailyRevenueB + " a day, " + res.periodRevenueB + " over the period. " + winnerSentence + " " + beBSentence + " " + beASentence + " Both volumes are scenarios you supplied: nothing here predicts how volume answers a rate change, no elasticity, growth or decline is assumed, and each tier's volume and rate are held constant across the period, with refunds and failed trades not modelled. Each day's revenue is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, so a real interface taking its fee trade by trade collects never more than these figures, and usually a little less on a day of many small trades. On an interface I build, whichever tier is chosen is the disclosed one, labelled before any trade and taken to my own fee wallet — the SOL address in the support section below. This page executes nothing: no wallet connects here and no fee is taken by using this model. An interface fee-tier comparison model, not live data, not a forecast. Not financial advice.";
+        document.getElementById("tier-daily-a").value = res.dailyRevenueA;
+        document.getElementById("tier-daily-b").value = res.dailyRevenueB;
+        document.getElementById("tier-period-a").value = res.periodRevenueA;
+        document.getElementById("tier-period-b").value = res.periodRevenueB;
+        document.getElementById("tier-diff").value = res.diffDaily;
+        document.getElementById("tier-be-b").value = res.breakEvenVolumeB === null ? "no break-even at a zero fee" : res.breakEvenVolumeB;
+        document.getElementById("tier-be-a").value = res.breakEvenVolumeA === null ? "no break-even at a zero fee" : res.breakEvenVolumeA;
       }
     });
 

@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred thirteen</label>
+      <label for="tool-q">Find a tool among the one hundred fourteen</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred thirteen tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred fourteen tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred thirteen.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred fourteen.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -2757,6 +2757,37 @@
         <button type="submit" class="btn primary">Estimate the interface's fee revenue</button>
         <p id="rev-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="tier-calc">
+        <h3>114 · Interface fee-tier comparison model</h3>
+        <p>The revenue estimator above prices one disclosed platform rate over time. This one compares two rates side by side, each with the daily volume you expect that rate to bring — because the rate an interface charges and the volume it keeps are a pair, and a higher rate on much less volume can earn less than a lower rate on more. On the headline numbers, tier A charges 0.25% and keeps 100,000 of volume a day, earning 250 a day and 7,500 over 30 days; tier B charges 0.5% on 80,000 a day, earning 400 a day and 12,000 over the period — tier B earns 150 a day more despite a fifth less volume. The break-even volumes state the same comparison as a volume: at its 0.5% rate, tier B would match tier A's revenue on just 50,000 of volume a day, while tier A at 0.25% would need 160,000 a day to match tier B. A zero rate is shown honestly: a tier charging nothing earns nothing at any volume, so when the other tier earns anything there is no volume at which the free tier catches up, and the model says so instead of inventing a number. Both volumes are yours to supply and nothing here predicts them: how volume actually answers a rate change is the interface's own experiment — no elasticity, growth or decline is assumed — and each tier's volume and rate are held constant across the period. Each day's revenue is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, so a real interface taking its fee trade by trade collects never more than these figures, and usually a little less on a day of many small trades. On an interface I build, whichever tier is chosen is the disclosed one, labelled before any trade and taken to my own fee wallet — the SOL address in the support section below. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volumes, fees and period, not live data, not a forecast, not financial advice.</p>
+        <label for="tier-vola">Daily volume you expect at tier A, in your unit of value</label>
+        <input id="tier-vola" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="tier-feea">Tier A platform fee (basis points, 25 = 0.25%)</label>
+        <input id="tier-feea" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="tier-volb">Daily volume you expect at tier B, in the same unit of value</label>
+        <input id="tier-volb" inputmode="decimal" placeholder="e.g. 80000" autocomplete="off">
+        <label for="tier-feeb">Tier B platform fee (basis points, 50 = 0.5%)</label>
+        <input id="tier-feeb" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="tier-days">Period (days)</label>
+        <input id="tier-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="tier-daily-a">Tier A platform-fee revenue per day (model)</label>
+        <input id="tier-daily-a" readonly placeholder="—" autocomplete="off">
+        <label for="tier-daily-b">Tier B platform-fee revenue per day (model)</label>
+        <input id="tier-daily-b" readonly placeholder="—" autocomplete="off">
+        <label for="tier-period-a">Tier A platform-fee revenue over the period (model)</label>
+        <input id="tier-period-a" readonly placeholder="—" autocomplete="off">
+        <label for="tier-period-b">Tier B platform-fee revenue over the period (model)</label>
+        <input id="tier-period-b" readonly placeholder="—" autocomplete="off">
+        <label for="tier-diff">Daily revenue difference, tier B minus tier A (model)</label>
+        <input id="tier-diff" readonly placeholder="—" autocomplete="off">
+        <label for="tier-be-b">Daily volume tier B needs to match tier A's revenue (model)</label>
+        <input id="tier-be-b" readonly placeholder="—" autocomplete="off">
+        <label for="tier-be-a">Daily volume tier A needs to match tier B's revenue (model)</label>
+        <input id="tier-be-a" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Compare the two fee tiers</button>
+        <p id="tier-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -2784,6 +2815,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=152"></script>
+<script src="app.js?v=153"></script>
 </body>
 </html>
