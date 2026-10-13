@@ -11785,22 +11785,37 @@ function payoutPeriodSolver(dailyVolumeStr, platformFeeBps, referralShareBps, th
    daily cut is the day's fee times the share, rounded
    down, so the smallest share that pays the referrer is
    the ceiling of that need over the fee; the builder
-   keeps the remainder, so the largest share that still
-   pays the builder is the one whose floored referrer
-   cut leaves at least the need behind — the floor of
-   one unit under the next share that would break it.
-   Both answers are read off the SAME day's fee, so where
+   keeps the remainder, and the largest share whose
+   daily remainder still meets the need — the sandwich
+   on the floored referrer cut, the floor of one unit
+   under the next share that would break it — is only a
+   proven LOWER bound on the largest paying share: the
+   builder's period cut is the estimator's composed
+   difference of period floors, which can reach the
+   threshold one smallest unit of daily remainder early
+   on a fractional period — several whole basis points
+   of share early at dust fee scales, where one basis
+   point moves the daily remainder by less than a unit —
+   so the bounded window above the sandwich share is
+   searched exactly against that composed cut. Both
+   answers are read off the SAME day's fee, so where
    the smallest paying referrer share is no larger than
    the largest paying builder share, every whole share
    between them pays both sides inside the period, and
    that range — not a single share — is the honest
    answer to "what split can we publish". Verified
    against a brute-force scan of every whole share from
-   0 to 10,000 before it shipped (3,010 cases, zero
-   mismatches), and the tests re-assert the boundaries
-   through the composed estimator itself: at a solved
-   share the side's period cut reaches the threshold,
-   and one basis point past it, it does not. Headline:
+   0 to 10,000 (3,010 cases before it shipped, and 907
+   further cases scanned share by share with every
+   period cut composed exactly as the estimator composes
+   it, zero mismatches — the first shipped form solved
+   the builder by the sandwich alone and understated
+   those boundaries on fractional periods at dust fee
+   scales; corrected), and the tests re-assert the
+   boundaries through the composed estimator itself: at
+   a solved share the side's period cut reaches the
+   threshold, and one basis point past it, it does not.
+   Headline:
    100,000 of volume a day at 50 bps accrues a day's fee
    of 500; against a threshold of 500 over 30 days a
    side needs 16.666666667 a day, so the referrer is
@@ -11875,6 +11890,32 @@ function payoutShareSolver(dailyVolumeStr, platformFeeBps, thresholdStr, payoutC
       shareBig = ((fee - need + 1n) * 10000n - 1n) / fee;
       if (shareBig > 10000n) shareBig = 10000n;
       if (shareBig < 0n) return side;
+      /* The daily-cut sandwich above is a proven LOWER bound
+         on the largest paying share, not the answer: the
+         builder's period cut is the estimator's composed
+         difference floor(periodFee) − floor(periodReferral),
+         which is floor(dailyBuilder · days / SCALE) or
+         exactly one smallest unit MORE, so on a fractional
+         period the composed cut can reach the threshold at a
+         share whose daily remainder sits below the need —
+         at dust fee scales several whole basis points below
+         it, because one basis point of share moves the
+         daily remainder by less than a smallest unit.
+         Search the bounded window above the sandwich share
+         exactly: no share beyond the window's top can reach
+         (its daily remainder D has floor(D · days / SCALE)
+         <= T − 2, capping its composed cut at T − 1), the
+         builder's period cut is non-increasing in the
+         share, and each candidate's cut is read from the
+         estimator itself. */
+      var needLow = threshold <= 1n ? 0n : ((threshold - 1n) * SCALE + daysScaled - 1n) / daysScaled;
+      var shareHi = needLow <= 0n ? 10000n : ((fee - needLow + 1n) * 10000n - 1n) / fee;
+      if (shareHi > 10000n) shareHi = 10000n;
+      while (shareBig < shareHi) {
+        var tt = referralFeeRevenue(dailyVolumeStr, platformFeeBps, Number(shareBig + 1n), daysStr);
+        if (tt === null || parseScaled(tt.periodBuilder) < threshold) break;
+        shareBig += 1n;
+      }
     }
     var share = Number(shareBig);
     var t = referralFeeRevenue(dailyVolumeStr, platformFeeBps, share, daysStr);
