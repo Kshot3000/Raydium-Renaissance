@@ -7901,5 +7901,129 @@ check("GUIDE item 132 sits between item 131 and the Building section", (() => { 
 check("guide covers solving for the share a payout needs", guide.includes("Solve for the share a payout needs"));
 check("README lists tool 131", readme.includes("131. **Fee-share payout share solver**"));
 
+/* ---------- Handler/model field audit (all 131 tools) ---------- */
+/* Tool 130's handler once read res.referralDailyReferral / res.builderDailyBuilder —
+   field names only the sibling volume, rate and share solvers define — so solved
+   clauses printed "accruing undefined a day" and the floored-to-zero cause branch
+   was dead, while every model-level test passed (the fix pinned that one handler
+   with a source check above). This audit closes the class hub-wide: it rebuilds
+   each exported model's result-field set from the app.js source itself — return
+   literals, the base object a return Object.assign(...) merges into, properties
+   assigned to a returned object, and delegation to another exported model — then
+   checks every field every submit handler reads off a model result against the
+   set for the model that result actually came from. */
+const handlerAudit = (() => {
+  function scanBlock(text, openIdx) {
+    let depth = 0, inStr = null, esc = false, inLine = false, inBlock = false;
+    for (let i = openIdx; i < text.length; i++) {
+      const c = text[i], n = text[i + 1];
+      if (inLine) { if (c === "\n") inLine = false; continue; }
+      if (inBlock) { if (c === "*" && n === "/") { inBlock = false; i++; } continue; }
+      if (inStr) { if (esc) esc = false; else if (c === "\\") esc = true; else if (c === inStr) inStr = null; continue; }
+      if (c === "/" && n === "/") { inLine = true; continue; }
+      if (c === "/" && n === "*") { inBlock = true; continue; }
+      if (c === '"' || c === "'" || c === "`") { inStr = c; continue; }
+      if (c === "{") depth++;
+      if (c === "}") { depth--; if (depth === 0) return i + 1; }
+    }
+    return text.length;
+  }
+  function objKeys(block) {
+    const keys = []; let depth = 0, inStr = null, esc = false, inLine = false, inBlock = false, cur = "";
+    for (let i = 0; i < block.length; i++) {
+      const c = block[i], n = block[i + 1];
+      if (inLine) { if (c === "\n") inLine = false; continue; }
+      if (inBlock) { if (c === "*" && n === "/") { inBlock = false; i++; } continue; }
+      if (inStr) { if (esc) esc = false; else if (c === "\\") esc = true; else if (c === inStr) inStr = null; continue; }
+      if (c === "/" && n === "/") { inLine = true; continue; }
+      if (c === "/" && n === "*") { inBlock = true; continue; }
+      if (c === '"' || c === "'" || c === "`") { inStr = c; continue; }
+      if (c === "{") { depth++; continue; }
+      if (c === "}") { depth--; if (depth === 0) break; continue; }
+      if (depth === 1) {
+        if (c === ":") { const k = cur.trim().split(/\s+/).pop(); if (/^[A-Za-z_$][\w$]*$/.test(k)) keys.push(k); cur = ""; }
+        else if (c === ",") { const k = cur.trim().split(/\s+/).pop(); if (/^[A-Za-z_$][\w$]*$/.test(k) && !keys.includes(k)) keys.push(k); cur = ""; }
+        else cur += c;
+      }
+    }
+    return keys;
+  }
+  function stripNested(body) {
+    let out = "", i = 0;
+    while (i < body.length) {
+      const idx = body.indexOf("function", i);
+      if (idx === -1) { out += body.slice(i); break; }
+      const braceIdx = body.indexOf("{", idx);
+      if (braceIdx === -1) { out += body.slice(i); break; }
+      out += body.slice(i, idx) + " /*FN*/ ";
+      i = scanBlock(body, braceIdx);
+    }
+    return out;
+  }
+  const funcs = new Map();
+  const funcRe = /function\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/g;
+  let fm;
+  while ((fm = funcRe.exec(appSrc))) { const b = appSrc.indexOf("{", fm.index); funcs.set(fm[1], appSrc.slice(b, scanBlock(appSrc, b))); }
+  const exportedNames = appSrc.match(/module\.exports = \{([^}]*)\}/)[1].split(",").map(s => s.trim()).filter(s => /^[A-Za-z_$][\w$]*$/.test(s));
+  const memo = new Map();
+  function refinedFields(name, seen) {
+    if (memo.has(name)) return memo.get(name);
+    if (seen.has(name)) return new Set();
+    seen.add(name);
+    const rawBody = funcs.get(name);
+    if (!rawBody) return new Set();
+    const body = stripNested(rawBody);
+    const set = new Set();
+    const returnedVars = new Set();
+    let r;
+    const retVarRe = /return\s+([A-Za-z_$][\w$]*)\s*;/g;
+    while ((r = retVarRe.exec(body))) returnedVars.add(r[1]);
+    const retOARe = /return\s+Object\.assign\s*\(\s*([A-Za-z_$][\w$]*)\s*,/g;
+    while ((r = retOARe.exec(body))) returnedVars.add(r[1]);
+    const retLitRe = /return\s*\{/g;
+    while ((r = retLitRe.exec(body))) { const b = body.indexOf("{", r.index); objKeys(body.slice(b, scanBlock(body, b))).forEach(k => set.add(k)); }
+    const oaRe = /Object\.assign\s*\(\s*([A-Za-z_$][\w$]*)\s*,\s*\{/g;
+    const oaTargets = new Set();
+    while ((r = oaRe.exec(body))) { oaTargets.add(r[1]); const b = body.indexOf("{", r.index); objKeys(body.slice(b, scanBlock(body, b))).forEach(k => set.add(k)); }
+    const interesting = new Set([...returnedVars, ...oaTargets]);
+    for (const v of interesting) {
+      const litRe = new RegExp("(?:^|[^\\w$])" + v + "\\s*=\\s*\\{", "g"); let a;
+      while ((a = litRe.exec(body))) { const b = body.indexOf("{", a.index); objKeys(body.slice(b, scanBlock(body, b))).forEach(k => set.add(k)); }
+      const propRe = new RegExp("\\b" + v + "\\.([A-Za-z_$][\\w$]*)\\s*=(?!=)", "g"); let p;
+      while ((p = propRe.exec(body))) set.add(p[1]);
+      const delRe = new RegExp("(?:^|[^\\w$])" + v + "\\s*=\\s*([A-Za-z_$][\\w$]*)\\s*\\(", "g"); let d;
+      while ((d = delRe.exec(body))) { if (funcs.has(d[1]) && d[1] !== name) refinedFields(d[1], seen).forEach(k => set.add(k)); }
+    }
+    const retCallRe = /return\s+([A-Za-z_$][\w$]*)\s*\(/g;
+    while ((r = retCallRe.exec(body))) { if (funcs.has(r[1]) && r[1] !== name) refinedFields(r[1], seen).forEach(k => set.add(k)); }
+    memo.set(name, set);
+    return set;
+  }
+  const tail = appSrc.slice(appSrc.indexOf('document.addEventListener("DOMContentLoaded"'));
+  const segRe = /document\.getElementById\("([^"]+)"\)\.addEventListener\("submit"/g;
+  const segs = []; let sm;
+  while ((sm = segRe.exec(tail))) segs.push({ id: sm[1], start: sm.index });
+  segs.push({ id: "__end__", start: tail.length });
+  let reads = 0; const mismatches = []; const unresolved = new Set();
+  for (let i = 0; i < segs.length - 1; i++) {
+    const seg = tail.slice(segs[i].start, segs[i + 1].start);
+    const varModel = new Map();
+    const assignRe = /(?:var\s+)?([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*\(/g; let am;
+    while ((am = assignRe.exec(seg))) if (funcs.has(am[2]) && exportedNames.includes(am[2])) varModel.set(am[1], am[2]);
+    for (const [v, model] of varModel) {
+      const f = refinedFields(model, new Set());
+      if (!f || f.size === 0) { unresolved.add(model); continue; }
+      const readRe = new RegExp("\\b" + v + "\\.([A-Za-z_$][\\w$]*)", "g"); let rd; const seenReads = new Set();
+      while ((rd = readRe.exec(seg))) seenReads.add(rd[1]);
+      for (const field of seenReads) { reads++; if (!f.has(field)) mismatches.push(segs[i].id + " reads " + v + "." + field + " (model " + model + ")"); }
+    }
+  }
+  return { segments: segs.length - 1, reads, mismatches, unresolved: [...unresolved] };
+})();
+check("HANDLER AUDIT parses all 131 submit handlers", handlerAudit.segments === 131);
+check("HANDLER AUDIT is non-vacuous: it checked 1775 distinct field reads on model results across the handlers", handlerAudit.reads === 1775);
+check("HANDLER AUDIT every field a handler reads exists on the result of the model it actually called — the Tool 130 class (a handler reading a sibling model's field name prints undefined in the page and deadens cause branches) is closed hub-wide, 0 mismatches", handlerAudit.mismatches.length === 0);
+check("HANDLER AUDIT every model a handler calls resolves to a known result shape (parseScaled alone is fieldless — it returns a BigInt scalar, never an object)", JSON.stringify(handlerAudit.unresolved) === JSON.stringify(["parseScaled"]));
+
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
