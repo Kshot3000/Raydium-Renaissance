@@ -10121,8 +10121,136 @@ function referralNetTierCompare(dailyVolumeAStr, platformFeeABps, referralShareA
   return result;
 }
 
+/* ---------- 121 · Referral fee-share maximum share solver ---------- */
+/* The referral tools so far take the referrer's share as an
+   input: the referral fee-share net revenue estimator (tool
+   118) nets one split fee against its builder's daily operating
+   cost, and the referral fee-share revenue estimator (tool 117)
+   prices the split itself over time. A builder designing a
+   referral programme faces the inverse question — how much of
+   the fee can I promise a referrer and still cover my costs? —
+   so this solves for the largest referrer share, in whole basis
+   points of the fee, whose builder cut still covers the daily
+   operating cost. The day's fee and every split are tool 117's
+   own floored arithmetic verbatim: the fee is the day's volume
+   times the disclosed rate floored at the smallest unit, the
+   referrer's cut is that fee times the share floored, and the
+   builder keeps the remainder, so the builder's cut falls as the
+   share rises and the largest affordable share is the largest
+   whole basis point whose floored referrer cut leaves at least
+   the cost behind. Writing F for the day's fee and C for the
+   cost, the referrer may take at most M = F − C, and the
+   largest share is closed form: the largest s with
+   floor(F · s / 10000) ≤ M is floor(((M + 1) · 10000 − 1) / F),
+   clamped at 10000 — verified against a brute-force scan of
+   every whole basis point before it was shipped, and the tests
+   assert maximality through tool 117 itself (at the solved
+   share the builder's cut covers the cost; one basis point
+   more, it does not). The edges are reported, not hidden: when
+   the cost outruns the whole fee there is NO affordable share —
+   even at 0% the builder nets the fee less the cost, a signed
+   shortfall the result reports as netAtZeroShare — and the
+   share fields are null rather than a invented number. A zero
+   cost is the other pole: the whole fee can go to the referrer,
+   the share is exactly 10000 basis points, and the builder
+   keeps nothing and still covers a cost of nothing. At the
+   solved share the builder's net is the small non-negative
+   remainder the basis-point granularity leaves — exactly zero
+   whenever the fee divides evenly, never more than one basis
+   point of the fee plus one smallest unit. Headline: 100,000
+   of volume a day at a disclosed 50 bps platform fee collects
+   500 a day; against a daily operating cost of 100 the largest
+   affordable share is 8000 basis points — 80% of the fee —
+   paying the referrer 400 a day, keeping 100 for the builder
+   and netting exactly 0 (3,000 of builder cut against 3,000 of
+   costs over 30 days); one basis point more, 8001, pays the
+   referrer 400.05 and the builder nets −0.05 a day. The volume,
+   rate and cost are supplied scenarios, held constant across
+   the period: nothing here predicts how volume answers a more
+   generous share — a bigger share is usually offered precisely
+   because it is expected to bring volume, and that expectation
+   is the operator's own, entered as the volume it is expected
+   to bring. Aggregating carries the usual honest consequence:
+   a real interface taking its fee trade by trade floors EVERY
+   trade, so the fee it collects, and therefore both cuts, are
+   never more than these figures and usually a little less on a
+   day of many small trades; this model is the ceiling, stated
+   as such. The volume and cost are in one unit of value — the
+   user's to choose. Model only: this page executes nothing,
+   connects no wallet and collects no fee; on an interface I
+   build, the share this solves for would be the disclosed one,
+   labelled before any trade, the builder's cut goes to my own
+   SOL fee wallet — the address in the support section below —
+   and the referrer's cut goes to that referrer's own wallet.
+   Not financial advice. */
+function referralMaxShare(dailyVolumeStr, platformFeeBps, dailyCostStr, daysStr) {
+  var raw = [dailyVolumeStr, platformFeeBps, dailyCostStr, daysStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var vol = parseScaled(dailyVolumeStr), days = parseScaled(daysStr), cost = parseScaled(dailyCostStr);
+  var fee = Number(platformFeeBps);
+  if (vol === null || days === null || cost === null) return null;
+  if (vol <= 0n || days <= 0n || days > 36500n * SCALE) return null;
+  if (cost < 0n) return null;
+  if (!Number.isInteger(fee) || fee < 0 || fee > 9999) return null;
+  function signed(n) { return n < 0n ? "-" + formatScaled(-n) : formatScaled(n); }
+  var feeAmt = vol * BigInt(fee) / 10000n;
+  var maxShare = null;
+  if (cost <= feeAmt) {
+    if (cost === 0n) {
+      maxShare = 10000;
+    } else {
+      var s = ((feeAmt - cost + 1n) * 10000n - 1n) / feeAmt;
+      if (s > 10000n) s = 10000n;
+      maxShare = Number(s);
+    }
+  }
+  var result = {
+    dailyVolume: formatScaled(vol),
+    platformFeePct: fee / 100,
+    dailyCost: formatScaled(cost),
+    dailyFee: formatScaled(feeAmt),
+    days: scaledToNumber(days),
+    maxShareBps: maxShare,
+    maxSharePct: maxShare === null ? null : maxShare / 100,
+    netAtZeroShare: signed(feeAmt - cost)
+  };
+  if (maxShare !== null) {
+    var referral = feeAmt * BigInt(maxShare) / 10000n;
+    var builder = feeAmt - referral;
+    var periodFee = feeAmt * days / SCALE;
+    var periodReferral = referral * days / SCALE;
+    var periodBuilder = periodFee - periodReferral;
+    var periodCosts = cost * days / SCALE;
+    result.dailyReferral = formatScaled(referral);
+    result.dailyBuilder = formatScaled(builder);
+    result.dailyNet = signed(builder - cost);
+    result.periodFee = formatScaled(periodFee);
+    result.periodReferral = formatScaled(periodReferral);
+    result.periodBuilder = formatScaled(periodBuilder);
+    result.periodCosts = formatScaled(periodCosts);
+    result.periodNet = signed(periodBuilder - periodCosts);
+    if (maxShare < 10000) {
+      var nextReferral = feeAmt * BigInt(maxShare + 1) / 10000n;
+      result.nextShareBps = maxShare + 1;
+      result.nextDailyReferral = formatScaled(nextReferral);
+      result.nextDailyNet = signed(feeAmt - nextReferral - cost);
+    } else {
+      result.nextShareBps = null;
+      result.nextDailyReferral = null;
+      result.nextDailyNet = null;
+    }
+  }
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, interfaceFeeRevenue, feeTierCompare, referralFeeSwap, referralFeeSwapExactOut, referralFeeRevenue, referralNetRevenue, referralTierCompare, referralNetTierCompare, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, interfaceFeeRevenue, feeTierCompare, referralFeeSwap, referralFeeSwapExactOut, referralFeeRevenue, referralNetRevenue, referralTierCompare, referralNetTierCompare, referralMaxShare, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -14326,6 +14454,62 @@ if (typeof document !== "undefined") {
         document.getElementById("rntier-diff").value = res.diffDailyNet;
         document.getElementById("rntier-be-b").value = res.breakEvenVolumeB === null ? "no break-even volume" : res.breakEvenVolumeB;
         document.getElementById("rntier-be-a").value = res.breakEvenVolumeA === null ? "no break-even volume" : res.breakEvenVolumeA;
+      }
+    });
+
+    document.getElementById("rshare-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = referralMaxShare(
+        document.getElementById("rshare-volume").value,
+        document.getElementById("rshare-fee").value,
+        document.getElementById("rshare-cost").value,
+        document.getElementById("rshare-days").value
+      );
+      var out = document.getElementById("rshare-result");
+      if (res === null) {
+        out.textContent = "Enter a positive daily fee-bearing volume (up to 9 decimal places, in your unit of value), a platform fee in whole basis points from 0 to 9999 (50 = 0.5%), a daily operating cost of zero or more in the same unit as the volume, and a positive period of at most 36500 days.";
+        document.getElementById("rshare-max").value = "";
+        document.getElementById("rshare-referral").value = "";
+        document.getElementById("rshare-builder").value = "";
+        document.getElementById("rshare-net").value = "";
+        document.getElementById("rshare-period").value = "";
+        document.getElementById("rshare-next").value = "";
+      } else if (res.maxShareBps === null) {
+        /* No affordable share: even keeping the whole fee, the
+           builder nets the signed shortfall reported at a zero
+           share — the prose says so plainly and invents no
+           share, because a programme whose fee cannot cover its
+           own cost has no split to solve for. */
+        out.textContent = "Model output: on " + res.dailyVolume + " of volume a day at a disclosed platform fee of " + fmt(res.platformFeePct, 4) + "%, the day's fee is " + res.dailyFee + " — and no referrer share covers the daily cost of " + res.dailyCost + ": even at a referrer share of 0%, with the builder keeping the whole fee, the builder nets " + res.netAtZeroShare + " a day, so there is no split to solve for until the volume, the rate or the cost changes. The share is a share of the platform fee, not of the volume. The volume, rate and cost are scenarios you supplied, held constant across the period: nothing here predicts how volume answers a more generous share, and no elasticity, growth or decline is assumed, with refunds and failed trades not modelled. The day's fee is the platform fee applied once to the day's whole volume and rounded down to the smallest unit, so a real interface taking its fee trade by trade collects never more than this figure, and usually a little less on a day of many small trades. On an interface I build, the share offered to a referrer would be the disclosed one, labelled before any trade, with the builder's cut taken to my own fee wallet — the SOL address in the support section below — and any referrer's cut to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by using this model. A referral fee-share maximum share solver, not live data, not a forecast. Not financial advice.";
+        document.getElementById("rshare-max").value = "no referrer share covers the cost";
+        document.getElementById("rshare-referral").value = "";
+        document.getElementById("rshare-builder").value = "";
+        document.getElementById("rshare-net").value = res.netAtZeroShare;
+        document.getElementById("rshare-period").value = "";
+        document.getElementById("rshare-next").value = "";
+      } else {
+        /* The share sentence branches on the solved share: a
+           whole-fee share means the cost was zero and the builder
+           keeps nothing; any other share is quoted with the net
+           one basis point higher, which is strictly negative by
+           maximality — the builder's cut there no longer covers
+           the cost — so the cost of generosity is stated in the
+           same sentence that grants it. */
+        var shareSentence;
+        if (res.maxShareBps === 10000) {
+          shareSentence = "With a daily operating cost of " + res.dailyCost + ", the whole fee can go to the referrer: the largest affordable share is the full 100% of the fee, the builder keeps nothing, and still covers the cost, because the cost is nothing.";
+        } else if (res.maxShareBps === 0) {
+          shareSentence = "Against a daily operating cost of " + res.dailyCost + ", the largest affordable share is 0% of the fee: the builder must keep the whole fee to cover the cost, and even one basis point to a referrer — " + res.nextDailyReferral + " a day — would leave the builder netting " + res.nextDailyNet + " a day.";
+        } else {
+          shareSentence = "Against a daily operating cost of " + res.dailyCost + ", the largest affordable share is " + fmt(res.maxSharePct, 4) + "% of the fee (" + res.maxShareBps + " basis points of the fee): it pays the referrer " + res.dailyReferral + " a day and keeps " + res.dailyBuilder + " for the builder, netting " + res.dailyNet + " a day after the cost. One basis point more, " + res.nextShareBps + " basis points, would pay the referrer " + res.nextDailyReferral + " a day and the builder would net " + res.nextDailyNet + " a day — short of the cost — so the solved share is the largest whole basis point that covers it, not a rounded guess.";
+        }
+        out.textContent = "Model output: on " + res.dailyVolume + " of volume a day at a disclosed platform fee of " + fmt(res.platformFeePct, 4) + "%, the day's fee is " + res.dailyFee + ". " + shareSentence + " Over " + fmt(res.days, 4) + " day(s) at the solved share the fee is " + res.periodFee + ", split " + res.periodReferral + " to the referrer and " + res.periodBuilder + " kept by the builder, against " + res.periodCosts + " of costs — a period net of " + res.periodNet + ", signed as modelled. The share is a share of the platform fee, not of the volume: the solved share here is an effective " + fmt(res.platformFeePct * res.maxSharePct / 100, 4) + "% of the day's volume at most, never that share of the volume itself. The volume, rate and cost are scenarios you supplied, held constant across the period: nothing here predicts how volume answers a more generous share — a bigger share is usually offered precisely because it is expected to bring volume, and that expectation is yours, entered as the volume it is expected to bring — and no elasticity, growth or decline is assumed, with refunds and failed trades not modelled. The day's fee is the platform fee applied once to the day's whole volume and rounded down to the smallest unit, with the referrer's cut rounded down and the builder keeping the remainder, so a real interface taking its fee trade by trade collects never more than these figures, and usually a little less on a day of many small trades. On an interface I build, the share this solves for would be the disclosed one, labelled before any trade, with the builder's cut taken to my own fee wallet — the SOL address in the support section below — and any referrer's cut to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by using this model. A referral fee-share maximum share solver, not live data, not a forecast. Not financial advice.";
+        document.getElementById("rshare-max").value = res.maxShareBps + " bps (" + fmt(res.maxSharePct, 4) + "% of the fee)";
+        document.getElementById("rshare-referral").value = res.dailyReferral;
+        document.getElementById("rshare-builder").value = res.dailyBuilder;
+        document.getElementById("rshare-net").value = res.dailyNet;
+        document.getElementById("rshare-period").value = res.periodNet;
+        document.getElementById("rshare-next").value = res.nextDailyNet === null ? "no higher share exists" : res.nextDailyNet;
       }
     });
 

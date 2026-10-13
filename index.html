@@ -2986,6 +2986,33 @@
         <button type="submit" class="btn primary">Compare the two referral tiers by net</button>
         <p id="rntier-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="rshare-calc">
+        <h3>121 · Referral fee-share maximum share solver</h3>
+        <p>The referral fee-share revenue estimator prices a split of a disclosed platform fee over time, and the referral fee-share net revenue estimator nets one split fee against its builder's daily operating cost — both take the referrer's share as an input. This one solves for the largest referrer share the builder can afford: given the day's fee-bearing volume, the disclosed platform rate and the builder's daily operating cost, it finds the largest share, in whole basis points of the fee, whose builder cut still covers that cost — the number a builder needs before promising a referrer anything, because a share promised past it is paid out of the builder's own pocket. On the headline numbers, 100,000 of volume a day at a disclosed 0.5% platform fee collects a fee of 500 a day, and against a daily operating cost of 100 the largest affordable share is 80% of the fee: it pays the referrer 400 a day, keeps 100 for the builder and nets exactly 0 after the cost — 3,000 of builder cut against 3,000 of costs over 30 days — while one basis point more, 8001 basis points of the fee, would pay the referrer 400.05 and leave the builder netting −0.05 a day. The share is a share of the platform fee, not of the volume: 80% here means 80% of the 0.5% fee, an effective 0.4% of the day's volume — never 80% of the volume itself. The edges are stated plainly: where the daily cost outruns the whole fee there is no affordable share at all — even at a share of 0%, keeping everything, the builder nets a signed shortfall, and the model reports that shortfall rather than inventing a share; where the cost is zero the whole fee can go to the referrer and the builder keeps nothing and still covers it. Each day's fee is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, the referrer's cut is rounded down and the builder keeps the remainder, so the two cuts always sum exactly to the fee — and a real interface taking its fee trade by trade rounds every single trade down, so what it collects, and therefore both cuts, are never more than these figures and usually a little less on a day of many small trades; read them as ceilings, not deposits. The volume, rate and cost are yours to supply and nothing here predicts them: a bigger share is usually offered precisely because it is expected to bring volume, and that expectation is yours, entered as the volume it is expected to bring — no elasticity, growth or decline is assumed — and the volume, rate and cost are held constant across the period, with refunds and failed trades not modelled, and volume served at a different rate or share, or fee-free, not told apart. The volume and cost are in one unit of value, yours to choose. On an interface I build, the share this solves for would be the disclosed one, labelled before any trade, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and any referrer's cut goes to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volume, fee, cost and period, not live data, not a forecast, not financial advice.</p>
+        <label for="rshare-volume">Daily fee-bearing volume, in your unit of value</label>
+        <input id="rshare-volume" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="rshare-fee">Platform fee (basis points, 50 = 0.5%)</label>
+        <input id="rshare-fee" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="rshare-cost">Builder's daily operating cost, in the same unit as the volume</label>
+        <input id="rshare-cost" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="rshare-days">Period (days)</label>
+        <input id="rshare-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="rshare-max">Largest referrer share whose builder cut covers the cost (model)</label>
+        <input id="rshare-max" readonly placeholder="—" autocomplete="off">
+        <label for="rshare-referral">Referrer cut per day at the solved share (model)</label>
+        <input id="rshare-referral" readonly placeholder="—" autocomplete="off">
+        <label for="rshare-builder">Builder cut per day at the solved share (model)</label>
+        <input id="rshare-builder" readonly placeholder="—" autocomplete="off">
+        <label for="rshare-net">Builder net per day at the solved share, after the cost (model, signed)</label>
+        <input id="rshare-net" readonly placeholder="—" autocomplete="off">
+        <label for="rshare-period">Builder net over the period at the solved share (model, signed)</label>
+        <input id="rshare-period" readonly placeholder="—" autocomplete="off">
+        <label for="rshare-next">Builder net per day one basis point of share higher (model, signed)</label>
+        <input id="rshare-next" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Solve for the largest affordable referrer share</button>
+        <p id="rshare-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -3013,6 +3040,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=162"></script>
+<script src="app.js?v=163"></script>
 </body>
 </html>
