@@ -12607,14 +12607,26 @@ function dualPayoutCostSolver(dailyVolumeStr, platformFeeBps, referralShareBps, 
    own threshold, and one smallest unit of volume a day
    less it does not. Because the volume is one number the
    interface actually does, the model also reports the
-   volume that pays BOTH sides — the larger of the two
-   solved volumes, since a side's period cut never falls as
-   volume grows, so at the larger volume the other side's
-   cut has reached its threshold too. Verified in a clean
-   foreground prototype before it shipped: 3,000 random
-   cases checked for reach and minimality through the fee
-   estimator, the both-volume property, and equal-terms
-   agreement, zero mismatches. Headline: at a disclosed
+   volume that pays BOTH sides. That volume is usually
+   the larger of the two solved volumes, but not always:
+   the referrer's period cut is monotone in volume, while
+   the builder's is the estimator's composed difference
+   of two floors, which can dip one smallest unit at
+   volumes past the builder's own solved volume — so when
+   the referrer's volume is the larger one, the model
+   searches onward from it, fee by fee in the windows
+   tool 127's solver proves, for the first fee whose
+   composed builder cut reaches the builder's threshold
+   (the directed case is pinned in the suite: share 9999,
+   a half-day period and one-unit thresholds solve the
+   builder at a fee of 2 and the referrer at a fee of 3,
+   whose composed builder cut is 0 — the both-volume is
+   the volume carrying a fee of 4, not the referrer's).
+   Verified in a clean foreground prototype before it
+   shipped: 3,000 random cases checked for reach and
+   minimality through the fee estimator, the both-volume
+   property, and equal-terms agreement, zero mismatches.
+   Headline: at a disclosed
    50 bps platform fee with 25% of the fee to the referrer
    over 30 days, the referrer — paid at its own threshold
    of 500 at its own cost of 0.5 a transfer — solves to
@@ -12672,7 +12684,87 @@ function dualPayoutVolumeSolver(platformFeeBps, referralShareBps, referralThresh
   var volumeToPayBoth = null;
   if (rSolve.referralMinVolume !== null && bSolve.builderMinVolume !== null) {
     var rVol = parseScaled(rSolve.referralMinVolume), bVol = parseScaled(bSolve.builderMinVolume);
-    volumeToPayBoth = formatScaled(rVol > bVol ? rVol : bVol);
+    if (bVol >= rVol) {
+      /* The builder's solved volume is the larger one, and
+         the referrer's period cut — a single floor of a
+         daily cut that never falls as volume grows — is
+         monotone in volume, so at the builder's volume the
+         referrer has reached its threshold too. */
+      volumeToPayBoth = formatScaled(bVol);
+    } else {
+      /* The referrer's volume is the larger one — but the
+         builder's period cut is the estimator's COMPOSED
+         difference floor(F · days) − floor(R · days), which
+         is NOT monotone in the day's fee F: as F steps, the
+         referral floor can jump while the fee floor does
+         not, dipping the builder's cut one smallest unit
+         below its threshold at volumes past its own solved
+         volume (share 9999, half-day period, one-unit
+         thresholds: the builder solves at a fee of 2, and
+         at the referrer's fee of 3 its period cut is 0).
+         So the both-volume is NOT the larger solved volume:
+         it is the smallest volume at or past the referrer's
+         whose fee's composed builder cut reaches the
+         builder's threshold, found by an exact onward
+         search over fees, mirroring tool 127's own window
+         methods. The referrer reaches at every fee at or
+         past its own solved fee, so only the builder side
+         needs the search. The sandwich fee closedB — the
+         smallest fee whose daily builder cut reaches
+         needB — always reaches (its composed cut is at
+         least floor(needB · days) >= threshold), and every
+         fee past it reaches too, so the search terminates;
+         the iteration cap is a runtime guard only, and past
+         it the guaranteed sandwich fee is used. */
+      var rateB = BigInt(Number(platformFeeBps)), shareB = BigInt(Number(referralShareBps)), keepB = 10000n - shareB;
+      var bThresh = parseScaled(builderThresholdStr), daysB = parseScaled(daysStr);
+      var feeR = rVol * rateB / 10000n;
+      var needB = (bThresh * SCALE + daysB - 1n) / daysB;
+      var closedB = (needB - 1n) * 10000n / keepB + 1n;
+      var composedB = function (F) {
+        var R = F * shareB / 10000n;
+        return F * daysB / SCALE - R * daysB / SCALE;
+      };
+      var bothFee = null;
+      if (composedB(feeR) >= bThresh) {
+        bothFee = feeR;
+      } else if (daysB >= SCALE) {
+        /* Whole-day-or-longer periods: scan daily builder
+           cuts upward from the referrer fee's own cut, in
+           the fee bands tool 127's solver uses, fees
+           ascending inside each band; a band whose daily
+           cut alone floors to the threshold is entered at
+           its first fee at or past the referrer's. */
+        var D0 = feeR - feeR * shareB / 10000n;
+        for (var D = D0; D <= needB && bothFee === null; D++) {
+          var loD = (D - 1n) * 10000n / keepB + 1n, hiD = D * 10000n / keepB;
+          if (D * daysB / SCALE >= bThresh) { bothFee = feeR > loD ? feeR : loD; break; }
+          var fStart = feeR > loD ? feeR : loD;
+          for (var F = fStart; F <= hiD; F++) { if (composedB(F) >= bThresh) { bothFee = F; break; } }
+        }
+        if (bothFee === null) bothFee = feeR > closedB ? feeR : closedB;
+      } else {
+        /* Sub-day periods: scan the period-referral B
+           upward from the referrer fee's own period
+           referral, as tool 127's sub-day search does; the
+           candidate for each B is the smallest fee at or
+           past the referrer's whose period fee reaches
+           threshold + B, and the first candidate whose
+           composed cut reaches is the smallest reaching
+           fee (any reaching fee is at or past the
+           candidate for its own B). */
+        var B0 = (feeR * shareB / 10000n) * daysB / SCALE;
+        for (var B = B0, guard = 0; guard < 5000000; B++, guard++) {
+          var cand = (bThresh + B) * SCALE;
+          cand = (cand + daysB - 1n) / daysB;
+          if (cand < feeR) cand = feeR;
+          if (cand >= closedB) { bothFee = cand; break; }
+          if (composedB(cand) >= bThresh) { bothFee = cand; break; }
+        }
+        if (bothFee === null) bothFee = feeR > closedB ? feeR : closedB;
+      }
+      volumeToPayBoth = formatScaled((bothFee * 10000n + rateB - 1n) / rateB);
+    }
   }
   var result = {
     platformFeePct: rSolve.platformFeePct,
@@ -17954,9 +18046,9 @@ if (typeof document !== "undefined") {
           bothClause = "no single volume pays both sides, because one side accrues at nothing at any volume";
         } else {
           document.getElementById("dvol-both").value = res.volumeToPayBoth;
-          bothClause = "the volume that pays both sides is " + res.volumeToPayBoth + " a day — the larger of the two solved volumes, because a side's period cut never falls as the volume grows, so at that volume the other side's cut has reached its own threshold too";
+          bothClause = "the volume that pays both sides is " + res.volumeToPayBoth + " a day — the smallest volume at which both sides' period cuts reach their own thresholds: usually the larger of the two solved volumes, but the builder's period cut is a difference of two floors and can dip a smallest unit at a volume past its own solved volume, so where that dip lands on the larger solved volume the paying-both volume is the first volume past it at which the builder's cut reaches again";
         }
-        out.textContent = "Model output: at a platform fee of " + fmt(res.platformFeePct, 4) + "% with a referrer share of " + fmt(res.referralSharePct, 4) + "% of the platform fee and a period of " + res.days + " day(s): for the referrer, " + rClause + "; for the builder, " + bClause + ". The two sides solve separately because they are paid separately: each side solved on its own threshold and its own cost — each side's daily cut is its own share of the same day's fee, the referrer's rounded down, the builder keeping the remainder — and wherever the two sides' thresholds and costs are equal this solver and the shared-terms volume solver agree exactly. At each solved volume that side's period cut first reaches its own threshold: the question answered is whether a payout lands at all on that side's terms. Each side's supplied cost changes nothing about its solved volume — a payout is reached when a cut reaches its threshold, whatever sending it costs — and is carried through only so the payouts each solved volume lands are reported with their cost on that side's own terms. The thresholds and the costs are figures you supplied, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent. The share is a share of the platform fee, not of the volume. The rate, share, thresholds, costs and period are scenarios you supplied, held constant across the period, with growth, refunds and fee-free volume not told apart. The day's fee is the platform fee applied once to the day's whole volume and rounded down to the smallest unit, with the referrer's cut rounded down and the builder keeping the remainder, so a real interface taking its fee trade by trade accrues never more than these figures, and the real volume a payout needs is never less than a solved volume. On an interface I build, both thresholds, both costs, the solved volumes and the fee itself would be published together, with the builder's cut taken to my own fee wallet — the SOL address in the support section below — and any referrer's cut to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by using this model. A dual-threshold fee-share payout volume solver, not live data, not a forecast. Not financial advice.";
+        out.textContent = "Model output: at a platform fee of " + fmt(res.platformFeePct, 4) + "% with a referrer share of " + fmt(res.referralSharePct, 4) + "% of the platform fee and a period of " + res.days + " day(s): for the referrer, " + rClause + "; for the builder, " + bClause + ". Across the split, " + bothClause + ". The two sides solve separately because they are paid separately: each side solved on its own threshold and its own cost — each side's daily cut is its own share of the same day's fee, the referrer's rounded down, the builder keeping the remainder — and wherever the two sides' thresholds and costs are equal this solver and the shared-terms volume solver agree exactly. At each solved volume that side's period cut first reaches its own threshold: the question answered is whether a payout lands at all on that side's terms. Each side's supplied cost changes nothing about its solved volume — a payout is reached when a cut reaches its threshold, whatever sending it costs — and is carried through only so the payouts each solved volume lands are reported with their cost on that side's own terms. The thresholds and the costs are figures you supplied, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent. The share is a share of the platform fee, not of the volume. The rate, share, thresholds, costs and period are scenarios you supplied, held constant across the period, with growth, refunds and fee-free volume not told apart. The day's fee is the platform fee applied once to the day's whole volume and rounded down to the smallest unit, with the referrer's cut rounded down and the builder keeping the remainder, so a real interface taking its fee trade by trade accrues never more than these figures, and the real volume a payout needs is never less than a solved volume. On an interface I build, both thresholds, both costs, the solved volumes and the fee itself would be published together, with the builder's cut taken to my own fee wallet — the SOL address in the support section below — and any referrer's cut to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by using this model. A dual-threshold fee-share payout volume solver, not live data, not a forecast. Not financial advice.";
       }
     });
 
