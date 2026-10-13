@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred thirty-one</label>
+      <label for="tool-q">Find a tool among the one hundred thirty-two</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred thirty-one tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred thirty-two tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred thirty-one.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred thirty-two.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -3407,6 +3407,62 @@
         <button type="submit" class="btn primary">Solve for the payout shares</button>
         <p id="pshare-result" role="status" aria-live="polite"></p>
       </form>
+      <form class="tool" id="dplan-calc">
+        <h3>132 · Dual-threshold fee-share payout plan</h3>
+        <p>The fee-share payout plan runs both sides of a split together, but on one shared threshold and one shared cost per transfer — the terms a programme publishes when both wallets are paid the same way. Two wallets are often not paid the same way: a referrer may be paid on a small threshold over a cheap rail while the builder's own cut waits for a larger threshold on a costlier one, or the reverse. This plan gives each side its own threshold and its own cost per transfer, and runs both schedules together on one scenario. You supply the daily fee-bearing volume, the platform fee rate, the referrer's share of the fee, the referrer's threshold and cost, the builder's threshold and cost, and the period. Nothing here is new arithmetic: each side's figures are its own payout schedule model's, run on that side's own terms and composed exactly, and the combined figures are their plain sums — never a re-estimate — and where the two sides' terms happen to be equal, the plan agrees with the shared-terms plan exactly. On the headline numbers, 100,000 of volume a day at a 50-basis-point fee with 25% of the fee to the referrer, a day's fee of 500 splits 125 to the referrer and 375 to the builder: the referrer, on a threshold of 500 at a cost of 1 per transfer, is first paid on day 4 and lands 7 payouts paying 3,500, costing 7 and netting 3,743; the builder, on a threshold of 1,000 at a cost of 2, is first paid a day earlier, on day 3, and lands 11 payouts paying 11,000, costing 22 and netting 11,228 — across both sides 18 payouts pay 14,500 of the period's 15,000 fee, costing 29 to move and netting the two cuts 14,971 between them, with 500 still accrued when the period ends. The order is the lesson: the builder's larger cut pays first here not only because it is larger but because each side waits for its own threshold — a smaller cut on a smaller threshold can land before a larger cut on a larger one, and planning both sides on one shared threshold would misjudge both first-payout days. The edges are stated per side, under that side's own terms: where a side's share of the fee is nothing — a referrer share of zero, or a share of the whole fee emptying the builder's side — that side accrues at nothing and never pays, in this period or any other, and the model says so alongside the other side's answer where there is one; a side that accrues but stays below its own threshold inside the period pays nothing inside it, and the plan states the day its first payout would land, after the period ends, with the whole accrued cut still waiting; and where a side's transfer costs more than the threshold it carries, that side's net — and with enough of them the combined net — goes honestly negative, reported signed, not hidden. The combined overhead is measured against the period's whole fee, not against either cut, because that is the pot every payout on both sides is paid out of. The thresholds and the costs are figures you supply, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent, and a planned first-payout day is a plan, not a promise. The accrual underneath is the fee estimator's own floored arithmetic: each day's fee is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, the referrer's cut is rounded down and the builder keeps the remainder — and a real interface taking its fee trade by trade rounds every trade down, so what accrues is never more than these figures, and first payouts land no earlier than these days, and usually a little later. The share is a share of the platform fee, not of the volume. The volume, rate, share, thresholds, costs and period are yours to supply and are held constant across the period, with growth, refunds and fee-free volume not told apart. On an interface I build, both thresholds and the fee itself would be published together, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and any referrer's cut goes to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volume, rate, share, thresholds, costs and period, not live data, not a forecast, not financial advice.</p>
+        <label for="dplan-vol">Daily fee-bearing volume, in your unit of value</label>
+        <input id="dplan-vol" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="dplan-rate">Platform fee rate (basis points, 50 = 0.5%)</label>
+        <input id="dplan-rate" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="dplan-share">Referrer share of the platform fee (basis points of the fee, 2500 = 25% of the fee)</label>
+        <input id="dplan-share" inputmode="numeric" placeholder="e.g. 2500" autocomplete="off">
+        <label for="dplan-rthreshold">Referrer payout threshold, in your unit of value (a referrer payout is sent whenever the referrer's accrued cut reaches it)</label>
+        <input id="dplan-rthreshold" inputmode="decimal" placeholder="e.g. 500" autocomplete="off">
+        <label for="dplan-rcost">Cost of one referrer payout transfer, in the same unit (supplied by you, never read from the network)</label>
+        <input id="dplan-rcost" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="dplan-bthreshold">Builder payout threshold, in your unit of value (a builder payout is sent whenever the builder's accrued cut reaches it)</label>
+        <input id="dplan-bthreshold" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="dplan-bcost">Cost of one builder payout transfer, in the same unit (supplied by you, never read from the network)</label>
+        <input id="dplan-bcost" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="dplan-days">Period (days)</label>
+        <input id="dplan-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="dplan-rfirst">Days until the first referrer payout lands, under the referrer's own threshold (model)</label>
+        <input id="dplan-rfirst" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-rcount">Referrer payouts inside the period (model)</label>
+        <input id="dplan-rcount" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-rpaid">Total paid out to the referrer inside the period (model)</label>
+        <input id="dplan-rpaid" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-rleft">Referrer cut still accrued when the period ends (model)</label>
+        <input id="dplan-rleft" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-rtcost">Total cost of the referrer's payout transfers, at the referrer's own cost (model)</label>
+        <input id="dplan-rtcost" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-rnet">Referrer cut net of its payout costs (model)</label>
+        <input id="dplan-rnet" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-bfirst">Days until the first builder payout lands, under the builder's own threshold (model)</label>
+        <input id="dplan-bfirst" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-bcount">Builder payouts inside the period (model)</label>
+        <input id="dplan-bcount" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-bpaid">Total paid out to the builder inside the period (model)</label>
+        <input id="dplan-bpaid" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-bleft">Builder cut still accrued when the period ends (model)</label>
+        <input id="dplan-bleft" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-btcost">Total cost of the builder's payout transfers, at the builder's own cost (model)</label>
+        <input id="dplan-btcost" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-bnet">Builder cut net of its payout costs (model)</label>
+        <input id="dplan-bnet" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-first">Which side's first payout lands first (model)</label>
+        <input id="dplan-first" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-gap">Days between the two sides' first payouts (model)</label>
+        <input id="dplan-gap" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-tcount">Payouts inside the period across both sides together (model)</label>
+        <input id="dplan-tcount" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-tcost">Total cost of every payout transfer on both sides (model)</label>
+        <input id="dplan-tcost" readonly placeholder="—" autocomplete="off">
+        <label for="dplan-cnet">The two cuts together, net of every payout cost on both sides (model)</label>
+        <input id="dplan-cnet" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan both sides on their own terms</button>
+        <p id="dplan-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -3434,6 +3490,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=180"></script>
+<script src="app.js?v=181"></script>
 </body>
 </html>
