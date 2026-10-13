@@ -3042,6 +3042,41 @@
         <button type="submit" class="btn primary">Solve for the smallest platform rate</button>
         <p id="rrate-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="rpay-calc">
+        <h3>123 · Referral fee-share payout schedule model</h3>
+        <p>The referral fee-share revenue estimator prices a referrer's cut as it accrues, day by day; this one prices how that cut is actually handed over. A referrer is not paid on every accrual — each payout is a transfer, and a transfer costs something to send — so the cut is paid out only when the accrued cut reaches the threshold you set, and what this model works out is the schedule that follows: the day the first payout lands, how many payouts a period holds, how much is still below the threshold when the period ends, what the transfers cost in total, and what the referrer nets after them. On the headline numbers, 100,000 of volume a day at a platform fee of 0.5% with a referrer share of 25% of the fee accrues the referrer 125 a day; against a threshold of 500 the first payout lands on day 4, a 30-day period holds seven payouts paying 3,500 of the 3,750 accrued, and 250 is still below the threshold at the end — carried forward into the next period, not lost. At a cost of 0.5 a transfer, supplied by you, the seven payouts cost 3.5 in total and the referrer nets 3,746.5 over the period — the schedule costs under a tenth of one percent of the cut. Set the threshold at 100 instead and the same period holds 37 payouts costing 18.5: a lower threshold pays sooner and costs more, and that trade is the whole decision this model prices. The edges are stated plainly: where the cut accrues at nothing — a rate of zero, a share of zero, or a day's fee so small its floored cut is zero — no payout is ever reached and the model says so rather than naming a day; where the threshold stands above a whole period's accrual, the first payout falls after the period ends and nothing is paid inside it; and where the cost of one transfer stands above the threshold itself, paying out costs more than each payout carries and the period net is reported signed, negative, rather than hidden. The transfer cost is a figure you supply, in the same unit as the volume, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent, and a schedule drawn against a supplied cost is a plan, not a quote. The accrual underneath is the revenue estimator's own: each day's fee is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, the referrer's cut is rounded down and the builder keeps the remainder — and a real interface taking its fee trade by trade rounds every trade down, so what accrues, and therefore what is paid, is never more than these figures and usually a little less on a day of many small trades; read them as ceilings, not deposits. Payouts are counted at whole-day boundaries, on the day's whole accrual: a programme that settles more often, or pays on a calendar rather than an accrual count, will land its payouts on different days by a little. The share is a share of the platform fee, not of the volume. The volume, rate, share, threshold, cost and period are yours to supply and are held constant across the period, with growth, refunds and fee-free volume not told apart. On an interface I build, the schedule and the threshold would be published with the fee itself, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and any referrer's cut goes to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volume, fee, share, threshold, payout cost and period, not live data, not a forecast, not financial advice.</p>
+        <label for="rpay-volume">Daily fee-bearing volume, in your unit of value</label>
+        <input id="rpay-volume" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="rpay-rate">Platform fee rate (basis points of the amount paid in, 50 = 0.5%)</label>
+        <input id="rpay-rate" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="rpay-share">Referrer share of the platform fee (basis points of the fee, 2500 = 25% of the fee)</label>
+        <input id="rpay-share" inputmode="numeric" placeholder="e.g. 2500" autocomplete="off">
+        <label for="rpay-threshold">Payout threshold — the accrued cut is paid out when it reaches this, in the same unit as the volume</label>
+        <input id="rpay-threshold" inputmode="decimal" placeholder="e.g. 500" autocomplete="off">
+        <label for="rpay-cost">Cost of one payout transfer, in the same unit (you supply it — it is not read from the network)</label>
+        <input id="rpay-cost" inputmode="decimal" placeholder="e.g. 0.5" autocomplete="off">
+        <label for="rpay-days">Period (days)</label>
+        <input id="rpay-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="rpay-daily">Referrer cut accrued per day (model)</label>
+        <input id="rpay-daily" readonly placeholder="—" autocomplete="off">
+        <label for="rpay-first">Days until the first payout lands (model)</label>
+        <input id="rpay-first" readonly placeholder="—" autocomplete="off">
+        <label for="rpay-count">Payouts inside the period (model)</label>
+        <input id="rpay-count" readonly placeholder="—" autocomplete="off">
+        <label for="rpay-paid">Total paid out over the period (model)</label>
+        <input id="rpay-paid" readonly placeholder="—" autocomplete="off">
+        <label for="rpay-left">Accrued but still below the threshold at the period's end, carried forward (model)</label>
+        <input id="rpay-left" readonly placeholder="—" autocomplete="off">
+        <label for="rpay-tcost">Total cost of the period's payout transfers (model)</label>
+        <input id="rpay-tcost" readonly placeholder="—" autocomplete="off">
+        <label for="rpay-net">Referrer net over the period, after payout costs (model, signed)</label>
+        <input id="rpay-net" readonly placeholder="—" autocomplete="off">
+        <label for="rpay-overhead">Payout costs as a share of the referrer's period cut (model)</label>
+        <input id="rpay-overhead" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Work out the payout schedule</button>
+        <p id="rpay-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -3069,6 +3104,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=165"></script>
+<script src="app.js?v=166"></script>
 </body>
 </html>
