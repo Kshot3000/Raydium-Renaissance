@@ -9971,7 +9971,13 @@ function referralTierCompare(dailyVolumeAStr, platformFeeABps, referralShareABps
    grossWinner keep the other two rankings apart, and no prose
    may infer one ranking from another — the headline case below
    is exactly the case where the builder-cut ranking and the
-   net ranking point opposite ways. The two break-even volumes
+   net ranking point opposite ways. The period relation is a
+   fourth ranking of its own: the period figures floor each
+   leg separately, so over the shortest periods the period
+   difference can collapse to exactly zero, or by one smallest
+   unit point opposite the daily difference — the handler
+   states the period relation from the signed period field
+   itself, never from the daily winner. The two break-even volumes
    restate the comparison in net terms: the smallest daily
    volume at tier B's rate and share whose builder cut covers
    tier A's daily net PLUS tier B's own daily cost. The builder
@@ -14257,13 +14263,34 @@ if (typeof document !== "undefined") {
         } else {
           grossClause = " Tier " + res.grossWinner + " collects more platform fee overall (" + res.dailyFeeA + " a day at tier A against " + res.dailyFeeB + " at tier B, before either split), yet nets less after the split and its cost.";
         }
+        /* The PERIOD relation is a fourth axis of its own, read
+           from the signed period field: the period figures floor
+           each leg separately, so over the shortest periods the
+           period difference can collapse to exactly zero, or by
+           one smallest unit point opposite the daily difference
+           (a 300,000-case scan at a period of one smallest unit
+           of a day found both shapes) — the period clause is
+           therefore branched on the period winner itself, never
+           quoted in the daily winner's direction by default. */
+        var periodWinner = res.diffPeriodNet === "0" ? "tie" : (res.diffPeriodNet.charAt(0) === "-" ? "A" : "B");
+        function periodClause(winnerLetter) {
+          if (periodWinner === winnerLetter) {
+            return ", " + absDiffPeriod + " more over the period.";
+          }
+          if (periodWinner === "tie") {
+            return ", and exactly the same over the period — the period figures floor each leg separately, so over a period this short they round the daily gap away.";
+          }
+          return ", though over the period tier " + periodWinner + " nets " + absDiffPeriod + " more — the period figures floor each leg separately, so they can point the other way from the daily figures over a period this short.";
+        }
         var winnerSentence;
         if (res.winner === "B") {
-          winnerSentence = "For the builder after costs, tier B nets more: " + absDiff + " a day more than tier A, " + absDiffPeriod + " more over the period." + builderClause + grossClause;
+          winnerSentence = "For the builder after costs, tier B nets more: " + absDiff + " a day more than tier A" + periodClause("B") + builderClause + grossClause;
         } else if (res.winner === "A") {
-          winnerSentence = "For the builder after costs, tier A nets more: " + absDiff + " a day more than tier B, " + absDiffPeriod + " more over the period." + builderClause + grossClause;
-        } else {
+          winnerSentence = "For the builder after costs, tier A nets more: " + absDiff + " a day more than tier B" + periodClause("A") + builderClause + grossClause;
+        } else if (periodWinner === "tie") {
           winnerSentence = "For the builder after costs, the two tiers net exactly the same: the net difference is 0 a day and 0 over the period, so on the net alone there is nothing to choose between them — the choice then rests on what each rate, share and cost does to the traders, referrers and operation living with it, which this model does not score.";
+        } else {
+          winnerSentence = "For the builder after costs, the two tiers net exactly the same a day: the daily net difference is 0, though over the period tier " + periodWinner + " nets " + absDiffPeriod + " more — the period figures floor each leg separately, so they can point the other way from the daily figures over a period this short. On the daily net alone there is nothing to choose between them — the choice then rests on what each rate, share and cost does to the traders, referrers and operation living with it, which this model does not score.";
         }
         /* Each break-even sentence names the exact cause when
            there is no break-even volume for that tier: a zero
