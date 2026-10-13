@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=163"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=164"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v163", html.includes("app.js?v=163"));
+check("app.js cache key bumped to v164", html.includes("app.js?v=164"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -7610,6 +7610,8 @@ check("RSHARE rejects a zero volume, zero days and periods past the cap, and acc
 check("RSHARE rejects bad fees", app.referralMaxShare("100000", 10000, "100", "30") === null && app.referralMaxShare("100000", -1, "100", "30") === null && app.referralMaxShare("100000", 50.5, "100", "30") === null && app.referralMaxShare("100000", 9999, "100", "30") !== null);
 check("RSHARE source solves the closed form from the same floored fee arithmetic and charges the cost against the builder cut alone", (() => { const at = appSrc.indexOf("function referralMaxShare"); const body = appSrc.slice(at, at + 2200); return at !== -1 && body.includes("vol * BigInt(fee) / 10000n") && body.includes("(feeAmt - cost + 1n) * 10000n - 1n") && body.includes("feeAmt * BigInt(maxShare) / 10000n") && body.includes("signed(builder - cost)") && body.includes("cost <= feeAmt"); })());
 check("RSHARE handler branches its share sentence on the solved share: no share, whole fee, zero share and the maximality clause one basis point higher", appSrc.includes('getElementById("rshare-calc")') && appSrc.includes("no referrer share covers the daily cost") && appSrc.includes("the whole fee can go to the referrer") && appSrc.includes("the largest affordable share is 0% of the fee") && appSrc.includes("so the solved share is the largest whole basis point that covers it, not a rounded guess") && appSrc.includes("no higher share exists"));
+check("RSHARE handler states the referrer's effective rate from the exact scaled cut and volume, never the headline rates multiplied together", (() => { const at = appSrc.indexOf('getElementById("rshare-calc")'); const seg = appSrc.slice(at, at + 9000); return at !== -1 && seg.includes("parseScaled(res.dailyReferral)") && seg.includes("effRefPct") && seg.includes("the referrer's cut here is an effective"); })() && !appSrc.includes("res.platformFeePct * res.maxSharePct"));
+check("RSHARE dust effective rates are the exact floored cuts, not the nominal products: a 3-unit fee solved at 9999 bps pays 2 units (0.3333% of volume, not 0.5000%), and at the whole-fee cost the solved share pays exactly 0", (() => { const a = app.referralMaxShare("0.0000006", 50, "0.000000001", "1"); const b = app.referralMaxShare("0.0000006", 50, "0.000000003", "1"); const eff = r => Number(app.parseScaled(r.dailyReferral)) / Number(app.parseScaled(r.dailyVolume)) * 100; return a !== null && eff(a) > 0.3333 && eff(a) < 0.3334 && b !== null && b.maxShareBps === 3333 && b.dailyReferral === "0" && eff(b) === 0; })());
 check("all rshare controls labelled", ["rshare-volume", "rshare-fee", "rshare-cost", "rshare-days", "rshare-max", "rshare-referral", "rshare-builder", "rshare-net", "rshare-period", "rshare-next"].every(id => html.includes(`for="${id}"`)));
 check("rshare tool present in index.html", html.includes('id="rshare-calc"') && html.includes('id="rshare-result"'));
 check("rshare handler wired to its own form", appSrc.includes('getElementById("rshare-calc")') && appSrc.includes('getElementById("rshare-result")'));
