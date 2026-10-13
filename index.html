@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred twenty-nine</label>
+      <label for="tool-q">Find a tool among the one hundred thirty</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred twenty-nine tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred thirty tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred twenty-nine.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred thirty.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -3329,6 +3329,45 @@
         <button type="submit" class="btn primary">Plan both sides' payouts</button>
         <p id="pplan-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="pper-calc">
+        <h3>130 · Fee-share payout period solver</h3>
+        <p>The payout solvers before this one hold the period fixed and solve for a threshold, a cost, a volume or a rate; this one holds the volume, the rate and the split fixed and solves for the period itself. You supply the daily fee-bearing volume, the platform fee rate, the referrer's share of the fee, the threshold a programme has published and the cost of one payout transfer, and it finds the smallest whole number of days at which each side's accrued cut first reaches the threshold — the shortest period at the end of which a first payout has landed. Each side of the split is solved on its own: the referrer's cut and the builder's cut — what is left of the platform fee after the referrer's share is taken off it — accrue at different rates off the same day's fee, so they honestly reach the threshold on different days, and a programme that must pay both sides inside one period needs the longer of the two solved periods. On the headline numbers, 100,000 of volume a day at a 50-basis-point fee with 25% of the fee to the referrer and a threshold of 500, a day's fee of 500 accrues the builder's larger cut to the threshold in 2 days — 750 accrued, one payout of 500, 250 still waiting — while the referrer's smaller cut needs 4 days to accrue its first 500 exactly. One day less on either side and that side's accrued cut is still below the threshold, so no payout has landed at all. The solved period is a whole number of days by construction: accrual is counted at whole-day boundaries on the day's whole accrual, the way the payout schedule models count it, so the answer is the first whole day the running cut reaches the threshold, never a fraction of a day. The edges are stated plainly: where a side's share of the fee is nothing — a referrer share of zero, or a share of the whole fee emptying the builder's side — that side accrues at nothing, so no period reaches a payout on it and the model says so, alongside the other side's answer where there is one; where a day's fee is so small that a side's cut rounds down to zero the same holds, because nothing accrues however long the period runs; and where a side accrues so slowly that even 36,500 days — the longest period this family prices — leaves its cut below the threshold, no period this family prices reaches a payout on that side either, and the model says that instead of printing an enormous day count. The supplied cost changes nothing about the solved periods — a payout is reached when a cut reaches the threshold, whatever sending it costs — and is carried through only so the payouts each solved period lands are reported with their cost, their net and their overhead. The threshold and the cost are figures you supply, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent, and a solved period is a projection, not a promise. The accrual underneath is the fee estimator's own floored arithmetic: each day's fee is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, the referrer's cut is rounded down and the builder keeps the remainder — and a real interface taking its fee trade by trade rounds every trade down, so what accrues is never more than these figures, and the real period a payout needs is therefore never shorter than the solved period, and usually a little longer on a day of many small trades; read the solved periods as floors, not forecasts. The share is a share of the platform fee, not of the volume. The volume, rate, share, threshold and cost are yours to supply and are held constant, with growth, refunds and fee-free volume not told apart. On an interface I build, the solved periods, the threshold and the fee itself would be published together, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and any referrer's cut goes to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volume, rate, share, threshold and cost, not live data, not a forecast, not financial advice.</p>
+        <label for="pper-vol">Daily fee-bearing volume, in your unit of value</label>
+        <input id="pper-vol" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="pper-rate">Platform fee rate (basis points, 50 = 0.5%)</label>
+        <input id="pper-rate" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="pper-share">Referrer share of the platform fee (basis points of the fee, 2500 = 25% of the fee)</label>
+        <input id="pper-share" inputmode="numeric" placeholder="e.g. 2500" autocomplete="off">
+        <label for="pper-threshold">Payout threshold, in your unit of value (a payout is sent whenever an accrued cut reaches it)</label>
+        <input id="pper-threshold" inputmode="decimal" placeholder="e.g. 500" autocomplete="off">
+        <label for="pper-cost">Cost of one payout transfer, in the same unit (supplied by you, never read from the network)</label>
+        <input id="pper-cost" inputmode="decimal" placeholder="e.g. 0.5" autocomplete="off">
+        <label for="pper-rdays">Shortest period (days) at which the referrer's cut first reaches the threshold (model)</label>
+        <input id="pper-rdays" readonly placeholder="—" autocomplete="off">
+        <label for="pper-rcut">Referrer cut accrued over that period (model)</label>
+        <input id="pper-rcut" readonly placeholder="—" autocomplete="off">
+        <label for="pper-rcount">Referrer payouts inside that period (model)</label>
+        <input id="pper-rcount" readonly placeholder="—" autocomplete="off">
+        <label for="pper-rtcost">Total cost of the referrer's payout transfers in that period (model)</label>
+        <input id="pper-rtcost" readonly placeholder="—" autocomplete="off">
+        <label for="pper-rover">Referrer payout costs as a share of the referrer's period cut (model)</label>
+        <input id="pper-rover" readonly placeholder="—" autocomplete="off">
+        <label for="pper-bdays">Shortest period (days) at which the builder's cut first reaches the threshold (model)</label>
+        <input id="pper-bdays" readonly placeholder="—" autocomplete="off">
+        <label for="pper-bcut">Builder cut accrued over that period (model)</label>
+        <input id="pper-bcut" readonly placeholder="—" autocomplete="off">
+        <label for="pper-bcount">Builder payouts inside that period (model)</label>
+        <input id="pper-bcount" readonly placeholder="—" autocomplete="off">
+        <label for="pper-btcost">Total cost of the builder's payout transfers in that period (model)</label>
+        <input id="pper-btcost" readonly placeholder="—" autocomplete="off">
+        <label for="pper-bover">Builder payout costs as a share of the builder's period cut (model)</label>
+        <input id="pper-bover" readonly placeholder="—" autocomplete="off">
+        <label for="pper-both">Shortest period at which both sides have been paid (model)</label>
+        <input id="pper-both" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Solve for the shortest payout periods</button>
+        <p id="pper-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -3356,6 +3395,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=175"></script>
+<script src="app.js?v=176"></script>
 </body>
 </html>
