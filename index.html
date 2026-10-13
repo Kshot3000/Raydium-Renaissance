@@ -3111,6 +3111,48 @@
         <button type="submit" class="btn primary">Work out the builder payout schedule</button>
         <p id="bpay-result" role="status" aria-live="polite"></p>
       </form>
+      <form class="tool" id="psolve-calc">
+        <h3>125 · Fee-share payout threshold solver</h3>
+        <p>The two payout schedule models price a payout schedule from a threshold you supply. This one solves for the threshold itself, from the figure an operator usually fixes first: the overhead they will tolerate — the largest share of a cut that the transfers paying it out may eat. You name that cap, as basis points of the period cut, and the solver returns the smallest payout threshold whose schedule keeps the period's payout costs at or under the cap — so each cut is paid as early as the cap allows, and no earlier than it should be. Each side of the split is solved on its own: the referrer's cut and the builder's cut — what is left of the platform fee after the referrer's share is taken off it — accrue at different rates against the same transfer cost, so they honestly solve to different thresholds. On the headline numbers, 100,000 of volume a day at a platform fee of 0.5% with a referrer share of 25% of the fee, a supplied cost of 0.5 a transfer and a cap of 0.1% of the period cut, the builder's side — 375 a day, 11,250 over 30 days — solves to a threshold of 489.130434783: the first payout lands on day 2, twenty-two payouts pay 10,760.869565226 of the cut and cost 11 in total, an overhead of about 0.0978% of the period cut, under the cap — while one smallest unit below that threshold the schedule pays out twenty-three times, costs 11.5, and the overhead passes the cap. The referrer's smaller cut — 125 a day, 3,750 over the period — solves to 468.750000001, seven payouts costing 3.5 in total, about 0.0933% of that cut. The edges are stated plainly: where a side's cut accrues at nothing — a rate of zero, a referrer share of the whole fee emptying the builder's side, or a day's fee so small its floored cut is zero — that side has no threshold and the model says so, alongside the other side's answer where there is one; where even a single payout inside the period would eat more of a side's whole period cut than the cap allows, no threshold with a payout in it meets the cap and the model says that instead of inventing a figure — a threshold above the whole period cut would pay nothing and cost nothing, which meets any cap vacuously and helps nobody; and where a payout costs nothing to send, payouts are free at any threshold and the smallest is the smallest unit itself, so the cut is paid out as it accrues. The transfer cost is a figure you supply, in the same unit as the volume, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent, and a threshold solved against a supplied cost is a plan, not a quote. The accrual underneath is the fee estimator's own floored arithmetic: each day's fee is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, the referrer's cut is rounded down and the builder keeps the remainder — and a real interface taking its fee trade by trade rounds every trade down, so what accrues, and therefore what any threshold is solved against, is never more than these figures and usually a little less on a day of many small trades; read them as ceilings, not deposits. The share is a share of the platform fee, not of the volume. The volume, rate, share, cap, cost and period are yours to supply and are held constant across the period, with growth, refunds and fee-free volume not told apart. On an interface I build, the cap and the thresholds it solves to would be published with the fee itself, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and any referrer's cut goes to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volume, fee, share, overhead cap, payout cost and period, not live data, not a forecast, not financial advice.</p>
+        <label for="psolve-volume">Daily fee-bearing volume, in your unit of value</label>
+        <input id="psolve-volume" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="psolve-rate">Platform fee rate (basis points of the amount paid in, 50 = 0.5%)</label>
+        <input id="psolve-rate" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="psolve-share">Referrer share of the platform fee (basis points of the fee, 2500 = 25% of the fee)</label>
+        <input id="psolve-share" inputmode="numeric" placeholder="e.g. 2500" autocomplete="off">
+        <label for="psolve-cap">Maximum payout overhead (basis points of the period cut, 10 = 0.1% of the cut)</label>
+        <input id="psolve-cap" inputmode="numeric" placeholder="e.g. 10" autocomplete="off">
+        <label for="psolve-cost">Cost of one payout transfer, in the same unit (you supply it — it is not read from the network)</label>
+        <input id="psolve-cost" inputmode="decimal" placeholder="e.g. 0.5" autocomplete="off">
+        <label for="psolve-days">Period (days)</label>
+        <input id="psolve-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="psolve-rdaily">Referrer cut accrued per day (model)</label>
+        <input id="psolve-rdaily" readonly placeholder="—" autocomplete="off">
+        <label for="psolve-bdaily">Builder cut accrued per day (model)</label>
+        <input id="psolve-bdaily" readonly placeholder="—" autocomplete="off">
+        <label for="psolve-rthresh">Smallest referrer payout threshold keeping payout costs at or under the cap (model)</label>
+        <input id="psolve-rthresh" readonly placeholder="—" autocomplete="off">
+        <label for="psolve-rfirst">Days until the first referrer payout lands at that threshold (model)</label>
+        <input id="psolve-rfirst" readonly placeholder="—" autocomplete="off">
+        <label for="psolve-rcount">Referrer payouts inside the period at that threshold (model)</label>
+        <input id="psolve-rcount" readonly placeholder="—" autocomplete="off">
+        <label for="psolve-rtcost">Total cost of the referrer's payout transfers at that threshold (model)</label>
+        <input id="psolve-rtcost" readonly placeholder="—" autocomplete="off">
+        <label for="psolve-rover">Referrer payout costs as a share of the referrer's period cut at that threshold (model)</label>
+        <input id="psolve-rover" readonly placeholder="—" autocomplete="off">
+        <label for="psolve-bthresh">Smallest builder payout threshold keeping payout costs at or under the cap (model)</label>
+        <input id="psolve-bthresh" readonly placeholder="—" autocomplete="off">
+        <label for="psolve-bfirst">Days until the first builder payout lands at that threshold (model)</label>
+        <input id="psolve-bfirst" readonly placeholder="—" autocomplete="off">
+        <label for="psolve-bcount">Builder payouts inside the period at that threshold (model)</label>
+        <input id="psolve-bcount" readonly placeholder="—" autocomplete="off">
+        <label for="psolve-btcost">Total cost of the builder's payout transfers at that threshold (model)</label>
+        <input id="psolve-btcost" readonly placeholder="—" autocomplete="off">
+        <label for="psolve-bover">Builder payout costs as a share of the builder's period cut at that threshold (model)</label>
+        <input id="psolve-bover" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Solve for the payout thresholds</button>
+        <p id="psolve-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -3138,6 +3180,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=168"></script>
+<script src="app.js?v=169"></script>
 </body>
 </html>
