@@ -12817,12 +12817,22 @@ function dualPayoutVolumeSolver(platformFeeBps, referralShareBps, referralThresh
    on its own terms instead: the referrer's side is the
    shared rate solver run on the referrer's threshold and
    cost, the builder's side is the same solver run on the
-   builder's, and the rate that pays both sides is the
-   larger of the two solved rates, because a side's period
-   cut never falls as the rate grows. Where the two sides'
-   terms are equal it must agree with tool 128 exactly,
-   and the suite asserts that it does. Nothing here is new
-   arithmetic beyond that composition and the max. */
+   builder's. The rate that pays both sides is NOT simply
+   the larger of the two solved rates: the referrer's
+   period cut is a single floor of the day's fee and never
+   falls as the rate grows, so where the builder's solved
+   rate is the larger it pays both; but the builder's
+   period cut is tool 117's composed difference
+   floor(F · days) − floor(dailyReferral · days), which
+   can dip below its threshold at rates past its own
+   solved rate as the fee steps, so where the referrer's
+   solved rate is the larger the both-rate is the smallest
+   rate at or past it whose composed builder cut reaches
+   the builder's threshold, found by an exact onward scan
+   over rates (mirroring tool 136's both-volume search on
+   the rate axis). Where the two sides' terms are equal
+   it must agree with tool 128 exactly, and the suite
+   asserts that it does. */
 function dualPayoutRateSolver(dailyVolumeStr, referralShareBps, referralThresholdStr, referralCostStr, builderThresholdStr, builderCostStr, daysStr) {
   var raw = [dailyVolumeStr, referralShareBps, referralThresholdStr, referralCostStr, builderThresholdStr, builderCostStr, daysStr];
   for (var i = 0; i < raw.length; i++) {
@@ -12833,7 +12843,48 @@ function dualPayoutRateSolver(dailyVolumeStr, referralShareBps, referralThreshol
   if (rSolve === null || bSolve === null) return null;
   var rateToPayBothBps = null;
   if (rSolve.referralMinRateBps !== null && bSolve.builderMinRateBps !== null) {
-    rateToPayBothBps = Math.max(rSolve.referralMinRateBps, bSolve.builderMinRateBps);
+    if (bSolve.builderMinRateBps >= rSolve.referralMinRateBps) {
+      rateToPayBothBps = bSolve.builderMinRateBps;
+    } else {
+      /* The referrer's solved rate is the larger, and the
+         referrer reaches at every rate at or past its own
+         (its period cut is a single floor, monotone in the
+         rate) — but the builder's composed period cut can
+         dip below its threshold at rates past its own
+         solved rate (share 9999, quarter-day period,
+         one-unit thresholds: the builder solves at 2 bps,
+         the referrer at 3, and at 3 bps the builder's
+         period cut is 0). Scan rates onward from the
+         referrer's solved rate, skipping rates whose
+         floored fee repeats the previous rate's (same fee,
+         same cuts), for the first whose composed builder
+         cut reaches the builder's threshold. The scan is
+         guaranteed to succeed at or before closedRate —
+         the smallest rate whose fee reaches closedB, the
+         smallest fee whose DAILY builder cut reaches
+         needB: at every fee at or past closedB the
+         composed cut is at least floor(needB · days) >=
+         the builder's threshold. If closedRate sits past
+         the 99.99% cap and no rate up to the cap reaches,
+         no single rate pays both sides and the field stays
+         null, even though each side solves on its own. */
+      var volB = parseScaled(dailyVolumeStr), shareN = BigInt(Number(referralShareBps)), keepN = 10000n - shareN;
+      var bThreshB = parseScaled(builderThresholdStr), daysB = parseScaled(daysStr);
+      var needB = (bThreshB * SCALE + daysB - 1n) / daysB;
+      var closedB = (needB - 1n) * 10000n / keepN + 1n;
+      var closedRate = (closedB * 10000n + volB - 1n) / volB;
+      var startR = BigInt(rSolve.referralMinRateBps);
+      var scanTop = closedRate > 9999n ? 9999n : (closedRate < startR ? startR : closedRate);
+      for (var candR = startR; candR <= scanTop;) {
+        var feeC = volB * candR / 10000n;
+        var refC = feeC * shareN / 10000n;
+        var composedC = feeC * daysB / SCALE - refC * daysB / SCALE;
+        if (composedC >= bThreshB) { rateToPayBothBps = Number(candR); break; }
+        /* Jump to the next rate whose floored fee differs —
+           a repeated fee carries the same cuts. */
+        candR = ((feeC + 1n) * 10000n + volB - 1n) / volB;
+      }
+    }
   }
   var result = {
     dailyVolume: rSolve.dailyVolume,
@@ -18246,10 +18297,12 @@ if (typeof document !== "undefined") {
         var bothClause;
         if (res.rateToPayBothBps === null) {
           document.getElementById("drate-both").value = "no rate pays both sides";
-          bothClause = "no single rate pays both sides, because one side cannot be paid at any rate on these terms";
+          bothClause = (res.referralMinRateBps === null || res.builderMinRateBps === null)
+            ? "no single rate pays both sides, because one side cannot be paid at any rate on these terms"
+            : "no single rate pays both sides: each side solves on its own terms, but the builder's period cut — the period fee less the referrer's period cut, a difference of two rounded-down figures — stays below its own threshold at every rate from the referrer's solved rate up to 99.99%, so the two sides are never paid at the same rate on these terms";
         } else {
           document.getElementById("drate-both").value = res.rateToPayBothBps + " basis points (" + fmt(res.rateToPayBothPct, 4) + "%)";
-          bothClause = "the rate that pays both sides is " + res.rateToPayBothBps + " basis point(s) — the larger of the two solved rates, because a side's period cut never falls as the rate grows, so at that rate the other side's cut has reached its own threshold too";
+          bothClause = "the rate that pays both sides is " + res.rateToPayBothBps + " basis point(s) — the smallest rate at which both sides' period cuts reach their own thresholds together, and never less than either solved rate: the referrer's period cut never falls as the rate grows, so it reaches at every rate past its own solved rate, but the builder's period cut — the period fee less the referrer's period cut, a difference of two rounded-down figures — can dip below its own threshold as the fee steps, so where the referrer's solved rate is the larger this rate is found by searching onward from it";
         }
         out.textContent = "Model output: on " + res.dailyVolume + " of volume a day with a referrer share of " + fmt(res.referralSharePct, 4) + "% of the platform fee and a period of " + res.days + " day(s): for the referrer, " + rClause + "; for the builder, " + bClause + ". Across the split, " + bothClause + ". The two sides solve separately because they are paid separately: each side solved on its own threshold and its own cost — each side's daily cut is its own share of the same day's fee, the referrer's rounded down, the builder keeping the remainder — and wherever the two sides' thresholds and costs are equal this solver and the shared-terms rate solver agree exactly. Each side's supplied cost changes nothing about its solved rate — a payout is reached when a cut reaches its threshold, whatever sending it costs — and is carried through only so the payouts each solved rate lands are reported with their cost on that side's own terms. The thresholds and the costs are figures you supplied, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent. The share is a share of the platform fee, not of the volume. The volume, share, thresholds, costs and period are scenarios you supplied, held constant across the period, with growth, refunds and fee-free volume not told apart. The day's fee is the platform fee applied once to the day's whole volume and rounded down to the smallest unit, with the referrer's cut rounded down and the builder keeping the remainder, so a real interface taking its fee trade by trade accrues never more than these figures, and the real rate a payout needs is never less than a solved rate. On an interface I build, both thresholds, both costs, the solved rates and the fee itself would be published together, with the builder's cut taken to my own fee wallet — the SOL address in the support section below — and any referrer's cut to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by using this model. A dual-threshold fee-share payout rate solver, not live data, not a forecast. Not financial advice.";
       }
