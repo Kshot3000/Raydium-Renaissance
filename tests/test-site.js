@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=170"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=171"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -1358,7 +1358,8 @@ check("RVOL rejects bad position inputs", app.clmmRequiredVolume("0", "0.8", "1.
 check("all rvol controls labelled", ["rvol-l", "rvol-lower", "rvol-upper", "rvol-entry", "rvol-check", "rvol-total", "rvol-bps", "rvol-days", "rvol-inrange", "rvol-out"].every(id => html.includes(`for="${id}"`)));
 check("rvol tool present in index.html", html.includes('id="rvol-calc"') && html.includes('id="rvol-result"'));
 check("rvol honesty: whole-pool volume and not-live labels", html.includes("whole pool's trading in token B per day") && html.includes("reported as not feasible") && html.includes("not a volume forecast, not financial advice"));
-check("README lists one hundred fourteen tools", readme.includes("one hundred fourteen pool tools") || readme.includes("all one hundred fourteen"));
+check("README lists one hundred twenty-six tools", readme.includes("one hundred twenty-six pool tools") || readme.includes("all one hundred twenty-six"));
+check("no surface still counts one hundred fourteen tools (the stale count fixed 2026-10-13)", !readme.includes("one hundred fourteen") && !html.includes("one hundred fourteen"));
 
 /* ---------- Tool 32: Constant-product required-volume planner (CPVOL) ---------- */
 const cpv1 = app.cpRequiredVolume(2, "1000", "10000", "1000000", 25, "10");
@@ -2001,8 +2002,8 @@ check("cswap tool present in index.html", html.includes('id="cswap-calc"') && ht
 check("cswap honesty: single-range wall and not-live labels", html.includes("range's edge is a hard wall") && html.includes("not live pool state") && html.includes("not financial advice") && html.includes("leaves the rest unfilled"));
 check("guide covers CLMM single-range swap", guide.includes("A CLMM range is a wall, not a well"));
 const appSrc = fs.readFileSync(path.join(root, "app.js"), "utf8");
-check("app.js header counts one hundred fourteen tools and names the newest tools",
-  appSrc.includes("plus one hundred fourteen fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, a Token-2022\n   transfer-fee swap model, a sandwich\n   (MEV) attack model, a Token-2022\n   transfer-fee exact-out swap model,\n   a just-in-time (JIT) liquidity model,\n   a farm rewards estimator (liquidity mining),\n   a farm net return calculator, a\n   two-pool arbitrage model, an LP\n   delta-hedge calculator, a CLMM\n   delta-hedge calculator, a\n   weighted-pool delta-hedge calculator,\n   a leveraged LP position model, a\n   sliced (TWAP-style) swap planner, a\n   Solana transaction cost estimator, a\n   stableswap delta-hedge calculator, a\n   leveraged CLMM position model, a swap\n   route comparison model, an exact-out\n   swap route comparison model, a three-hop\n   swap model, a three-hop exact-out\n   swap model, a route-length\n   comparison model, a platform-fee\n   swap model, a platform-fee\n   exact-out swap model, an\n   interface fee-revenue estimator, and an\n   interface fee-tier comparison model.\n   These are educational MODELS"));
+check("app.js header counts one hundred twenty-six tools and names the newest tools",
+  appSrc.includes("plus one hundred twenty-six fully") && appSrc.includes("a stableswap deposit planner, a stableswap\n   withdrawal planner, a weighted-pool\n   deposit planner, a weighted-pool\n   withdrawal planner, a Token-2022\n   transfer-fee swap model, a sandwich\n   (MEV) attack model, a Token-2022\n   transfer-fee exact-out swap model,\n   a just-in-time (JIT) liquidity model,\n   a farm rewards estimator (liquidity mining),\n   a farm net return calculator, a\n   two-pool arbitrage model, an LP\n   delta-hedge calculator, a CLMM\n   delta-hedge calculator, a\n   weighted-pool delta-hedge calculator,\n   a leveraged LP position model, a\n   sliced (TWAP-style) swap planner, a\n   Solana transaction cost estimator, a\n   stableswap delta-hedge calculator, a\n   leveraged CLMM position model, a swap\n   route comparison model, an exact-out\n   swap route comparison model, a three-hop\n   swap model, a three-hop exact-out\n   swap model, a route-length\n   comparison model, a platform-fee\n   swap model, a platform-fee\n   exact-out swap model, an\n   interface fee-revenue estimator, an\n   interface fee-tier comparison model, a referral\n   fee-share swap model, a referral fee-share\n   exact-out swap model, a referral fee-share\n   revenue estimator, a referral fee-share net\n   revenue estimator, a referral fee-share tier\n   comparison model, a referral fee-share net tier\n   comparison model, a referral fee-share maximum\n   share solver, a referral fee-share minimum rate\n   solver, a referral fee-share payout schedule\n   model, a builder fee-share payout schedule\n   model, a fee-share payout threshold solver, and\n   a fee-share payout maximum cost solver.\n   These are educational MODELS"));
 
 /* ---------- Tool 43: CLMM two-range swap model (XSWAP) ---------- */
 const XSWAP_L = "947.2135954999577"; // Tool 8's L for 100 A @ P1 in 0.8-1.25; position holds 100 A / 100 B
@@ -5107,7 +5108,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v170", html.includes("app.js?v=170"));
+check("app.js cache key bumped to v171", html.includes("app.js?v=171"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -6846,7 +6847,7 @@ check("FINDER extra whitespace in the query is ignored", app.toolSearchMatch("sa
 check("FINDER non-string haystack never matches", app.toolSearchMatch(null, "swap") === false && app.toolSearchMatch(undefined, "") === false);
 check("FINDER finder controls present and labelled", html.includes('id="tool-q"') && html.includes('for="tool-q"') && html.includes('id="tool-filter-status"') && html.includes('id="tool-no-results"'));
 check("FINDER status is a polite live region", /id="tool-filter-status"[^>]*role="status"[^>]*aria-live="polite"/.test(html));
-check("FINDER finder sits above the tool grid and counts the tools honestly", html.indexOf('id="tool-q"') > html.indexOf('id="tools"') && html.indexOf('id="tool-q"') < html.indexOf('class="tool-grid"') && html.includes("Find a tool among the one hundred fourteen"));
+check("FINDER finder sits above the tool grid and counts the tools honestly", html.indexOf('id="tool-q"') > html.indexOf('id="tools"') && html.indexOf('id="tool-q"') < html.indexOf('class="tool-grid"') && html.includes("Find a tool among the one hundred twenty-six"));
 check("FINDER wiring uses the shared matcher over every tool form", appSrc.includes('querySelectorAll(".tool-grid .tool")') && appSrc.includes('getElementById("tool-q")') && appSrc.includes("toolSearchMatch(form.textContent, toolQ.value)") && appSrc.includes('addEventListener("input", applyToolFilter)'));
 check("FINDER hiding never deletes: filter toggles hidden only", appSrc.includes("form.hidden = !show") && !/toolForms\.forEach[\s\S]{0,400}remove\(\)/.test(appSrc));
 check("FINDER hidden actually hides: stylesheet forces [hidden] to display:none (the .tool grid display would otherwise override the UA rule and leave filtered tools rendered)", /\[hidden\]\s*\{\s*display\s*:\s*none\s*!important/.test(css));

@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus one hundred fourteen fully
+/* Raydium Renaissance hub logic: project filtering plus one hundred twenty-six fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -84,8 +84,19 @@
    comparison model, a platform-fee
    swap model, a platform-fee
    exact-out swap model, an
-   interface fee-revenue estimator, and an
-   interface fee-tier comparison model.
+   interface fee-revenue estimator, an
+   interface fee-tier comparison model, a referral
+   fee-share swap model, a referral fee-share
+   exact-out swap model, a referral fee-share
+   revenue estimator, a referral fee-share net
+   revenue estimator, a referral fee-share tier
+   comparison model, a referral fee-share net tier
+   comparison model, a referral fee-share maximum
+   share solver, a referral fee-share minimum rate
+   solver, a referral fee-share payout schedule
+   model, a builder fee-share payout schedule
+   model, a fee-share payout threshold solver, and
+   a fee-share payout maximum cost solver.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
