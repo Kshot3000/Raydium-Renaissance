@@ -3013,6 +3013,35 @@
         <button type="submit" class="btn primary">Solve for the largest affordable referrer share</button>
         <p id="rshare-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="rrate-calc">
+        <h3>122 · Referral fee-share minimum rate solver</h3>
+        <p>The referral fee-share net revenue estimator nets a split platform fee against its builder's daily operating cost at a platform rate you supply, and its companion share solver holds that rate fixed and solves for the share instead. This one holds the share fixed and solves for the rate: given the day's fee-bearing volume, the referrer's agreed share of the fee and the builder's daily operating cost, it finds the smallest platform rate, in whole basis points of the amount paid in, whose builder cut still covers that cost — the number a builder needs before publishing a rate, because the rate is the one figure in this family that traders pay, on every trade, so the smallest covering rate is also the fairest one to publish. On the headline numbers, 100,000 of volume a day with a referrer share of 25% of the fee against a daily operating cost of 100 solves to a rate of 14 basis points, 0.14%: it collects a fee of 140 a day, split 35 to the referrer and 105 kept by the builder, netting 5 a day after the cost and 150 over 30 days — while one basis point less, 13 basis points, collects 130, splits it 32.5 / 97.5 and nets −2.5 a day. The share is a share of the platform fee, not of the volume: 25% here means a quarter of whatever fee the solved rate collects — never 25% of the volume itself. The edges are stated plainly: where the cost is zero the smallest rate is zero — no fee needs to be charged at all, and any rate above zero would charge traders for a cost the builder does not have; and where even the highest rate this model prices leaves the builder's cut short of the cost there is no rate to solve for — including the case where the referrer takes the whole fee, which leaves the builder nothing at every rate — and the model reports the signed shortfall at that highest rate rather than inventing a number. Each day's fee is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, the referrer's cut is rounded down and the builder keeps the remainder, so the two cuts always sum exactly to the fee — and a real interface taking its fee trade by trade rounds every single trade down, so what it collects, and therefore both cuts, are never more than these figures and usually a little less on a day of many small trades; read them as ceilings, not deposits. The volume, share and cost are yours to supply and nothing here predicts them: how volume answers the rate charged is the interface's own experiment — a lower rate is usually expected to keep or bring volume, and that expectation is yours, entered as the volume it is expected to bring — no elasticity, growth or decline is assumed, and the volume, share and cost are held constant across the period, with refunds and failed trades not modelled, and volume served at a different rate or share, or fee-free, not told apart. The volume and cost are in one unit of value, yours to choose. On an interface I build, the rate this solves for would be the disclosed one, labelled before any trade, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and any referrer's cut goes to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volume, share, cost and period, not live data, not a forecast, not financial advice.</p>
+        <label for="rrate-volume">Daily fee-bearing volume, in your unit of value</label>
+        <input id="rrate-volume" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="rrate-share">Referrer share of the platform fee (basis points of the fee, 2500 = 25% of the fee)</label>
+        <input id="rrate-share" inputmode="numeric" placeholder="e.g. 2500" autocomplete="off">
+        <label for="rrate-cost">Builder's daily operating cost, in the same unit as the volume</label>
+        <input id="rrate-cost" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="rrate-days">Period (days)</label>
+        <input id="rrate-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="rrate-rate">Smallest platform rate whose builder cut covers the cost (model)</label>
+        <input id="rrate-rate" readonly placeholder="—" autocomplete="off">
+        <label for="rrate-fee">Platform fee collected per day at the solved rate (model)</label>
+        <input id="rrate-fee" readonly placeholder="—" autocomplete="off">
+        <label for="rrate-referral">Referrer cut per day at the solved rate (model)</label>
+        <input id="rrate-referral" readonly placeholder="—" autocomplete="off">
+        <label for="rrate-builder">Builder cut per day at the solved rate (model)</label>
+        <input id="rrate-builder" readonly placeholder="—" autocomplete="off">
+        <label for="rrate-net">Builder net per day at the solved rate, after the cost (model, signed)</label>
+        <input id="rrate-net" readonly placeholder="—" autocomplete="off">
+        <label for="rrate-period">Builder net over the period at the solved rate (model, signed)</label>
+        <input id="rrate-period" readonly placeholder="—" autocomplete="off">
+        <label for="rrate-prev">Builder net per day one basis point of rate lower (model, signed)</label>
+        <input id="rrate-prev" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Solve for the smallest platform rate</button>
+        <p id="rrate-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -3040,6 +3069,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=164"></script>
+<script src="app.js?v=165"></script>
 </body>
 </html>
