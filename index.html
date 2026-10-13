@@ -3077,6 +3077,40 @@
         <button type="submit" class="btn primary">Work out the payout schedule</button>
         <p id="rpay-result" role="status" aria-live="polite"></p>
       </form>
+      <form class="tool" id="bpay-calc">
+        <h3>124 · Builder fee-share payout schedule model</h3>
+        <p>The payout schedule model for a referrer's cut prices how that cut is handed over; this one prices the same question for the builder's own cut — what is left of the platform fee after the referrer's share is taken off it. That cut is not in the builder's wallet as it accrues — it sits in the fee account, and moving it out is a transfer, and a transfer costs something to send — so the cut is paid out only when the accrued cut reaches the threshold you set, and what this model works out is the schedule that follows: the day the first payout lands, how many payouts a period holds, how much is still below the threshold when the period ends, what the transfers cost in total, and what the builder nets after them. On the headline numbers, 100,000 of volume a day at a platform fee of 0.5% with a referrer share of 25% of the fee keeps the builder 375 a day; against a threshold of 500 the first payout lands on day 2, a 30-day period holds twenty-two payouts paying 11,000 of the 11,250 accrued, and 250 is still below the threshold at the end — carried forward into the next period, not lost. At a cost of 0.5 a transfer, supplied by you, the twenty-two payouts cost 11 in total and the builder nets 11,239 over the period — the schedule costs under a tenth of one percent of the cut. Set the threshold at 1,000 instead and the first payout waits until day 3: a higher threshold pays later and costs less, and that trade is the whole decision this model prices. The edges are stated plainly: where the builder's cut accrues at nothing — a rate of zero, a referrer share of the whole fee, or a day's fee so small its floored remainder is zero — no payout is ever reached and the model says so rather than naming a day; where the threshold stands above a whole period's accrual, the first payout falls after the period ends and nothing is paid inside it; and where the cost of one transfer stands above the threshold itself, paying out costs more than each payout carries and the period net is reported signed, negative, rather than hidden. The transfer cost is a figure you supply, in the same unit as the volume, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent, and a schedule drawn against a supplied cost is a plan, not a quote. The accrual underneath is the fee estimator's own, read on its builder side: each day's fee is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, the referrer's cut is rounded down and the builder keeps the remainder — and a real interface taking its fee trade by trade rounds every trade down, so what accrues, and therefore what is paid, is never more than these figures and usually a little less on a day of many small trades; read them as ceilings, not deposits. Payouts are counted at whole-day boundaries, on the day's whole accrual: a programme that settles more often, or pays on a calendar rather than an accrual count, will land its payouts on different days by a little. The share is a share of the platform fee, not of the volume. The volume, rate, share, threshold, cost and period are yours to supply and are held constant across the period, with growth, refunds and fee-free volume not told apart. On an interface I build, the schedule and the threshold would be published with the fee itself, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and any referrer's cut goes to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volume, fee, share, threshold, payout cost and period, not live data, not a forecast, not financial advice.</p>
+        <label for="bpay-volume">Daily fee-bearing volume, in your unit of value</label>
+        <input id="bpay-volume" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="bpay-rate">Platform fee rate (basis points of the amount paid in, 50 = 0.5%)</label>
+        <input id="bpay-rate" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="bpay-share">Referrer share of the platform fee (basis points of the fee, 2500 = 25% of the fee)</label>
+        <input id="bpay-share" inputmode="numeric" placeholder="e.g. 2500" autocomplete="off">
+        <label for="bpay-threshold">Payout threshold — the accrued builder cut is paid out when it reaches this, in the same unit as the volume</label>
+        <input id="bpay-threshold" inputmode="decimal" placeholder="e.g. 500" autocomplete="off">
+        <label for="bpay-cost">Cost of one payout transfer, in the same unit (you supply it — it is not read from the network)</label>
+        <input id="bpay-cost" inputmode="decimal" placeholder="e.g. 0.5" autocomplete="off">
+        <label for="bpay-days">Period (days)</label>
+        <input id="bpay-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="bpay-daily">Builder cut accrued per day (model)</label>
+        <input id="bpay-daily" readonly placeholder="—" autocomplete="off">
+        <label for="bpay-first">Days until the first payout lands (model)</label>
+        <input id="bpay-first" readonly placeholder="—" autocomplete="off">
+        <label for="bpay-count">Payouts inside the period (model)</label>
+        <input id="bpay-count" readonly placeholder="—" autocomplete="off">
+        <label for="bpay-paid">Total paid out over the period (model)</label>
+        <input id="bpay-paid" readonly placeholder="—" autocomplete="off">
+        <label for="bpay-left">Accrued but still below the threshold at the period's end, carried forward (model)</label>
+        <input id="bpay-left" readonly placeholder="—" autocomplete="off">
+        <label for="bpay-tcost">Total cost of the period's payout transfers (model)</label>
+        <input id="bpay-tcost" readonly placeholder="—" autocomplete="off">
+        <label for="bpay-net">Builder net over the period, after payout costs (model, signed)</label>
+        <input id="bpay-net" readonly placeholder="—" autocomplete="off">
+        <label for="bpay-overhead">Payout costs as a share of the builder's period cut (model)</label>
+        <input id="bpay-overhead" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Work out the builder payout schedule</button>
+        <p id="bpay-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -3104,6 +3138,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=167"></script>
+<script src="app.js?v=168"></script>
 </body>
 </html>
