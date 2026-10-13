@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred thirty</label>
+      <label for="tool-q">Find a tool among the one hundred thirty-one</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred thirty tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred thirty-one tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred thirty.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred thirty-one.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -3368,6 +3368,45 @@
         <button type="submit" class="btn primary">Solve for the shortest payout periods</button>
         <p id="pper-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="pshare-calc">
+        <h3>131 · Fee-share payout share solver</h3>
+        <p>The payout solvers before this one hold the split fixed and solve for a threshold, a cost, a volume, a rate or a period; this one holds the volume, the rate, the threshold and the period fixed and solves for the split itself — the one input that family had not solved. You supply the daily fee-bearing volume, the platform fee rate, the threshold a programme has published, the cost of one payout transfer and the period, and it finds the smallest referrer share at which the referrer's cut first reaches the threshold inside the period, and the largest referrer share at which the builder's remainder still reaches it. A period pays a side exactly when that side's period cut reaches the threshold, and the period cut is the daily cut times the days, so each side needs a daily cut of at least the threshold divided by the days, rounded up to the smallest unit. The two boundaries are read off the same day's fee, because the split is one number with two sides: the referrer's cut is the fee times the share, rounded down, and the builder keeps what is left. On the headline numbers, 100,000 of volume a day at a 50-basis-point fee accrues a day's fee of 500; against a threshold of 500 over 30 days a side needs 16.666666667 a day, so the referrer is first paid at a share of 334 basis points of the fee — a daily cut of 16.7, 501 over the period, one payout on day 30, netting 500.5 after a 0.5 transfer cost — and the builder is still paid at any share up to 9,666 basis points, where the same 16.7 a day is left behind. Every whole share between those boundaries pays both sides inside the period, a range 9,332 basis points wide, and that range — not a single share — is the honest answer to what split a programme can publish. One basis point past either boundary and that side's period cut falls below the threshold, so no payout lands inside the period on it. The edges are stated plainly: where a day's whole fee is below the daily cut the period needs, no share pays that side at all — not even the whole fee handed to the referrer, nor a zero share leaving the builder everything — and the model says so per side; and where each side can be paid alone but never together, because the smallest share paying the referrer sits above the largest share still paying the builder, the range paying both sides is empty and the model says that too, rather than naming a split that pays one wallet by starving the other — paying both then needs a longer period, a lower threshold, a higher rate or more volume, not a different split. The supplied cost changes nothing about the solved shares — a payout is reached when a cut reaches the threshold, whatever sending it costs — and is carried through only so the payouts each boundary share lands are reported with their cost, their net and their overhead. The threshold and the cost are figures you supply, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent, and a solved share is a boundary, not a promise. The accrual underneath is the fee estimator's own floored arithmetic: each day's fee is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, the referrer's cut is rounded down and the builder keeps the remainder — and a real interface taking its fee trade by trade rounds every trade down, so what accrues is never more than these figures, and the share a real payout needs is therefore never smaller for the referrer, nor larger for the builder, than these boundaries; read the solved shares as the edges of the publishable range, not forecasts. The share is a share of the platform fee, not of the volume. The volume, rate, threshold, cost and period are yours to supply and are held constant, with growth, refunds and fee-free volume not told apart. On an interface I build, the chosen share, the threshold and the fee itself would be published together, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and any referrer's cut goes to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volume, rate, threshold, cost and period, not live data, not a forecast, not financial advice.</p>
+        <label for="pshare-vol">Daily fee-bearing volume, in your unit of value</label>
+        <input id="pshare-vol" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="pshare-rate">Platform fee rate (basis points, 50 = 0.5%)</label>
+        <input id="pshare-rate" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="pshare-threshold">Payout threshold, in your unit of value (a payout is sent whenever an accrued cut reaches it)</label>
+        <input id="pshare-threshold" inputmode="decimal" placeholder="e.g. 500" autocomplete="off">
+        <label for="pshare-cost">Cost of one payout transfer, in the same unit (supplied by you, never read from the network)</label>
+        <input id="pshare-cost" inputmode="decimal" placeholder="e.g. 0.5" autocomplete="off">
+        <label for="pshare-days">Period (days)</label>
+        <input id="pshare-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="pshare-rshare">Smallest referrer share of the fee at which the referrer is paid inside the period (model)</label>
+        <input id="pshare-rshare" readonly placeholder="—" autocomplete="off">
+        <label for="pshare-rcut">Referrer cut accrued over the period at that share (model)</label>
+        <input id="pshare-rcut" readonly placeholder="—" autocomplete="off">
+        <label for="pshare-rcount">Referrer payouts inside the period at that share (model)</label>
+        <input id="pshare-rcount" readonly placeholder="—" autocomplete="off">
+        <label for="pshare-rtcost">Total cost of the referrer's payout transfers at that share (model)</label>
+        <input id="pshare-rtcost" readonly placeholder="—" autocomplete="off">
+        <label for="pshare-rover">Referrer payout costs as a share of the referrer's period cut at that share (model)</label>
+        <input id="pshare-rover" readonly placeholder="—" autocomplete="off">
+        <label for="pshare-bshare">Largest referrer share of the fee at which the builder is still paid inside the period (model)</label>
+        <input id="pshare-bshare" readonly placeholder="—" autocomplete="off">
+        <label for="pshare-bcut">Builder cut accrued over the period at that share (model)</label>
+        <input id="pshare-bcut" readonly placeholder="—" autocomplete="off">
+        <label for="pshare-bcount">Builder payouts inside the period at that share (model)</label>
+        <input id="pshare-bcount" readonly placeholder="—" autocomplete="off">
+        <label for="pshare-btcost">Total cost of the builder's payout transfers at that share (model)</label>
+        <input id="pshare-btcost" readonly placeholder="—" autocomplete="off">
+        <label for="pshare-bover">Builder payout costs as a share of the builder's period cut at that share (model)</label>
+        <input id="pshare-bover" readonly placeholder="—" autocomplete="off">
+        <label for="pshare-range">Range of shares at which both sides are paid inside the period (model)</label>
+        <input id="pshare-range" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Solve for the payout shares</button>
+        <p id="pshare-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -3395,6 +3434,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=176"></script>
+<script src="app.js?v=177"></script>
 </body>
 </html>

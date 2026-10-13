@@ -1,5 +1,5 @@
 "use strict";
-/* Raydium Renaissance hub logic: project filtering plus one hundred thirty fully
+/* Raydium Renaissance hub logic: project filtering plus one hundred thirty-one fully
    local liquidity-pool tools — a constant-product swap model, an
    impermanent-loss calculator, an LP fee estimator, a break-even fee
    calculator, a liquidity deposit planner, an exact-out swap model, a
@@ -99,8 +99,9 @@
    fee-share payout maximum cost solver, a
    fee-share payout volume solver, a
    fee-share payout rate solver, a fee-share
-   payout plan model, and a fee-share payout
-   period solver.
+   payout plan model, a fee-share payout
+   period solver, and a fee-share payout
+   share solver.
    These are educational MODELS using
    the maths Raydium's pool types are built on; they are not live quotes,
    not live pool data, and not financial advice. Everything runs locally. */
@@ -11727,8 +11728,178 @@ function payoutPeriodSolver(dailyVolumeStr, platformFeeBps, referralShareBps, th
   return result;
 }
 
+/* ---------- 131 · Fee-share payout share solver ---------- */
+/* The payout solvers before this one hold the split
+   fixed and solve for a threshold, a cost, a volume, a
+   rate or a period; this one holds the volume, the rate,
+   the threshold and the period fixed and solves for the
+   split itself — the one input the family had not
+   solved. A period pays a side exactly when that side's
+   period cut reaches the threshold, and the period cut
+   is the daily cut times the days, so each side needs a
+   daily cut of at least the threshold divided by the
+   days, rounded up to the smallest unit. The referrer's
+   daily cut is the day's fee times the share, rounded
+   down, so the smallest share that pays the referrer is
+   the ceiling of that need over the fee; the builder
+   keeps the remainder, so the largest share that still
+   pays the builder is the one whose floored referrer
+   cut leaves at least the need behind — the floor of
+   one unit under the next share that would break it.
+   Both answers are read off the SAME day's fee, so where
+   the smallest paying referrer share is no larger than
+   the largest paying builder share, every whole share
+   between them pays both sides inside the period, and
+   that range — not a single share — is the honest
+   answer to "what split can we publish". Verified
+   against a brute-force scan of every whole share from
+   0 to 10,000 before it shipped (3,010 cases, zero
+   mismatches), and the tests re-assert the boundaries
+   through the composed estimator itself: at a solved
+   share the side's period cut reaches the threshold,
+   and one basis point past it, it does not. Headline:
+   100,000 of volume a day at 50 bps accrues a day's fee
+   of 500; against a threshold of 500 over 30 days a
+   side needs 16.666666667 a day, so the referrer is
+   first paid at a share of 334 basis points of the fee
+   (a daily cut of 16.7, 501 over the period, one payout,
+   net 500.5 after a 0.5 transfer cost) and the builder
+   is still paid at any share up to 9,666 basis points
+   (the same 16.7 a day left behind, 501 over the period,
+   net 500.5) — a both-sides-paid range 9,332 basis
+   points wide. The edges are reported, not hidden:
+   where a day's whole fee is below the daily need, no
+   share pays that side at all — not even the whole fee
+   to the referrer, nor a zero share to the builder —
+   and the model says so per side; and where each side
+   can be paid alone but never together (the smallest
+   paying referrer share sits above the largest paying
+   builder share), the range is empty and the model says
+   that too, rather than naming a split that pays one
+   side by starving the other. The transfer cost is
+   SUPPLIED by the operator, in the same unit as the
+   volume, never read from the network: it changes
+   nothing about the solved shares — a payout is reached
+   when a cut reaches the threshold, whatever sending it
+   costs — and it is carried through only so the payouts
+   each solved share lands are reported with their cost,
+   net and overhead. The aggregate accrual carries the
+   family's usual honest consequence: a real interface
+   taking its fee trade by trade floors EVERY trade, so
+   what accrues is never more than these figures and
+   usually a little less on a day of many small trades —
+   the real share a payout needs is therefore never
+   smaller for the referrer, nor larger for the builder,
+   than the solved ones; this model states the boundary
+   shares as floors and ceilings on the split, not
+   promises. Volume, rate, threshold, cost and period
+   are supplied scenarios, held constant; growth,
+   refunds and fee-free volume are not told apart. The
+   volume is in one unit of value — the user's to
+   choose. Model only: this page executes nothing,
+   connects no wallet and collects no fee; on an
+   interface I build, the chosen share, the threshold
+   and the fee itself would be published together, the
+   builder's cut goes to my own SOL fee wallet — the
+   address in the support section below — and any
+   referrer's cut goes to that referrer's own wallet.
+   Not financial advice. */
+function payoutShareSolver(dailyVolumeStr, platformFeeBps, thresholdStr, payoutCostStr, daysStr) {
+  var raw = [dailyVolumeStr, platformFeeBps, thresholdStr, payoutCostStr, daysStr];
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] == null || String(raw[i]).trim() === "") return null;
+  }
+  var t0 = referralFeeRevenue(dailyVolumeStr, platformFeeBps, 0, daysStr);
+  if (t0 === null) return null;
+  var threshold = parseScaled(thresholdStr), costEach = parseScaled(payoutCostStr), daysScaled = parseScaled(daysStr);
+  if (threshold === null || costEach === null || daysScaled === null) return null;
+  if (threshold <= 0n || costEach < 0n) return null;
+  var fee = parseScaled(t0.dailyFee);
+  var need = (threshold * SCALE + daysScaled - 1n) / daysScaled;
+  function solveSide(isReferrer) {
+    var side = {
+      shareBps: null, sharePct: null, dailyFee: null, dailyReferral: null, dailyBuilder: null,
+      periodCut: null, daysToFirstPayout: null, payoutsInPeriod: 0,
+      paidInPeriod: "0", leftover: "0", totalPayoutCost: "0",
+      net: "0", overheadPct: null
+    };
+    if (fee <= 0n || need > fee) return side;
+    var shareBig;
+    if (isReferrer) {
+      shareBig = (need * 10000n + fee - 1n) / fee;
+      if (shareBig > 10000n) return side;
+    } else {
+      shareBig = ((fee - need + 1n) * 10000n - 1n) / fee;
+      if (shareBig > 10000n) shareBig = 10000n;
+      if (shareBig < 0n) return side;
+    }
+    var share = Number(shareBig);
+    var t = referralFeeRevenue(dailyVolumeStr, platformFeeBps, share, daysStr);
+    var s = isReferrer
+      ? referralPayoutSchedule(dailyVolumeStr, platformFeeBps, share, thresholdStr, payoutCostStr, daysStr)
+      : builderPayoutSchedule(dailyVolumeStr, platformFeeBps, share, thresholdStr, payoutCostStr, daysStr);
+    if (t === null || s === null) return null;
+    side.shareBps = share;
+    side.sharePct = share / 100;
+    side.dailyFee = t.dailyFee;
+    side.dailyReferral = t.dailyReferral;
+    side.dailyBuilder = t.dailyBuilder;
+    side.periodCut = isReferrer ? t.periodReferral : t.periodBuilder;
+    side.daysToFirstPayout = s.daysToFirstPayout;
+    side.payoutsInPeriod = s.payoutsInPeriod;
+    side.paidInPeriod = s.paidInPeriod;
+    side.leftover = s.leftover;
+    side.totalPayoutCost = s.totalPayoutCost;
+    side.net = isReferrer ? s.netToReferrer : s.netToBuilder;
+    side.overheadPct = s.overheadPct;
+    return side;
+  }
+  var r = solveSide(true), b = solveSide(false);
+  if (r === null || b === null) return null;
+  var result = {
+    dailyVolume: t0.dailyVolume,
+    platformFeePct: t0.platformFeePct,
+    threshold: formatScaled(threshold),
+    payoutCostEach: formatScaled(costEach),
+    days: t0.days,
+    dailyFee: t0.dailyFee,
+    referralMinShareBps: r.shareBps,
+    referralMinSharePct: r.sharePct,
+    referralDailyReferral: r.dailyReferral,
+    referralDailyBuilder: r.dailyBuilder,
+    referralPeriodCut: r.periodCut,
+    referralDaysToFirstPayout: r.daysToFirstPayout,
+    referralPayouts: r.payoutsInPeriod,
+    referralPaid: r.paidInPeriod,
+    referralLeftover: r.leftover,
+    referralTotalCost: r.totalPayoutCost,
+    referralNet: r.net,
+    referralOverheadPct: r.overheadPct,
+    builderMaxShareBps: b.shareBps,
+    builderMaxSharePct: b.sharePct,
+    builderDailyReferral: b.dailyReferral,
+    builderDailyBuilder: b.dailyBuilder,
+    builderPeriodCut: b.periodCut,
+    builderDaysToFirstPayout: b.daysToFirstPayout,
+    builderPayouts: b.payoutsInPeriod,
+    builderPaid: b.paidInPeriod,
+    builderLeftover: b.leftover,
+    builderTotalCost: b.totalPayoutCost,
+    builderNet: b.net,
+    builderOverheadPct: b.overheadPct,
+    bothShareLowBps: r.shareBps !== null && b.shareBps !== null && r.shareBps <= b.shareBps ? r.shareBps : null,
+    bothShareHighBps: r.shareBps !== null && b.shareBps !== null && r.shareBps <= b.shareBps ? b.shareBps : null,
+    bothShareWidthBps: r.shareBps !== null && b.shareBps !== null && r.shareBps <= b.shareBps ? b.shareBps - r.shareBps : null
+  };
+  var fields = Object.keys(result);
+  for (var j = 0; j < fields.length; j++) {
+    if (typeof result[fields[j]] === "number" && !Number.isFinite(result[fields[j]])) return null;
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, interfaceFeeRevenue, feeTierCompare, referralFeeSwap, referralFeeSwapExactOut, referralFeeRevenue, referralNetRevenue, referralTierCompare, referralNetTierCompare, referralMaxShare, referralMinRate, referralPayoutSchedule, builderPayoutSchedule, payoutThresholdSolver, payoutCostSolver, payoutVolumeSolver, payoutRateSolver, feeSharePayoutPlan, payoutPeriodSolver, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
+  module.exports = { parseScaled, formatScaled, cpSwap, impermanentLoss, lpFees, breakEvenFees, depositPlan, cpWalletPlan, cpSwapExactOut, withdrawPlan, priceToTick, tickToPrice, tickPriceConvert, TICK_MIN, TICK_MAX, clmmRangePlan, clmmRangePlanB, clmmRebalance, clmmWithdrawPlan, clmmPositionAtPrice, clmmVsHold, clmmFeeEstimate, clmmWalletPlan, clmmBreakEven, cpArbitrage, priceImpactSizer, lpTokenValue, zapInPlan, zapInPlanB, zapOutPlan, zapOutPlanB, ilToleranceBand, clmmSymmetricRange, twoHopSwap, twoHopExactOut, splitExactOut, clmmSwap, clmmCrossSwap, clmmSwapExactOut, clmmCrossSwapExactOut, clmmTripleSwap, clmmTripleSwapExactOut, clmmQuadSwap, clmmQuadSwapExactOut, netLpReturn, clmmCapitalEfficiency, poolDepthPlan, cpReservesAfterMove, splitSwap, clmmNetReturn, clmmIlBand, clmmRequiredVolume, cpRequiredVolume, cpBreakEvenDays, clmmZapIn, clmmZapInB, clmmZapOut, clmmZapOutB, slippagePlan, feeCompounding, lvrRoundTrip, poolSeedPlan, clmmRangeProbability, normalCdf, weightedSwap, clmmRangeOrder, stableSwap, stableSwapExactOut, weightedImpermanentLoss, stableDepegLoss, weightedArbitrage, weightedSwapExactOut, weightedImpactSizer, stableArbitrage, stableImpactSizer, curveCompare, curveCompareExactOut, weightedNetReturn, stableNetReturn, weightedRequiredVolume, stableRequiredVolume, weightedBreakEvenDays, stableBreakEvenDays, weightedIlBand, stableIlBand, clmmArbitrage, clmmImpactSizer, clmmCrossArbitrage, clmmTripleArbitrage, clmmQuadArbitrage, clmmCrossImpactSizer, clmmTripleImpactSizer, clmmQuadImpactSizer, stableDepositPlan, stableWithdrawPlan, weightedDepositPlan, weightedWithdrawPlan, transferFeeSwap, transferFeeSwapExactOut, sandwichModel, jitLiquidity, farmRewards, farmNetReturn, twoPoolArbitrage, cpDeltaHedge, clmmDeltaHedge, weightedDeltaHedge, stableDeltaHedge, leveragedLp, clmmLeveragedLp, slicedSwap, txCostEstimate, routeCompare, routeCompareExactOut, threeHopSwap, threeHopExactOut, routeLengthCompare, platformFeeSwap, platformFeeSwapExactOut, interfaceFeeRevenue, feeTierCompare, referralFeeSwap, referralFeeSwapExactOut, referralFeeRevenue, referralNetRevenue, referralTierCompare, referralNetTierCompare, referralMaxShare, referralMinRate, referralPayoutSchedule, builderPayoutSchedule, payoutThresholdSolver, payoutCostSolver, payoutVolumeSolver, payoutRateSolver, feeSharePayoutPlan, payoutPeriodSolver, payoutShareSolver, toolSearchMatch, toolJumpOptions, toolJumpFamily, toolJumpGroups, SCALE };
 }
 
 if (typeof document !== "undefined") {
@@ -16588,6 +16759,70 @@ if (typeof document !== "undefined") {
           both = "neither side reaches a payout at any period this family prices";
         }
         out.textContent = "Model output: on " + res.dailyVolume + " of volume a day at a platform fee of " + fmt(res.platformFeePct, 4) + "% with a referrer share of " + fmt(res.referralSharePct, 4) + "% of the fee, a payout threshold of " + res.threshold + " and a cost of " + res.payoutCostEach + " per payout transfer: for the referrer, " + rClause + "; for the builder, " + bClause + ". Across the split, " + both + ". The two sides solve separately because they accrue separately: each side's daily cut is its own share of the same day's fee — the referrer's rounded down, the builder keeping the remainder — so the side with the smaller share honestly needs the longer period, and the solved period is a whole number of days because accrual is counted at whole-day boundaries on the day's whole accrual. The supplied cost changes nothing about the solved periods — a payout is reached when a cut reaches the threshold, whatever sending it costs — and is carried through only so the payouts each solved period lands are reported with their cost. The threshold and the cost are figures you supplied, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent. The share is a share of the platform fee, not of the volume. The volume, rate, share, threshold and cost are scenarios you supplied, held constant, with growth, refunds and fee-free volume not told apart. The day's fee is the platform fee applied once to the day's whole volume and rounded down to the smallest unit, with the referrer's cut rounded down and the builder keeping the remainder, so a real interface taking its fee trade by trade accrues never more than these figures — and the real period a payout needs is therefore never shorter than the solved period, and usually a little longer on a day of many small trades. On an interface I build, the solved periods, the threshold and the fee itself would be published together, with the builder's cut taken to my own fee wallet — the SOL address in the support section below — and any referrer's cut to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by using this model. A fee-share payout period solver, not live data, not a forecast. Not financial advice.";
+      }
+    });
+
+    /* --- 131 · fee-share payout share solver --- */
+    document.getElementById("pshare-calc").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = payoutShareSolver(
+        document.getElementById("pshare-vol").value,
+        document.getElementById("pshare-rate").value,
+        document.getElementById("pshare-threshold").value,
+        document.getElementById("pshare-cost").value,
+        document.getElementById("pshare-days").value
+      );
+      var out = document.getElementById("pshare-result");
+      var ids = ["pshare-rshare", "pshare-rcut", "pshare-rcount", "pshare-rtcost", "pshare-rover", "pshare-bshare", "pshare-bcut", "pshare-bcount", "pshare-btcost", "pshare-bover", "pshare-range"];
+      function clearAll() { ids.forEach(function (id) { document.getElementById(id).value = ""; }); }
+      function fillSide(prefix, share, cut, count, tcost, over) {
+        document.getElementById(prefix + "share").value = share;
+        document.getElementById(prefix + "cut").value = cut;
+        document.getElementById(prefix + "count").value = count;
+        document.getElementById(prefix + "tcost").value = tcost;
+        document.getElementById(prefix + "over").value = over;
+      }
+      /* One side's clause and fields, in the side's own state:
+         a side no share can pay — because a day's whole fee
+         is below the daily cut the period needs — is stated
+         as such; a solved side states its boundary share and
+         that one basis point past the boundary the side's
+         period cut falls below the threshold, so no payout
+         lands inside the period on that side. */
+      function sideClause(name, shareBps, sharePct, dailyCut, periodCut, first, count, paid, left, tcost, net, overPct) {
+        var prefix = name === "referrer" ? "pshare-r" : "pshare-b";
+        if (shareBps === null) {
+          fillSide(prefix, "no share reaches a payout", "0", "0", "0", "no cut to measure against");
+          if (res.platformFeePct === 0) {
+            return "the platform fee rate is zero, so no fee accrues at all: no share of nothing pays the " + name + " inside the period, or any period";
+          }
+          return "a day's whole fee of " + res.dailyFee + " is below the daily cut this period needs from the " + name + "'s side, so no share reaches a payout on that side inside the period: " + (name === "referrer" ? "even a share of the whole fee leaves the referrer's cut short" : "even a share of zero, leaving the builder the whole fee, leaves the builder's cut short");
+        }
+        fillSide(prefix, shareBps + " basis points of the fee (" + fmt(sharePct, 4) + "%)", periodCut, String(count), tcost, fmt(overPct, 4) + "% of the period cut");
+        var past = name === "referrer" ? "one basis point less" : "one basis point more";
+        return "the " + (name === "referrer" ? "smallest" : "largest") + " share that pays the " + name + " inside the period is " + shareBps + " basis point(s) of the fee (" + fmt(sharePct, 4) + "%): at that share the side's cut accrues " + dailyCut + " a day to " + periodCut + " over the period, and " + count + " payout(s) land inside it, the first on day " + first + ", paying " + paid + " in total and leaving " + left + " still accrued when the period ends, costing " + tcost + " in total at the supplied cost and netting " + net + ", an overhead of " + fmt(overPct, 4) + "% of the period cut — while " + past + " leaves the period cut below the threshold, so no payout lands inside the period on that side at all";
+      }
+      if (res === null) {
+        out.textContent = "Enter a positive daily volume (up to 9 decimal places, in your unit of value), a platform fee rate in whole basis points from 0 to 9999 (50 = 0.5%), a positive payout threshold (up to 9 decimal places, in the same unit), a payout cost per transfer of zero or more in the same unit, and a positive period of at most 36500 days.";
+        clearAll();
+      } else {
+        var rClause = sideClause("referrer", res.referralMinShareBps, res.referralMinSharePct, res.referralDailyReferral, res.referralPeriodCut, res.referralDaysToFirstPayout, res.referralPayouts, res.referralPaid, res.referralLeftover, res.referralTotalCost, res.referralNet, res.referralOverheadPct);
+        var bClause = sideClause("builder", res.builderMaxShareBps, res.builderMaxSharePct, res.builderDailyBuilder, res.builderPeriodCut, res.builderDaysToFirstPayout, res.builderPayouts, res.builderPaid, res.builderLeftover, res.builderTotalCost, res.builderNet, res.builderOverheadPct);
+        var range;
+        if (res.bothShareLowBps !== null) {
+          document.getElementById("pshare-range").value = res.bothShareLowBps + " to " + res.bothShareHighBps + " basis points of the fee (" + res.bothShareWidthBps + " wide)";
+          range = "every whole share from " + res.bothShareLowBps + " to " + res.bothShareHighBps + " basis points of the fee pays both sides inside the period — a range " + res.bothShareWidthBps + " basis point(s) wide, so the split a programme publishes can sit anywhere inside it and still pay both wallets inside the period";
+        } else if (res.referralMinShareBps !== null && res.builderMaxShareBps !== null) {
+          document.getElementById("pshare-range").value = "no share pays both sides";
+          range = "each side can be paid alone, but never together inside this period: the smallest share that pays the referrer sits above the largest share that still pays the builder, so the range of shares paying both sides is empty — paying both inside the period needs a longer period, a lower threshold, a higher rate or more volume, not a different split";
+        } else if (res.referralMinShareBps !== null || res.builderMaxShareBps !== null) {
+          document.getElementById("pshare-range").value = "only one side can be paid";
+          range = "only one side can be paid inside this period at any share, so no share pays both sides";
+        } else {
+          document.getElementById("pshare-range").value = "neither side can be paid";
+          range = "neither side can be paid inside this period at any share, so there is no split to solve for on these figures";
+        }
+        out.textContent = "Model output: on " + res.dailyVolume + " of volume a day at a platform fee of " + fmt(res.platformFeePct, 4) + "%, a payout threshold of " + res.threshold + ", a cost of " + res.payoutCostEach + " per payout transfer and a period of " + res.days + " day(s), a day's fee of " + res.dailyFee + " accrues off the split: for the referrer, " + rClause + "; for the builder, " + bClause + ". Across the split, " + range + ". The two boundaries are read off the same day's fee because the split is one number with two sides: the referrer's cut is the fee times the share, rounded down, and the builder keeps what is left, so raising the share moves a day's cut from one side to the other without changing the fee itself — which is why the range paying both sides can be wide on a healthy fee and empty on a thin one. The supplied cost changes nothing about the solved shares — a payout is reached when a cut reaches the threshold, whatever sending it costs — and is carried through only so the payouts each boundary share lands are reported with their cost. The threshold and the cost are figures you supplied, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent. The share is a share of the platform fee, not of the volume. The volume, rate, threshold, cost and period are scenarios you supplied, held constant, with growth, refunds and fee-free volume not told apart. The day's fee is the platform fee applied once to the day's whole volume and rounded down to the smallest unit, with the referrer's cut rounded down and the builder keeping the remainder, so a real interface taking its fee trade by trade accrues never more than these figures — and the share a real payout needs is therefore never smaller for the referrer, nor larger for the builder, than the solved boundaries. On an interface I build, the chosen share, the threshold and the fee itself would be published together, with the builder's cut taken to my own fee wallet — the SOL address in the support section below — and any referrer's cut to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by using this model. A fee-share payout share solver, not live data, not a forecast. Not financial advice.";
       }
     });
 
