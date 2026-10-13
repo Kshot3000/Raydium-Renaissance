@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred twenty-eight</label>
+      <label for="tool-q">Find a tool among the one hundred twenty-nine</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred twenty-eight tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred twenty-nine tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred twenty-eight.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred twenty-nine.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -3276,6 +3276,59 @@
         <button type="submit" class="btn primary">Solve for the smallest payout rates</button>
         <p id="prate-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="pplan-calc">
+        <h3>129 · Fee-share payout plan</h3>
+        <p>The two payout schedule models price the split one side at a time — the referrer's cut handed over under a threshold on one, the builder's remainder on the other — but a programme runs both at once, off the same day's fee, under the same published threshold and the same cost per transfer. This plan runs both schedules together on one scenario and reports the picture neither shows alone: which side's first payout lands first and by how many days, how many payouts the period holds across both sides together, what moving them all costs in total, and what the period's whole fee nets once every payout on both sides is paid for. You supply the daily fee-bearing volume, the platform fee rate, the referrer's share of the fee, the threshold, the cost of one payout transfer and the period. Nothing here is new arithmetic: each side's figures are its own schedule model's, composed exactly, and the combined figures are their plain sums — never a re-estimate. On the headline numbers, 100,000 of volume a day at a 50-basis-point fee with 25% of the fee to the referrer, a threshold of 500, a cost of 0.5 and a period of 30 days, a day's fee of 500 splits 125 to the referrer and 375 to the builder: the builder's first payout lands on day 2, two days before the referrer's on day 4, and across the period the two sides land 29 payouts between them — 7 on the referrer's side, 22 on the builder's — paying 14,500 of the period's 15,000 fee in total, costing 14.5 to move and netting the two cuts 14,985.5 between them. The edges are stated per side, not averaged away: where a side's share of the fee is nothing — a referrer share of zero, or a share of the whole fee emptying the builder's side — that side accrues at nothing and never pays, in this period or any other, and the model says so alongside the other side's answer where there is one; a side that accrues but stays below the threshold inside the period pays nothing inside it, and the plan states the day its first payout would land, after the period ends, with the whole accrued cut still waiting; and where a transfer costs more than the threshold it carries, a side's net — and with enough of them the combined net — goes honestly negative, reported signed, not hidden. The combined overhead is measured against the period's whole fee, not against either cut, because that is the pot every payout on both sides is paid out of. The threshold and the cost are figures you supply, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent, and a planned first-payout day is a plan, not a promise. The accrual underneath is the fee estimator's own floored arithmetic: each day's fee is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, the referrer's cut is rounded down and the builder keeps the remainder — and a real interface taking its fee trade by trade rounds every trade down, so what accrues is never more than these figures, and first payouts land no earlier than these days, and usually a little later. The share is a share of the platform fee, not of the volume. The volume, rate, share, threshold, cost and period are yours to supply and are held constant across the period, with growth, refunds and fee-free volume not told apart. On an interface I build, the threshold and the fee itself would be published together, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and any referrer's cut goes to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volume, rate, share, threshold, cost and period, not live data, not a forecast, not financial advice.</p>
+        <label for="pplan-vol">Daily fee-bearing volume, in your unit of value</label>
+        <input id="pplan-vol" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="pplan-rate">Platform fee rate (basis points, 50 = 0.5%)</label>
+        <input id="pplan-rate" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="pplan-share">Referrer share of the platform fee (basis points of the fee, 2500 = 25% of the fee)</label>
+        <input id="pplan-share" inputmode="numeric" placeholder="e.g. 2500" autocomplete="off">
+        <label for="pplan-threshold">Payout threshold, in your unit of value (a payout is sent whenever an accrued cut reaches it)</label>
+        <input id="pplan-threshold" inputmode="decimal" placeholder="e.g. 500" autocomplete="off">
+        <label for="pplan-cost">Cost of one payout transfer, in the same unit (supplied by you, never read from the network)</label>
+        <input id="pplan-cost" inputmode="decimal" placeholder="e.g. 0.5" autocomplete="off">
+        <label for="pplan-days">Period (days)</label>
+        <input id="pplan-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="pplan-rfirst">Days until the first referrer payout lands (model)</label>
+        <input id="pplan-rfirst" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-rcount">Referrer payouts inside the period (model)</label>
+        <input id="pplan-rcount" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-rpaid">Total paid out to the referrer inside the period (model)</label>
+        <input id="pplan-rpaid" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-rleft">Referrer cut still accrued when the period ends (model)</label>
+        <input id="pplan-rleft" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-rtcost">Total cost of the referrer's payout transfers (model)</label>
+        <input id="pplan-rtcost" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-rnet">Referrer cut net of its payout costs (model)</label>
+        <input id="pplan-rnet" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-bfirst">Days until the first builder payout lands (model)</label>
+        <input id="pplan-bfirst" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-bcount">Builder payouts inside the period (model)</label>
+        <input id="pplan-bcount" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-bpaid">Total paid out to the builder inside the period (model)</label>
+        <input id="pplan-bpaid" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-bleft">Builder cut still accrued when the period ends (model)</label>
+        <input id="pplan-bleft" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-btcost">Total cost of the builder's payout transfers (model)</label>
+        <input id="pplan-btcost" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-bnet">Builder cut net of its payout costs (model)</label>
+        <input id="pplan-bnet" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-first">Which side's first payout lands first, and on which day (model)</label>
+        <input id="pplan-first" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-gap">Days between the two sides' first payouts (model)</label>
+        <input id="pplan-gap" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-tcount">Payouts inside the period across both sides together (model)</label>
+        <input id="pplan-tcount" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-tcost">Total cost of every payout transfer on both sides (model)</label>
+        <input id="pplan-tcost" readonly placeholder="—" autocomplete="off">
+        <label for="pplan-cnet">Both cuts together, net of every payout cost on both sides (model)</label>
+        <input id="pplan-cnet" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Plan both sides' payouts</button>
+        <p id="pplan-result" role="status" aria-live="polite"></p>
+      </form>
     </div>
   </section>
 
@@ -3303,6 +3356,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=174"></script>
+<script src="app.js?v=175"></script>
 </body>
 </html>
