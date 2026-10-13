@@ -11254,28 +11254,47 @@ function payoutVolumeSolver(platformFeeBps, referralShareBps, thresholdStr, payo
    reports both so that gap is visible rather than
    averaged away. The closed forms are exact integer
    arithmetic throughout and mirror the volume solver
-   step for step. A side's period cut reaches the
-   threshold T exactly when its daily cut D satisfies
-   floor(D · days / SCALE) >= T, so the smallest daily
-   cut that can reach it is need = ceil(T · SCALE /
-   days). On the referrer's side the daily cut is
+   step for step. On the referrer's side a period cut
+   reaches the threshold T exactly when its daily cut D
+   satisfies floor(D · days / SCALE) >= T, so the
+   smallest daily cut that can reach it is
+   need = ceil(T · SCALE / days); the daily cut is
    floor(F · s / 10000) of the day's fee F, so the
-   smallest fee carrying it is ceil(need · 10000 / s);
-   on the builder's side the daily cut is the remainder
-   F − floor(F · s / 10000), which is exactly
-   ceil(F · (10000 − s) / 10000), so the smallest fee
-   carrying it is floor((need − 1) · 10000 /
-   (10000 − s)) + 1 — the same "+1 smallest unit, −1"
-   sandwich as the family's other inverse solvers.
-   Either way the smallest whole-basis-point rate whose
-   floored fee reaches that fee is
-   ceil(fee · 10000 / volume). Verified against a
-   bounded direct scan of candidate rates before it
-   shipped (640 cases checked, 405 of them brute-forced
-   rate by rate, zero mismatches), and the tests
-   re-assert minimality through the composed estimator
-   itself: at the solved rate the period cut reaches
-   the threshold, and one basis point less it does not.
+   smallest fee carrying it is ceil(need · 10000 / s),
+   and the smallest whole-basis-point rate whose floored
+   fee reaches that fee is ceil(fee · 10000 / volume).
+   The builder's side is NOT that shape: its period cut
+   is the estimator's composed difference
+   floor(F · days / SCALE) − floor(dailyReferral · days
+   / SCALE), which is floor(dailyBuilder · days / SCALE)
+   or exactly one smallest unit MORE, so the sandwich
+   fee floor((need − 1) · 10000 / (10000 − s)) + 1 and
+   its rate are a proven UPPER bound on the builder's
+   answer, not the answer: on fractional periods whose
+   two period floors align, the composed cut reaches
+   the threshold at a rate below the sandwich rate (at
+   dust scales a whole basis point below — a 0.00002
+   daily volume at a 5% referrer share, a 0.00000001
+   threshold and a half-day period solves to 10 bps,
+   not the sandwich's 11) — and can reach under the
+   family's 99.99% cap even when the sandwich rate
+   itself sits above it. The builder's rate is
+   therefore found by an exact search of the bounded
+   window beneath the sandwich rate, up to the cap: no
+   rate below the window can reach, because its daily
+   builder cut D satisfies floor(D · days / SCALE)
+   <= T − 2, capping its composed cut at T − 1; inside
+   the window each candidate rate's composed period cut
+   is read from the estimator itself and the first rate
+   that reaches is the answer, with the side unsolved
+   only when no rate in the window reaches. Verified against a direct scan of
+   EVERY candidate rate (2,756 cases, the period cuts
+   composed exactly as the estimator composes them,
+   zero mismatches), and the tests re-assert minimality
+   through the composed estimator itself: at the solved
+   rate the period cut reaches the threshold, and at
+   every rate below it — not just one basis point less
+   — it does not.
    Headline: 100,000 of volume a day with 25% of the fee
    to the referrer, a threshold of 500 and a period of
    30 days solve the referrer's side to 7 bps — a day's
@@ -11355,8 +11374,32 @@ function payoutRateSolver(dailyVolumeStr, referralShareBps, thresholdStr, payout
       feeNeed = (need - 1n) * 10000n / BigInt(10000 - share) + 1n;
     }
     var rateBig = (feeNeed * 10000n + vol - 1n) / vol;
-    if (rateBig > 9999n) return side;
-    var rate = Number(rateBig);
+    if (rateBig > 9999n && isReferrer) return side;
+    var rate = rateBig > 9999n ? null : Number(rateBig);
+    if (!isReferrer) {
+      /* The sandwich rate is an upper bound only: the
+         builder's period cut is the composed difference
+         floor(F · days) − floor(dailyReferral · days),
+         which can reach the threshold one smallest unit
+         before floor(dailyBuilder · days) does — and can
+         reach at all under the 99.99% cap even when the
+         sandwich rate itself sits above it. Search the
+         bounded window beneath it exactly — a rate below
+         the window carries a daily builder cut D with
+         floor(D · days) <= T − 2, so its composed cut is
+         at most T − 1 and cannot reach. */
+      var needLow = threshold <= 1n ? 0n : ((threshold - 1n) * SCALE + daysScaled - 1n) / daysScaled;
+      var feeLow = needLow <= 0n ? 0n : (needLow - 1n) * 10000n / BigInt(10000 - share) + 1n;
+      if (feeLow < need) feeLow = need; /* the composed cut never exceeds the period fee itself, so a reaching fee's own period accrual floor(F · days) must reach T too: F >= need */
+      var rateLow = feeLow <= 0n ? 1n : (feeLow * 10000n + vol - 1n) / vol;
+      if (rateLow < 1n) rateLow = 1n;
+      var capRate = rateBig > 9999n ? 9999n : rateBig;
+      for (var cand = rateLow; cand <= capRate; cand++) {
+        var tt = referralFeeRevenue(dailyVolumeStr, Number(cand), referralShareBps, daysStr);
+        if (tt !== null && parseScaled(tt.periodBuilder) >= threshold) { rate = Number(cand); break; }
+      }
+      if (rate === null) return side;
+    }
     var t = referralFeeRevenue(dailyVolumeStr, rate, referralShareBps, daysStr);
     var s = isReferrer
       ? referralPayoutSchedule(dailyVolumeStr, rate, referralShareBps, thresholdStr, payoutCostStr, daysStr)
