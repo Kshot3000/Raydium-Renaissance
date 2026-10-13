@@ -11031,20 +11031,41 @@ function payoutCostSolver(dailyVolumeStr, platformFeeBps, referralShareBps, thre
    that can reach it is need = ceil(T · SCALE / days). On
    the referrer's side the daily cut is floor(F · s / 10000)
    of the day's fee F, so the smallest fee carrying it is
-   ceil(need · 10000 / s); on the builder's side the daily
-   cut is the remainder F − floor(F · s / 10000), which is
-   exactly ceil(F · (10000 − s) / 10000), so the smallest
-   fee carrying it is floor((need − 1) · 10000 / (10000 − s))
-   + 1 — the same "+1 smallest unit, −1" sandwich as the
-   family's other inverse solvers. Either way the smallest
-   volume whose floored fee reaches that fee is
-   ceil(fee · 10000 / rate). Verified against a direct
-   smallest-unit scan of candidate volumes on thousands of
-   small cases before it shipped (7,859 sides scanned, zero
-   mismatches), and the tests re-assert minimality through
-   the composed estimator itself: at the solved volume the
-   period cut reaches the threshold, and one smallest unit
-   of volume a day less it does not. Headline: a disclosed
+   ceil(need · 10000 / s). On the builder's side the daily
+   cut is the remainder F − floor(F · s / 10000), exactly
+   ceil(F · (10000 − s) / 10000), and the fee at which it
+   first reaches need is the "+1 smallest unit, −1"
+   sandwich floor((need − 1) · 10000 / (10000 − s)) + 1 —
+   but that fee is only an upper bound on the builder's
+   answer, because the builder's PERIOD cut is the
+   estimator's composed difference, period fee minus period
+   referral, and a difference of two floors is the floored
+   daily product or one smallest unit more: the builder's
+   period cut can reach the threshold at a daily cut below
+   need, on fees the sandwich steps past (the first shipped
+   form solved the builder by the sandwich alone and
+   overstated the volume on exactly those shapes — a
+   fractional period whose two period floors align — and
+   is corrected here). The smallest builder fee is found
+   exactly, in a bounded window: on a period of a day or
+   more only the daily cuts need − 1 and need can first
+   reach the threshold, so the fees carrying them are
+   checked directly against the composed period cut; on a
+   sub-day period the search runs over the period referral
+   B — a fee first reaches the threshold at the smallest
+   period fee T + B whose own referrer period cut stays at
+   or under B, and the floor bounds confine B to a window
+   of about thirty thousand values around T · s / (10000
+   − s). Either way the smallest volume whose floored fee
+   reaches that fee is ceil(fee · 10000 / rate). Verified
+   against a brute-force smallest-unit scan of candidate
+   fees (every period cut composed exactly as the estimator
+   composes it) on thousands of small cases, including the
+   fractional-period shapes where the builder reaches the
+   threshold early, and the tests re-assert minimality
+   through the composed estimator itself: at the solved
+   volume the period cut reaches the threshold, and one
+   smallest unit of volume a day less it does not. Headline: a disclosed
    50 bps platform fee with 25% of the fee to the referrer,
    a threshold of 500 and a period of 30 days solve the
    referrer's side to 13,333.3333336 of volume a day — a
@@ -11103,6 +11124,39 @@ function payoutVolumeSolver(platformFeeBps, referralShareBps, thresholdStr, payo
   if (!Number.isInteger(rate) || rate < 0 || rate > 9999) return null;
   if (!Number.isInteger(share) || share < 0 || share > 10000) return null;
   var need = (threshold * SCALE + daysScaled - 1n) / daysScaled;
+  function fdiv(a, b) { var q = a / b; if (a % b !== 0n && ((a < 0n) !== (b < 0n))) q -= 1n; return q; }
+  /* Smallest day's fee whose COMPOSED builder period cut
+     (period fee − period referral, the estimator's own
+     definition) reaches the threshold. The sandwich fee is
+     a proven upper bound — at it the daily builder cut is
+     need, so the composed cut is at least floor(need ·
+     days / SCALE) >= threshold — and the searches below
+     only look underneath it, in windows the floor bounds
+     prove contain the first reaching fee (see header). */
+  function builderFeeNeed() {
+    var s = BigInt(share), b = BigInt(10000 - share);
+    var closed = (need - 1n) * 10000n / b + 1n;
+    if (daysScaled >= SCALE) {
+      var dStart = (threshold - 1n) * SCALE / daysScaled + 1n;
+      for (var D = dStart; D < need; D++) {
+        var lo = (D - 1n) * 10000n / b + 1n, hi = D * 10000n / b;
+        for (var F = lo; F <= hi; F++) {
+          var R = F * s / 10000n;
+          if (F * daysScaled / SCALE - R * daysScaled / SCALE >= threshold) return F;
+        }
+      }
+      return closed;
+    }
+    var bStart = fdiv(threshold * s * SCALE - 10000n * daysScaled - 10000n * SCALE, b * SCALE) + 1n;
+    if (bStart < 0n) bStart = 0n;
+    var bEnd = fdiv(threshold * s * SCALE + daysScaled * s, b * SCALE) + 1n;
+    for (var B = bStart; B <= bEnd; B++) {
+      var fee = ((threshold + B) * SCALE + daysScaled - 1n) / daysScaled;
+      var ref = fee * s / 10000n;
+      if (ref * daysScaled / SCALE <= B) return fee;
+    }
+    return closed;
+  }
   function solveSide(isReferrer) {
     var side = {
       minVolume: null, dailyFee: null, dailyReferral: null, dailyBuilder: null,
@@ -11117,7 +11171,7 @@ function payoutVolumeSolver(platformFeeBps, referralShareBps, thresholdStr, payo
       feeNeed = (need * 10000n + BigInt(share) - 1n) / BigInt(share);
     } else {
       if (share === 10000) return side;
-      feeNeed = (need - 1n) * 10000n / BigInt(10000 - share) + 1n;
+      feeNeed = builderFeeNeed();
     }
     var vol = (feeNeed * 10000n + BigInt(rate) - 1n) / BigInt(rate);
     var volStr = formatScaled(vol);
