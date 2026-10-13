@@ -16829,8 +16829,8 @@ if (typeof document !== "undefined") {
         clearAll();
         document.getElementById("pper-both").value = "";
       } else {
-        var rClause = sideClause("referrer", res.referralMinDays, res.referralDailyReferral, res.referralPeriodCut, res.referralPayouts, res.referralPaid, res.referralLeftover, res.referralTotalCost, res.referralNet, res.referralOverheadPct);
-        var bClause = sideClause("builder", res.builderMinDays, res.builderDailyBuilder, res.builderPeriodCut, res.builderPayouts, res.builderPaid, res.builderLeftover, res.builderTotalCost, res.builderNet, res.builderOverheadPct);
+        var rClause = sideClause("referrer", res.referralMinDays, res.dailyReferral, res.referralPeriodCut, res.referralPayouts, res.referralPaid, res.referralLeftover, res.referralTotalCost, res.referralNet, res.referralOverheadPct);
+        var bClause = sideClause("builder", res.builderMinDays, res.dailyBuilder, res.builderPeriodCut, res.builderPayouts, res.builderPaid, res.builderLeftover, res.builderTotalCost, res.builderNet, res.builderOverheadPct);
         var both;
         if (res.daysToPayBoth !== null) {
           document.getElementById("pper-both").value = res.daysToPayBoth + (res.daysToPayBoth === 1 ? " day" : " days");
