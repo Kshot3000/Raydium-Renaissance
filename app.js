@@ -10422,7 +10422,15 @@ function referralMinRate(dailyVolumeStr, referralShareBps, dailyCostStr, daysStr
    paid inside it; where one transfer costs more than the
    threshold it carries, the period net is signed and can be
    negative — paying out then costs more than it pays, and the
-   model says so in numbers. The transfer cost is SUPPLIED by
+   model says so in numbers. The overhead figure — the period's
+   payout costs as a percentage of the period's cut — is a ratio
+   of two exact scaled figures, and where either figure is too
+   large to convert to a double it is evaluated from the exact
+   integers at a scale chosen from their digit lengths: dividing
+   converted doubles there would read not-a-number when both
+   overflow, or worse a silent zero when the cut alone overflows
+   and the cost stays finite, for a percentage that is small but
+   real. The transfer cost is SUPPLIED by
    the operator, in the same unit as the volume, never read
    from the network: what a payout really costs is whatever
    the network charges on the day it is sent, so a schedule
@@ -10467,9 +10475,13 @@ function referralPayoutSchedule(dailyVolumeStr, platformFeeBps, referralShareBps
   var totalCost = payouts * costEach;
   var overheadPct = null;
   if (periodReferral > 0n) {
-    overheadPct = Number(totalCost) / Number(periodReferral) * 100;
-    if (!Number.isFinite(overheadPct)) {
-      overheadPct = Number(totalCost * (10n ** 18n) / periodReferral) / 1e16;
+    var tcNum = Number(totalCost), prNum = Number(periodReferral);
+    if (Number.isFinite(tcNum) && Number.isFinite(prNum)) {
+      overheadPct = tcNum / prNum * 100;
+    } else {
+      var shift = String(periodReferral).length - String(totalCost).length + 18;
+      var sr = shift >= 0 ? totalCost * (10n ** BigInt(shift)) / periodReferral : totalCost / (periodReferral * (10n ** BigInt(-shift)));
+      overheadPct = Number(sr.toString() + "e" + (2 - shift));
     }
   }
   var result = {

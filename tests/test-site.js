@@ -57,7 +57,7 @@ check("all wallet-planner controls labelled",
 check("all break-even-days controls labelled",
   ["bed-l", "bed-lower", "bed-upper", "bed-entry", "bed-check", "bed-total", "bed-volume", "bed-bps", "bed-inrange", "bed-out"]
     .every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=166"));
+check("cache keys present", html.includes("styles.css?v=4") && html.includes("app.js?v=167"));
 check("every element id is unique (a duplicate id silently re-wires getElementById handlers to the first match)",
   (() => { const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); return new Set(ids).size === ids.length; })());
 check("catalogue has 14 cards", (html.match(/class="card"/g) || []).length === 14);
@@ -5107,7 +5107,7 @@ check("all tarb controls labelled",
 check("tarb tool present in index.html", html.includes('id="tarb-calc"') && html.includes('id="tarb-result"'));
 check("tarb handler wired to its own form", appSrc.includes('getElementById("tarb-calc")') && appSrc.includes('getElementById("tarb-result")'));
 check("tarb honesty: third wall, third fee and not-live labels", html.includes("an external price beyond the third range's outer edge caps the combined trade there") && html.includes("the fee is charged again on the third range") && html.includes("not live pool data, not a found opportunity, not financial advice"));
-check("app.js cache key bumped to v166", html.includes("app.js?v=166"));
+check("app.js cache key bumped to v167", html.includes("app.js?v=167"));
 check("guide covers CLMM three-range arbitrage", guide.includes("price the third range too"));
 check("README lists tool 80", readme.includes("80. **CLMM three-range arbitrage model**"));
 
@@ -7670,6 +7670,10 @@ check("RPAY rejects blanks and junk in every field", ["", " ", "abc", "1e3", "-5
 check("RPAY rejects a zero threshold, a zero volume, zero days and periods past the cap, and bad rates and shares, and accepts a zero payout cost", app.referralPayoutSchedule("100000", 50, 2500, "0", "0.5", "30") === null && app.referralPayoutSchedule("0", 50, 2500, "500", "0.5", "30") === null && app.referralPayoutSchedule("100000", 50, 2500, "500", "0.5", "0") === null && app.referralPayoutSchedule("100000", 50, 2500, "500", "0.5", "36501") === null && app.referralPayoutSchedule("100000", 10000, 2500, "500", "0.5", "30") === null && app.referralPayoutSchedule("100000", 50, 10001, "500", "0.5", "30") === null && app.referralPayoutSchedule("100000", 50, 2500, "500", "0", "30") !== null);
 check("RPAY source composes the revenue estimator's accrual and counts payouts by whole thresholds off the floored period cut, first day by the ceiling form", (() => { const at = appSrc.indexOf("function referralPayoutSchedule"); const body = appSrc.slice(at, at + 2600); return at !== -1 && body.includes("referralFeeRevenue(dailyVolumeStr, platformFeeBps, referralShareBps, daysStr)") && body.includes("(threshold + dailyReferral - 1n) / dailyReferral") && body.includes("periodReferral / threshold") && body.includes("signed(periodReferral - totalCost)"); })());
 check("RPAY handler branches on the accrual: no payout at a zero accrual, a first payout falling after the period ends, the carried remainder, and no cut to measure an overhead against", appSrc.includes('getElementById("rpay-calc")') && appSrc.includes("no payout at this accrual") && appSrc.includes("falls after this period ends") && appSrc.includes("carried, not lost") && appSrc.includes("no cut to measure against") && appSrc.includes("not a live network fee"));
+check("RPAY overhead is not silently zeroed when the period cut alone overflows double conversion: a 1e301-token cut with 1e297 of costs reads its true 0.01%", (() => { const r = app.referralPayoutSchedule("2" + "0".repeat(301), 5000, 10000, "1" + "0".repeat(300), "1" + "0".repeat(296), "1"); return r !== null && r.payoutsInPeriod === 10 && Math.abs(r.overheadPct - 0.01) < 1e-15; })());
+check("RPAY overhead stays exact when both figures overflow double conversion", (() => { const r = app.referralPayoutSchedule("3" + "0".repeat(299), 9999, 10000, "1" + "0".repeat(298), "9" + "0".repeat(296), "30"); return r !== null && r.payoutsInPeriod === 899 && Math.abs(r.overheadPct - 8.990899089908991) < 1e-12; })());
+check("RPAY overhead reaches a huge but representable ratio instead of rejecting the schedule: 37 payouts at 1e300 each on a 3750 cut", (() => { const r = app.referralPayoutSchedule("100000", 50, 2500, "100", "1" + "0".repeat(300), "30"); return r !== null && r.payoutsInPeriod === 37 && Math.abs(r.overheadPct / 9.866666666666667e299 - 1) < 1e-12; })());
+check("RPAY source evaluates the overhead ratio from the exact integers whenever either conversion is non-finite, never by dividing converted doubles unconditionally", (() => { const at = appSrc.indexOf("function referralPayoutSchedule"); const body = appSrc.slice(at, at + 2600); return at !== -1 && body.includes("Number.isFinite(tcNum) && Number.isFinite(prNum)") && body.includes("String(periodReferral).length - String(totalCost).length") && !body.includes("Number(totalCost) / Number(periodReferral)"); })());
 check("all rpay controls labelled", ["rpay-volume", "rpay-rate", "rpay-share", "rpay-threshold", "rpay-cost", "rpay-days", "rpay-daily", "rpay-first", "rpay-count", "rpay-paid", "rpay-left", "rpay-tcost", "rpay-net", "rpay-overhead"].every(id => html.includes(`for="${id}"`)));
 check("rpay tool present in index.html", html.includes('id="rpay-calc"') && html.includes('id="rpay-result"'));
 check("rpay handler wired to its own form", appSrc.includes('getElementById("rpay-calc")') && appSrc.includes('getElementById("rpay-result")'));
