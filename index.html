@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred thirty-six</label>
+      <label for="tool-q">Find a tool among the one hundred thirty-seven</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred thirty-six tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred thirty-seven tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred thirty-six.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred thirty-seven.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -3646,6 +3646,53 @@
         <p id="dvol-result" role="status" aria-live="polite"></p>
       </form>
 
+      <form class="tool" id="drate-calc">
+        <h3>137 · Dual-threshold fee-share payout rate solver</h3>
+        <p>The payout rate solver before this one fixes the daily volume and the split and solves, for each side of the split, the smallest platform fee rate at which that side's period cut first reaches the payout threshold — but under one shared threshold and one shared cost per transfer. Two wallets are often not paid on the same terms: the tools above give each side its own threshold and its own cost, and this one solves each side's rate under those per-side terms. You supply the daily fee-bearing volume, the referrer's share of the fee, the referrer's threshold and cost, the builder's threshold and cost, and the period in days, and it finds the smallest platform fee rate — in whole basis points, the unit a rate is published in — at which each side's period cut first reaches its own threshold, and the rate that pays both sides. Each side is solved on its own: the referrer's cut and the builder's cut — what is left of the platform fee after the referrer's share is taken off it — accrue at different rates off the same day's fee and are paid at different thresholds, so they honestly solve to different rates, and a shared-terms solve would state neither side's. On the headline numbers, 100,000 of volume a day with 25% of the fee to the referrer over 30 days, the referrer, paid at its own threshold of 500 at its own cost of 0.5 a transfer, solves to 7 basis points — a day's fee of 70 puts 17.5 a day to it and its period cut reaches 525, one payout on day 29 — while the builder, paid at its own threshold of 1,000 at its own cost of 2 a transfer, solves to only 5 basis points, a day's fee of 50 putting 37.5 a day to it and its period cut reaching 1,125, one payout on day 27. The builder's threshold is twice the referrer's, but its share of every fee is three times as large, and the share wins: paying both sides takes 7 basis points, the larger of the two solved rates, because a side's period cut never falls as the rate grows. One basis point less than either solved rate leaves that side's period cut below its own threshold, so no payout lands on that side inside the period at all. The edges are stated per side, under that side's own terms: where a side's share of the fee is nothing — a referrer share of zero, or a share of the whole fee emptying the builder's side — that side accrues at nothing at any rate, so no rate reaches a payout on it and no rate pays both sides, alongside the other side's answer where there is one; and where even the largest rate this family quotes, 99.99%, leaves a side's period cut below its own threshold on the supplied volume, no rate reaches a payout on that side either — the volume, not the rate, is then the binding constraint on that side. Wherever the two sides' thresholds and costs are equal, this solver and the shared-terms rate solver agree exactly — different terms are the only reason to run both. Each side's cost is a figure you supply, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent, and a cost changes nothing about a solved rate — a payout is reached when a cut reaches its threshold, whatever sending it costs — so each cost is carried through only so the payouts a solved rate lands are reported with their cost on that side's own terms. The accrual underneath is the fee estimator's own floored arithmetic: each day's fee is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, the referrer's cut is rounded down and the builder keeps the remainder — and a real interface taking its fee trade by trade rounds every trade down, so what accrues is never more than these figures, and the real rate a payout needs is never less than a solved rate, and usually a little more. The share is a share of the platform fee, not of the volume. The volume, share, thresholds, costs and period are yours to supply and are held constant, with growth, refunds and fee-free volume not told apart. On an interface I build, both thresholds, both costs, the solved rates and the fee itself would be published together, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and any referrer's cut goes to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volume, share, thresholds and costs, not live data, not a forecast, not financial advice.</p>
+        <label for="drate-vol">Daily fee-bearing volume, in your unit of value</label>
+        <input id="drate-vol" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="drate-share">Referrer share of the platform fee (basis points of the fee, 2500 = 25% of the fee)</label>
+        <input id="drate-share" inputmode="numeric" placeholder="e.g. 2500" autocomplete="off">
+        <label for="drate-rthresh">Referrer payout threshold, in your unit of value (supplied by you, never read from the network)</label>
+        <input id="drate-rthresh" inputmode="decimal" placeholder="e.g. 500" autocomplete="off">
+        <label for="drate-rcost">Referrer payout cost per transfer, in the same unit (supplied by you, never read from the network)</label>
+        <input id="drate-rcost" inputmode="decimal" placeholder="e.g. 0.5" autocomplete="off">
+        <label for="drate-bthresh">Builder payout threshold, in your unit of value (supplied by you, never read from the network)</label>
+        <input id="drate-bthresh" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="drate-bcost">Builder payout cost per transfer, in the same unit (supplied by you, never read from the network)</label>
+        <input id="drate-bcost" inputmode="decimal" placeholder="e.g. 2" autocomplete="off">
+        <label for="drate-days">Period (days)</label>
+        <input id="drate-days" inputmode="decimal" placeholder="e.g. 30" autocomplete="off">
+        <label for="drate-rrate">Smallest platform fee rate at which the referrer's cut reaches its own threshold inside the period (model)</label>
+        <input id="drate-rrate" readonly placeholder="—" autocomplete="off">
+        <label for="drate-rdaily">Referrer cut accrued per day at that rate (model)</label>
+        <input id="drate-rdaily" readonly placeholder="—" autocomplete="off">
+        <label for="drate-rfirst">Days until the first referrer payout lands at that rate (model)</label>
+        <input id="drate-rfirst" readonly placeholder="—" autocomplete="off">
+        <label for="drate-rcount">Referrer payouts inside the period at that rate (model)</label>
+        <input id="drate-rcount" readonly placeholder="—" autocomplete="off">
+        <label for="drate-rtcost">Total cost of the referrer's payout transfers at that rate, at its own cost (model)</label>
+        <input id="drate-rtcost" readonly placeholder="—" autocomplete="off">
+        <label for="drate-rover">Referrer payout costs as a share of the referrer's period cut at that rate (model)</label>
+        <input id="drate-rover" readonly placeholder="—" autocomplete="off">
+        <label for="drate-brate">Smallest platform fee rate at which the builder's cut reaches its own threshold inside the period (model)</label>
+        <input id="drate-brate" readonly placeholder="—" autocomplete="off">
+        <label for="drate-bdaily">Builder cut accrued per day at that rate (model)</label>
+        <input id="drate-bdaily" readonly placeholder="—" autocomplete="off">
+        <label for="drate-bfirst">Days until the first builder payout lands at that rate (model)</label>
+        <input id="drate-bfirst" readonly placeholder="—" autocomplete="off">
+        <label for="drate-bcount">Builder payouts inside the period at that rate (model)</label>
+        <input id="drate-bcount" readonly placeholder="—" autocomplete="off">
+        <label for="drate-btcost">Total cost of the builder's payout transfers at that rate, at its own cost (model)</label>
+        <input id="drate-btcost" readonly placeholder="—" autocomplete="off">
+        <label for="drate-bover">Builder payout costs as a share of the builder's period cut at that rate (model)</label>
+        <input id="drate-bover" readonly placeholder="—" autocomplete="off">
+        <label for="drate-both">Smallest platform fee rate at which both sides' cuts reach their own thresholds inside the period (model)</label>
+        <input id="drate-both" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Solve for each side's rate on its own terms</button>
+        <p id="drate-result" role="status" aria-live="polite"></p>
+      </form>
+
     </div>
   </section>
 
@@ -3673,6 +3720,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=185"></script>
+<script src="app.js?v=186"></script>
 </body>
 </html>
