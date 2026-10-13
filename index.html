@@ -156,12 +156,12 @@
     <h2 id="tools-h">Pool tools — right here, nothing leaves your browser</h2>
     <p><strong>Honest labels:</strong> these are educational models of how Raydium-style pools behave, using example numbers you type in. They are <strong>not</strong> live quotes, not live pool data, and not financial advice. For real pools, use <a href="https://raydium.io/liquidity-pools/">raydium.io/liquidity-pools</a>.</p>
     <div class="filter-row" role="group" aria-label="Find a pool tool">
-      <label for="tool-q">Find a tool among the one hundred thirty-four</label>
+      <label for="tool-q">Find a tool among the one hundred thirty-five</label>
       <input id="tool-q" type="search" placeholder="e.g. impermanent loss, CLMM zap, sandwich, transfer fee…" autocomplete="off">
-      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred thirty-four tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
+      <p>Every word you type must appear in the tool, in any order — “loss impermanent” works too. Clearing the search brings all one hundred thirty-five tools back; filtering only hides tools on this page, it changes nothing you have typed into them.</p>
     </div>
     <p id="tool-filter-status" class="sr-status" role="status" aria-live="polite"></p>
-    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred thirty-four.</p>
+    <p id="tool-no-results" hidden>No tools match that search yet — try fewer or shorter words, or clear the search to browse all one hundred thirty-five.</p>
     <div class="filter-row" role="group" aria-label="Jump to a pool tool">
       <label for="tool-jump">Jump straight to a tool</label>
       <select id="tool-jump">
@@ -3553,6 +3553,53 @@
         <button type="submit" class="btn primary">Solve for each side's threshold on its own terms</button>
         <p id="dtsolve-result" role="status" aria-live="polite"></p>
       </form>
+      <form class="tool" id="dcost-calc">
+        <h3>135 · Dual-threshold fee-share payout maximum cost solver</h3>
+        <p>The payout maximum cost solver before this one holds the volume, the rate and the split fixed and solves, for each side of the split, the largest cost per payout transfer whose transfer costs inside the period stay at or under a stated overhead cap — but under one shared threshold and one shared cap. Two wallets are often not paid on the same terms: the tools above give each side its own threshold, and this one gives each side its own threshold and its own overhead cap and solves each side's largest cost under those per-side terms. You supply the daily fee-bearing volume, the platform fee rate, the referrer's share of the fee, the referrer's threshold and overhead cap, the builder's threshold and overhead cap, and the period in days, and it finds the largest cost at which each side's payouts inside the period cost that side no more than its own cap allows. Each side is solved on its own: the referrer's cut and the builder's cut — what is left of the platform fee after the referrer's share is taken off it — accrue at different rates off the same day's fee, are paid at different thresholds and are capped differently, so they honestly solve to different largest costs, and a shared-terms solve would state neither side's. On the headline numbers, 100,000 of volume a day at a 50-basis-point fee with 25% of the fee to the referrer over 30 days, the referrer's period cut of 3,750, paid at its own threshold of 500 under its own cap of 0.1% of the cut, solves to a largest cost of 0.535714285 a transfer — first payout on day 4, seven payouts, costing 3.749999995 in total — while the builder's period cut of 11,250, paid at its own threshold of 1,000 under its own looser cap of 0.2% of the cut, solves to 2.045454545 a transfer — first payout on day 3, eleven payouts, costing 22.499999995 in total. The builder's larger threshold and looser cap both work in its favour here, and nothing in the arithmetic forces that order: each largest cost is that side's own cut, count and cap, not the other side's figures. One smallest unit above either solved cost, that side's total costs pass its own cap. The edges are stated per side, under that side's own terms: where a side's own threshold stands above its whole period cut, nothing is paid inside the period at any cost, so any cost meets that side's cap vacuously and no largest cost is invented for it; where a side's cap is zero, that side's largest cost is exactly zero — only sending for free keeps that side under a cap of nothing, stated as the answer rather than as no answer; and where a side's share of the fee is nothing — a referrer share of zero, or a share of the whole fee emptying the builder's side — that side accrues at nothing, so no payout cost applies to it at all, alongside the other side's answer where there is one. Wherever the two sides' thresholds and caps are equal, this solver and the shared-terms maximum cost solver agree exactly — different terms are the only reason to run both. The thresholds and the caps are figures you supply, not a live network fee: what a payout really costs is whatever the network charges on the day it is sent, and a real cost above a side's solved largest cost means that side's published threshold and its stated cap cannot both hold. The accrual underneath is the fee estimator's own floored arithmetic: each day's fee is the platform fee applied once to that day's whole volume and rounded down to the smallest unit, the referrer's cut is rounded down and the builder keeps the remainder — and a real interface taking its fee trade by trade rounds every trade down, so what accrues is never more than these figures, and the costs solved against them are ceilings in the same way. The share is a share of the platform fee, not of the volume. The volume, rate, share, thresholds, caps and period are yours to supply and are held constant, with growth, refunds and fee-free volume not told apart. On an interface I build, both thresholds, both caps, the largest costs they solve to and the fee itself would be published together, the builder's cut goes to my own fee wallet — the SOL address in the support section below — and any referrer's cut goes to that referrer's own wallet. This page executes nothing: no wallet connects here and no fee is taken by viewing or using this model. Educational model only — your volume, rate, share, thresholds and caps, not live data, not a forecast, not financial advice.</p>
+        <label for="dcost-vol">Daily fee-bearing volume, in your unit of value</label>
+        <input id="dcost-vol" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off">
+        <label for="dcost-rate">Platform fee rate (basis points, 50 = 0.5%)</label>
+        <input id="dcost-rate" inputmode="numeric" placeholder="e.g. 50" autocomplete="off">
+        <label for="dcost-share">Referrer share of the platform fee (basis points of the fee, 2500 = 25% of the fee)</label>
+        <input id="dcost-share" inputmode="numeric" placeholder="e.g. 2500" autocomplete="off">
+        <label for="dcost-rthresh">Referrer payout threshold, in the same unit (supplied by you, never read from the network)</label>
+        <input id="dcost-rthresh" inputmode="decimal" placeholder="e.g. 500" autocomplete="off">
+        <label for="dcost-rcap">Referrer overhead cap, in basis points of the referrer's period cut (10 = 0.1% of that cut)</label>
+        <input id="dcost-rcap" inputmode="numeric" placeholder="e.g. 10" autocomplete="off">
+        <label for="dcost-bthresh">Builder payout threshold, in the same unit (supplied by you, never read from the network)</label>
+        <input id="dcost-bthresh" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <label for="dcost-bcap">Builder overhead cap, in basis points of the builder's period cut (20 = 0.2% of that cut)</label>
+        <input id="dcost-bcap" inputmode="numeric" placeholder="e.g. 20" autocomplete="off">
+        <label for="dcost-days">Period in days over which the cuts accrue and the caps are measured</label>
+        <input id="dcost-days" inputmode="numeric" placeholder="e.g. 30" autocomplete="off">
+        <label for="dcost-rdaily">Referrer cut accruing per day (model)</label>
+        <input id="dcost-rdaily" readonly placeholder="—" autocomplete="off">
+        <label for="dcost-rmax">Largest cost a referrer payout may carry at the referrer's own threshold under the referrer's own cap (model)</label>
+        <input id="dcost-rmax" readonly placeholder="—" autocomplete="off">
+        <label for="dcost-rfirst">Day of the referrer's first payout at that threshold (model)</label>
+        <input id="dcost-rfirst" readonly placeholder="—" autocomplete="off">
+        <label for="dcost-rcount">Referrer payouts inside the period at that threshold (model)</label>
+        <input id="dcost-rcount" readonly placeholder="—" autocomplete="off">
+        <label for="dcost-rtcost">Total cost of the referrer's payout transfers inside the period at that largest cost (model)</label>
+        <input id="dcost-rtcost" readonly placeholder="—" autocomplete="off">
+        <label for="dcost-rover">Referrer payout costs as a share of the referrer's period cut at that largest cost (model)</label>
+        <input id="dcost-rover" readonly placeholder="—" autocomplete="off">
+        <label for="dcost-bdaily">Builder cut accruing per day (model)</label>
+        <input id="dcost-bdaily" readonly placeholder="—" autocomplete="off">
+        <label for="dcost-bmax">Largest cost a builder payout may carry at the builder's own threshold under the builder's own cap (model)</label>
+        <input id="dcost-bmax" readonly placeholder="—" autocomplete="off">
+        <label for="dcost-bfirst">Day of the builder's first payout at that threshold (model)</label>
+        <input id="dcost-bfirst" readonly placeholder="—" autocomplete="off">
+        <label for="dcost-bcount">Builder payouts inside the period at that threshold (model)</label>
+        <input id="dcost-bcount" readonly placeholder="—" autocomplete="off">
+        <label for="dcost-btcost">Total cost of the builder's payout transfers inside the period at that largest cost (model)</label>
+        <input id="dcost-btcost" readonly placeholder="—" autocomplete="off">
+        <label for="dcost-bover">Builder payout costs as a share of the builder's period cut at that largest cost (model)</label>
+        <input id="dcost-bover" readonly placeholder="—" autocomplete="off">
+        <button type="submit" class="btn primary">Solve for each side's largest cost on its own terms</button>
+        <p id="dcost-result" role="status" aria-live="polite"></p>
+      </form>
+
     </div>
   </section>
 
@@ -3580,6 +3627,6 @@
   <p>Raydium Renaissance · An independent builder hub by Kyle Cox (@kshot9000). Not affiliated with Raydium, raydium-io, or the Solana Foundation. Pool tools are educational models, not live data, quotes, or financial advice — verify everything on <a href="https://raydium.io/liquidity-pools/">raydium.io</a> before risking funds.</p>
   <p>SOL tips: 9WMsvgpQQgtvfV4g2Mm7U6mHRGpVvEmFvQGAAu4aArU8</p>
 </footer>
-<script src="app.js?v=183"></script>
+<script src="app.js?v=184"></script>
 </body>
 </html>
